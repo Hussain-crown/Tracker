@@ -7,7 +7,7 @@ import type { HabitEntry, WeeklyReview } from '@/lib/stores'
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
 
-const FIELDS = [
+const ALL_FIELDS = [
   { key:'interruptions',label:'Interruptions',  color:RED,       weight:-1,desc:'Focus disruptions'         },
   { key:'convo',        label:'Conversations',  color:GOLD,      weight:3, desc:'New prospect conversations' },
   { key:'mpa',          label:'MPA',            color:BLUE,      weight:2, desc:'Product demonstrations'    },
@@ -18,7 +18,9 @@ const FIELDS = [
   { key:'mg1',          label:'MG1',            color:TEAL,      weight:4, desc:'Group presentations run'   },
   { key:'launch',       label:'Launches',       color:GOLD,      weight:3, desc:'New partner launches'      },
 ] as const
-type FieldKey = typeof FIELDS[number]['key']
+type FieldKey = typeof ALL_FIELDS[number]['key']
+// Fields hidden entirely at level 1 (entry tier) — restored at level >= 2.
+const LEVEL1_HIDDEN: readonly FieldKey[] = ['interruptions','convo','contact']
 type Tab = 'log'|'month'|'trends'|'core'|'resources'
 
 const HIST: Record<string,number> = {
@@ -138,11 +140,17 @@ function QAccordion({qkey,title,question,sub,value,active,onToggle,onChange}:{
   )
 }
 
-export default function Habits({hideMonth=false,goalOverride=null}:{hideMonth?:boolean;goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null}={}){
+export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hideMonth?:boolean;goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
   const {userId,habits,loadHabits,saveHabit,getMeta,setMeta,
          weeklyReviews,loadWeeklyReviews,upsertWeeklyReview,
          leads,loadLeads,upsertLead,resources,loadResources}=useStore()
   const todayStr=brisbaneToday()
+  // Level 1 (entry tier) hides interruptions/convo/contact entirely from the UI.
+  // Level >= 2 gets full field set. Gate as >= so future levels need no rework.
+  const FIELDS = useMemo(
+    () => level>=2 ? ALL_FIELDS : ALL_FIELDS.filter(f=>!LEVEL1_HIDDEN.includes(f.key)),
+    [level]
+  )
 
   const [selDate,setSelDate]     =useState(todayStr)
   const [form,setForm]           =useState<Record<FieldKey,number>>({convo:0,mg1:0,mpa:0,catch_up:0,dtm:0,pre_filter:0,launch:0,interruptions:0,contact:0})
