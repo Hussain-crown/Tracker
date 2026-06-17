@@ -1,0 +1,122 @@
+// ── HUSSAIN OS — SHARED TYPES ─────────────────────────────
+// Source of truth for all interfaces across all domain stores.
+// These match exactly what the pages use and what Supabase stores.
+
+export interface Lead {
+  id: string; user_id: string; name: string
+  phone: string; instagram: string; contact: string
+  source: string; stage: string; score: number
+  hunger: number; looking: number
+  relationship: string    // 'Close friend' | 'Acquaintance' | 'Stranger' | 'Online only'
+  age_range: string       // 'Under 25' | '25-35' | '35-45' | '45+'
+  life_stage: string      // 'Student' | 'Working' | 'Business owner' | 'Parent' | 'Retired'
+  primary_driver: string  // 'Time freedom' | 'Extra income' | 'Full-time income' | 'Business ownership' | 'Products only'
+  pain_point: string      // their words
+  archived: boolean
+  archived_reason: string
+  notes: string; next_action: string; next_action_date: string
+  created_at: string; updated_at: string
+}
+
+export interface Candidate {
+  id: string; user_id: string; name: string; email: string; phone: string
+  stage: string; source: string; interview_notes: string; status: string
+  hxl_score?: number; hunger?: number; looking?: number
+  relationship?: string; age_range?: string; life_stage?: string
+  primary_driver?: string; pain_point?: string
+  created_at: string; updated_at: string
+}
+
+export interface ContactLog {
+  id: string; user_id: string
+  entity_type: 'lead' | 'candidate' | 'partner'
+  entity_id: string; entity_name: string
+  event_type: string; outcome: string
+  notes: string; fathom_link: string
+  next_action: string; next_date: string
+  created_at: string
+}
+
+export interface Partner {
+  id: string; user_id: string; name: string; ibo_number: string; phone: string
+  email: string; stage: string; gpv: number; ppv: number; bonus: number
+  group_size: number; sponsoring: number; gpv_goal?: number; notes?: string
+  last_contact: string; next_call: string
+  activation_done: string; archived: boolean; parent_id: string
+  created_at: string; updated_at: string
+}
+
+export interface PartnerNote {
+  id: string; partner_id: string; user_id: string
+  text: string; date: string; created_at: string
+}
+
+export interface HabitEntry {
+  id: string; user_id: string; date: string
+  interruptions: number; convo: number; mpa: number; contact: number
+  catch_up: number; dtm: number; pre_filter: number; mg1: number; launch: number
+  energy?: number; deep_work_hours?: number; mg1_names?: string
+  hours?: number
+  created_at: string; updated_at: string
+}
+
+export interface Win {
+  id: string; user_id: string; title: string; category: string
+  description: string; date: string; created_at: string
+}
+
+export interface WeeklyReview {
+  id: string; user_id: string; week_start: string
+  what_happened: string; next_week_number: string; one_fix: string
+  created_at: string; updated_at?: string
+}
+
+export interface AIInsight {
+  id: string; user_id: string; type: string; content: string
+  generated_at: string; read: boolean; created_at?: string
+}
+
+export interface MoodEntry {
+  id: string; user_id: string; text: string; ai_response: string
+  sentiment: 'positive' | 'neutral' | 'low' | 'struggling' | 'fired-up'
+  energy: number; tags: string; created_at: string
+}
+
+export interface Statement {
+  id: string; user_id: string; month: string
+  ppv: number; bv: number; pct: number; bonus: number
+  created_at: string; updated_at: string
+}
+
+export interface Resource {
+  id: string; user_id: string; title: string; type: string; category: string
+  author: string; url: string; status: string; rating: number
+  key_takeaway: string; date_completed: string; created_at: string; updated_at: string
+}
+
+export interface Audio {
+  id: string; user_id: string; title: string; speaker: string
+  duration: string; url: string; played: boolean; notes: string
+  created_at: string; updated_at: string
+}
+
+export interface Task {
+  id: string; user_id: string; title: string; due_date: string
+  done: boolean; auto_generated: boolean; priority: string
+  created_at: string; updated_at: string
+}
+
+export interface ROICost {
+  id: string; user_id: string; date: string; label: string
+  amount: number; category: string; created_at: string
+}
+
+export interface GPVEntry {
+  id: string; user_id: string; month: string; gpv: number
+  bonus_pct: number; created_at: string; updated_at: string
+}
+
+export interface MetaEntry {
+  id?: string; user_id: string; key: string; value: string
+  created_at?: string; updated_at?: string
+}

@@ -1,0 +1,194 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ── BRAND PALETTE ─────────────────────────────── */
+  --gold:    #C8A24A;
+  --gold2:   #E8B85A;
+  --gold3:   #A8822A;
+  --gold-dim:rgba(200,162,74,0.12);
+  --gold-border:rgba(200,162,74,0.25);
+
+  --green:   #4CAF7D;
+  --green2:  #2D8F5E;
+  --red:     #E05555;
+  --red2:    #C03535;
+  --blue:    #5B9BD5;
+  --purple:  #9B5BD5;
+  --orange:  #E8913A;
+  --teal:    #5BD59B;
+
+  /* ── SURFACE SYSTEM ────────────────────────────── */
+  --bg:      #09090B;
+  --s0:      #0D0D10;
+  --s1:      #111116;
+  --s2:      #16161C;
+  --s3:      #1C1C24;
+  --s4:      #22222C;
+
+  /* ── BORDERS ───────────────────────────────────── */
+  --br:      rgba(255,255,255,0.07);
+  --br2:     rgba(255,255,255,0.10);
+  --br3:     rgba(255,255,255,0.14);
+
+  /* ── TEXT ──────────────────────────────────────── */
+  --text:    #EEEAE3;
+  --text2:   #B8B4AD;
+  --text3:   #8B8780;
+  --text4:   #666670;
+
+  /* ── RADIUS ────────────────────────────────────── */
+  --r:       8px;
+  --r2:      12px;
+  --r3:      16px;
+  --r4:      20px;
+
+  /* ── SHADOWS ───────────────────────────────────── */
+  --shadow:  0 4px 24px rgba(0,0,0,0.4);
+  --shadow2: 0 8px 40px rgba(0,0,0,0.6);
+
+  /* ── TRANSITIONS ───────────────────────────────── */
+  --t:       0.15s ease;
+  --t2:      0.25s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ── SCROLLBARS ─────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── SELECTION ──────────────────────────────────── */
+::selection { background: rgba(200,162,74,0.3); color: var(--text); }
+
+/* ── ANIMATIONS ─────────────────────────────────── */
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(200,162,74,0.4); }
+  50%       { box-shadow: 0 0 0 8px rgba(200,162,74,0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes glow {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes count-up {
+  from { opacity: 0; transform: scale(0.8); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── SKELETON ───────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--s2) 25%, var(--s3) 50%, var(--s2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--r);
+}
+
+/* ── LIVE INDICATOR ─────────────────────────────── */
+.live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-gold 2s infinite;
+}
+
+/* ── GLASS CARD ─────────────────────────────────── */
+.glass {
+  background: rgba(17,17,22,0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--br);
+}
+
+/* ── GRADIENT TEXT ──────────────────────────────── */
+.grad-text {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── FADE IN ANIMATION ──────────────────────────── */
+.fade-in  { animation: fade-in 0.3s ease; }
+.slide-up { animation: slide-up 0.4s ease; }
+
+/* ── HOVER LIFT ─────────────────────────────────── */
+.hover-lift {
+  transition: transform var(--t), box-shadow var(--t);
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+/* ── NUMBER FONT ────────────────────────────────── */
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ── FOCUS RING ─────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ── INPUT BASE ─────────────────────────────────── */
+input, select, textarea {
+  background: var(--s0);
+  border: 1px solid var(--br2);
+  border-radius: var(--r);
+  color: var(--text);
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color var(--t);
+  width: 100%;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--gold);
+}
+input::placeholder, textarea::placeholder {
+  color: var(--text4);
+}
+
+/* ── MOBILE SAFE AREA ───────────────────────────── */
+@supports (padding: max(0px)) {
+  .safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .safe-top    { padding-top: max(0px, env(safe-area-inset-top)); }
+}
+
+/* ── RESPONSIVE ─────────────────────────────────── */
+@media (max-width: 768px) {
+  body { font-size: 13px; }
+}
