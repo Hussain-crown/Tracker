@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
+import { buildPreCallBrief } from '@/lib/aiText'
 import type { Candidate, Partner, ContactLog } from '@/lib/stores'
 
 // ── STAGES ────────────────────────────────────────────────
@@ -455,10 +456,20 @@ export default function Candidates(){
   async function getBrief(c:Candidate){
     setBriefLoading(true);setBriefText('')
     const logs=contactLogs.filter(l=>l.entity_id===c.id).slice(0,5)
-    const ctx={name:c.name,stage:normaliseStage(c.stage),score:scores[c.id],hxl:c.hxl_score,hunger:c.hunger,looking:c.looking,relationship:c.relationship,primary_driver:c.primary_driver,pain_point:c.pain_point,daysSince:daysSince(c.updated_at),notes:getNotes(c).slice(0,200),recentLogs:logs.map(l=>({outcome:l.outcome,notes:l.notes?.slice(0,80),objection:(l as any).objection,date:l.created_at.slice(0,10)}))}
+    const stage=normaliseStage(c.stage)
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:280,system:`You are a sponsoring coach for Hussain, an Amway IBO. Write a 4-sentence pre-call brief: their current state and objections, stage-specific approach (${normaliseStage(c.stage)} — ${STAGE_CFG[normaliseStage(c.stage)].nextAction}), opening line, one specific question. Direct, use real data.`,messages:[{role:'user',content:`Candidate: ${JSON.stringify(ctx)}\nBrief.`}]})})
-      const data=await res.json();setBriefText(data.content?.[0]?.text??'Error.')
+      const text=buildPreCallBrief({
+        name:c.name,
+        stageLabel:stage,
+        daysSinceContact:daysSince(c.updated_at),
+        driver:c.primary_driver,
+        painPoint:c.pain_point,
+        metricLabel:'HxL',metricValue:c.hxl_score,
+        notes:getNotes(c).slice(0,200),
+        nextAction:STAGE_CFG[stage].nextAction,
+        recentOutcomes:logs.map(l=>l.outcome),
+      })
+      setBriefText(text)
     }catch{setBriefText('Failed.')}
     setBriefLoading(false)
   }

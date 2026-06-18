@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
+import { buildPreCallBrief } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores'
 
 // ── CONSTANTS ─────────────────────────────────────────────
@@ -259,9 +260,18 @@ export default function Pipeline(){
     setBriefModal({lead:l,text:'',loading:true})
     const logs=leadLogs(l.id).slice(0,3)
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:280,system:`You are a pre-call coach for Hussain, an Amway IBO in Brisbane. Write a 4-sentence brief: their current state, approach based on driver/pain point, opening line, one specific question. Use real data. Direct, no fluff.`,messages:[{role:'user',content:`Lead: ${JSON.stringify({name:l.name,stage:l.stage,hxl:hxl(l.hunger,l.looking),hunger:l.hunger,looking:l.looking,relationship:l.relationship,primary_driver:l.primary_driver,pain_point:l.pain_point,source:l.source,daysSinceContact:daysSince(l.updated_at),nextAction:l.next_action,notes:l.notes,recentLogs:logs.map(c=>({outcome:c.outcome,notes:c.notes.slice(0,100),date:c.created_at.slice(0,10)}))})}\nBrief.`}]})})
-      const data=await res.json()
-      setBriefModal(p=>p?{...p,text:data.content?.[0]?.text??'Error',loading:false}:null)
+      const text=buildPreCallBrief({
+        name:l.name,
+        stageLabel:l.stage,
+        daysSinceContact:daysSince(l.updated_at),
+        driver:l.primary_driver,
+        painPoint:l.pain_point,
+        metricLabel:'HxL',metricValue:hxl(l.hunger,l.looking),
+        notes:l.notes,
+        nextAction:l.next_action,
+        recentOutcomes:logs.map(c=>c.outcome),
+      })
+      setBriefModal(p=>p?{...p,text,loading:false}:null)
     }catch{setBriefModal(p=>p?{...p,text:'Failed.',loading:false}:null)}
   }
 

@@ -74,6 +74,7 @@ export interface WeeklyReview {
 export interface AIInsight {
   id: string; user_id: string; type: string; content: string
   generated_at: string; read: boolean; created_at?: string
+  entity_type?: string | null; entity_id?: string | null
 }
 
 export interface MoodEntry {
@@ -104,6 +105,7 @@ export interface Task {
   id: string; user_id: string; title: string; due_date: string
   done: boolean; auto_generated: boolean; priority: string
   created_at: string; updated_at: string
+  entity_type?: string | null; entity_id?: string | null
 }
 
 export interface ROICost {

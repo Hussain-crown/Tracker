@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now, today } from '@/lib/utils'
+import { buildHabitCoach } from '@/lib/aiText'
 import type { HabitEntry, WeeklyReview } from '@/lib/stores'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
@@ -436,10 +437,25 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   async function getAiCoach(){
     setAiLoading(true);setAiCoach('')
     const l7=allDates.slice(-7)
-    const ctx={today:{...form,score:todayScore,date:selDate},mg1Goal:coreGoals.goalMonthly,monthProgress:{mg1:monthProgress.mg1,convo:monthProgress.convo,mpa:monthProgress.mpa},targets:{mg1:targets.mg1,convo:targets.convo,mpa:targets.mpa},daysLeftInMonth:daysLeft(coreGoals.deadline),sevenDayAvg:{convo:Math.round(l7.reduce((s,d)=>s+getV(habits[d] as HabitEntry|undefined,'convo'),0)/7*10)/10,mg1:Math.round(l7.reduce((s,d)=>s+getV(habits[d] as HabitEntry|undefined,'mg1'),0)/7*10)/10},streak,conv,consistency}
+    const sevenDayAvgMg1=Math.round(l7.reduce((s,d)=>s+getV(habits[d] as HabitEntry|undefined,'mg1'),0)/7*10)/10
+    const sevenDayAvgConvo=Math.round(l7.reduce((s,d)=>s+getV(habits[d] as HabitEntry|undefined,'convo'),0)/7*10)/10
     try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:250,system:'You are a direct business coach for Hussain, an Amway IBO in Brisbane. 3 sentences. Use his exact numbers. What was good, what was off, one action for tomorrow. No fluff.',messages:[{role:'user',content:JSON.stringify(ctx)+'\nCoach.'}]})})
-      const data=await res.json();setAiCoach(data.content?.[0]?.text??'Error.')
+      const text=buildHabitCoach({
+        todayScore,
+        mg1Today:getV(form as HabitEntry,'mg1'),
+        convoToday:getV(form as HabitEntry,'convo'),
+        mg1Goal:coreGoals.goalMonthly,
+        monthMg1:monthProgress.mg1,
+        monthConvo:monthProgress.convo,
+        targetMg1:targets.mg1,
+        targetConvo:targets.convo,
+        daysLeftInMonth:daysLeft(coreGoals.deadline),
+        sevenDayAvgMg1,
+        sevenDayAvgConvo,
+        streak,
+        consistency,
+      })
+      setAiCoach(text)
     }catch{setAiCoach('Failed to connect.')}
     setAiLoading(false)
   }
