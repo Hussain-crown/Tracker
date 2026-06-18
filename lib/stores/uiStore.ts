@@ -65,11 +65,11 @@ export const useUIStore = create<UIStore>((set) => ({
     const { data: { user } } = await sb.auth.getUser()
     const userId = user?.id ?? ''
     if (!userId) return
-    try {
-      // delete then insert — avoids unique constraint errors if index is missing
-      await sb.from('meta').delete().eq('user_id', userId).eq('key', key)
-      await sb.from('meta').insert({ key, user_id: userId, value })
-    } catch {}
+    // delete then insert — avoids unique constraint errors if index is missing
+    const del = await sb.from('meta').delete().eq('user_id', userId).eq('key', key)
+    if (del.error) throw del.error
+    const ins = await sb.from('meta').insert({ key, user_id: userId, value })
+    if (ins.error) throw ins.error
   },
 
   loadResources: async () => {

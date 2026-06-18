@@ -42,7 +42,8 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
 
   addContactLog: async (log) => {
     set(s => ({ contactLogs: [log, ...s.contactLogs] }))
-    try { await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>) } catch {}
+    const { error } = await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>)
+    if (error) throw error
   },
 
   loadContactLogs: async (entityId?) => {
