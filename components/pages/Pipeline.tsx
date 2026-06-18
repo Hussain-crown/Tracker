@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
-import { buildPreCallBrief } from '@/lib/aiText'
+import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores'
 
 // ── CONSTANTS ─────────────────────────────────────────────
@@ -20,6 +20,7 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
 const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
 const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
 const NEXT_ACTS  = ['Call','WhatsApp','MPA','Catch-Up','DTM','Send Info','Other']
+const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
 const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only']
 const AGE_RANGES = ['Under 25','25-35','35-45','45+']
 const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
@@ -64,7 +65,7 @@ interface LeadCardProps {
   candidates: {name:string}[]
   contactLogs: ContactLog[]
   setContactModal: (l:Lead)=>void
-  setContactLog: (v:{outcome:string;notes:string;nextAction:string;nextDate:string})=>void
+  setContactLog: (v:{outcome:string;notes:string;nextAction:string;nextDate:string;rationale:string})=>void
   setBookPFModal: (l:Lead)=>void
   setBriefModal: (v:{lead:Lead;text:string;loading:boolean})=>void
   setDrawerLead: (l:Lead)=>void
@@ -127,7 +128,7 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
       )}
       {lastLog?.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>Last: "{lastLog.notes.slice(0,80)}"</div>}
       <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,alignItems:'center'}}>
-        <button onClick={()=>{setContactModal(l);setContactLog({outcome:'Positive',notes:'',nextAction:l.next_action||'Call',nextDate:''})}}
+        <button onClick={()=>{setContactModal(l);setContactLog({outcome:'Positive',notes:'',nextAction:l.next_action||'Call',nextDate:'',rationale:''})}}
           style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
           ✓ Log
         </button>
@@ -166,7 +167,7 @@ export default function Pipeline(){
   const [form,setForm]         = useState<Partial<Lead>>(blankLead())
   const [err,setErr]           = useState('')
   const [contactModal,setContactModal] = useState<Lead|null>(null)
-  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:''})
+  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:''})
   const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
   const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
   const [briefModal,setBriefModal]     = useState<{lead:Lead;text:string;loading:boolean}|null>(null)
@@ -246,7 +247,7 @@ export default function Pipeline(){
     const l=contactModal
     await upsertLead({...l,next_action:contactLog.nextAction,next_action_date:contactLog.nextDate,updated_at:now()})
     await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()})
-    setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:''})
+    setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:''})
   }
 
   async function bookPF(){
@@ -427,7 +428,7 @@ export default function Pipeline(){
                 ))
               }
               <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const}}>
-                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:''});setDrawerLead(null)}}
+                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:''});setDrawerLead(null)}}
                   style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
                   ✓ Log Contact
                 </button>
@@ -543,7 +544,11 @@ export default function Pipeline(){
               <div style={SL}>Outcome</div>
               <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
                 {OUTCOMES.map(o=>(
-                  <button key={o} onClick={()=>setContactLog(p=>({...p,outcome:o}))}
+                  <button key={o} onClick={()=>{
+                    const sugg=suggestFollowUpDays(o,7)
+                    const d=new Date();d.setDate(d.getDate()+sugg.days)
+                    setContactLog(p=>({...p,outcome:o,nextAction:ACTION_BY_OUTCOME[o]||p.nextAction,nextDate:d.toISOString().slice(0,10),rationale:sugg.rationale}))
+                  }}
                     style={{padding:'6px 12px',borderRadius:'var(--r)',border:`1px solid ${contactLog.outcome===o?GOLD:'var(--br)'}`,background:contactLog.outcome===o?'rgba(200,162,74,0.15)':'var(--s2)',color:contactLog.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:contactLog.outcome===o?700:400}}>
                     {o}
                   </button>
@@ -566,6 +571,7 @@ export default function Pipeline(){
                 <input type="date" value={contactLog.nextDate} onChange={e=>setContactLog(p=>({...p,nextDate:e.target.value}))} style={INP}/>
               </div>
             </div>
+            {contactLog.rationale&&<div style={{fontSize:11,color:'var(--text4)',fontStyle:'italic',marginBottom:18,marginTop:-10}}>{contactLog.rationale}</div>}
             <div style={{display:'flex',gap:8}}>
               <button onClick={logContact} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save Log</button>
               <button onClick={()=>setContactModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>

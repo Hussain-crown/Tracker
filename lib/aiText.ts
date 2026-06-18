@@ -88,3 +88,63 @@ export function buildHabitCoach(ctx: HabitCoachInput): string {
 
   return sentences.join(' ')
 }
+
+// Suggests how many days to wait before the next follow-up based on how the
+// last contact went, relative to the entity's normal contact cadence.
+export function suggestFollowUpDays(outcome: string, baseCadenceDays = 7): { days: number; rationale: string } {
+  const o = (outcome || '').toLowerCase()
+
+  if (o.includes('negative')) {
+    return { days: Math.max(baseCadenceDays, 10), rationale: 'Negative outcome — give it more space before re-approaching, don\'t crowd them.' }
+  }
+  if (o.includes('no show')) {
+    return { days: 2, rationale: 'No show — retry soon, before it slips their mind entirely.' }
+  }
+  if (o.includes('positive')) {
+    return { days: Math.max(1, Math.round(baseCadenceDays / 2)), rationale: 'Positive outcome — keep the momentum going, don\'t let it go cold.' }
+  }
+  if (o.includes('not yet')) {
+    return { days: baseCadenceDays, rationale: 'Not ready yet — check back on the normal cadence rather than chasing.' }
+  }
+  return { days: baseCadenceDays, rationale: 'Neutral outcome — standard cadence applies.' }
+}
+
+export type DailyBriefingInput = {
+  gpv: number
+  bracketLabel: string
+  gpvToNext: number
+  habitStreak: number
+  weekMg1: number
+  weekConvo: number
+  healthScore: number
+  consistencyScore: number
+  overdueContacts: number
+  staleLeads: number
+  activeCandidates: number
+  inactionDays: number
+  isLowMode: boolean
+}
+
+export function buildDailyBriefing(ctx: DailyBriefingInput): string {
+  const { gpv, bracketLabel, gpvToNext, habitStreak, weekMg1, weekConvo, healthScore, consistencyScore, overdueContacts, staleLeads, activeCandidates, inactionDays, isLowMode } = ctx
+  const lines: string[] = []
+
+  lines.push(`${bracketLabel} bracket at ${gpv.toFixed(0)} GPV${gpvToNext > 0 ? ` — ${gpvToNext.toFixed(0)} to the next bracket.` : '.'}`)
+
+  if (weekMg1 === 0) lines.push(`No MG1s yet this week — that's the priority today.`)
+  else lines.push(`${weekMg1} MG1${weekMg1 === 1 ? '' : 's'} and ${weekConvo} convos this week.`)
+
+  if (habitStreak >= 5) lines.push(`${habitStreak}-day logging streak — keep it going.`)
+  else if (habitStreak === 0) lines.push(`Streak reset — log today to start rebuilding it.`)
+
+  if (overdueContacts > 0) lines.push(`${overdueContacts} overdue contact${overdueContacts === 1 ? '' : 's'} waiting on a follow-up.`)
+  if (staleLeads > 0) lines.push(`${staleLeads} lead${staleLeads === 1 ? '' : 's'} stale (7+ days no update).`)
+  if (activeCandidates > 0) lines.push(`${activeCandidates} active candidate${activeCandidates === 1 ? '' : 's'} in the pipeline.`)
+
+  if (inactionDays > 7) lines.push(`${inactionDays} days since your last MG1 — that's the real cost driver right now.`)
+  if (consistencyScore < 40) lines.push(`Output has been inconsistent lately — aim for steady daily activity over binge sessions.`)
+  if (isLowMode) lines.push(`Low mode is on — smaller daily targets apply, don't punish yourself for it.`)
+  else if (healthScore >= 80) lines.push(`Health score is strong (${healthScore}) — good position to push harder today.`)
+
+  return lines.join(' ')
+}

@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
-import { buildPreCallBrief } from '@/lib/aiText'
+import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Candidate, Partner, ContactLog } from '@/lib/stores'
 
 // ── STAGES ────────────────────────────────────────────────
@@ -216,7 +216,7 @@ export default function Candidates(){
   const [booking,setBooking]   = useState(false)
   const [dqOpen,setDqOpen]     = useState<Candidate|null>(null)
   const [logModal,setLogModal] = useState<Candidate|null>(null)
-  const [logForm,setLogForm]   = useState({outcome:'Positive',notes:'',objection:'None',nextAction:'',nextDate:''})
+  const [logForm,setLogForm]   = useState({outcome:'Positive',notes:'',objection:'None',nextAction:'',nextDate:'',rationale:''})
   const [launchConfirm,setLaunchConfirm] = useState<Candidate|null>(null)
   const [addTeamOpen,setAddTeamOpen] = useState(false)
   const [addTeamForm,setAddTeamForm] = useState({name:'',phone:'',email:'',source:'',stage:'Pre-Filter' as Stage,sponsor_ibo:''})
@@ -314,7 +314,7 @@ export default function Candidates(){
   // ── ACTIONS ──────────────────────────────────────────────
   function openLog(c:Candidate){
     setLogModal(c)
-    setLogForm({outcome:'Positive',notes:'',objection:'None',nextAction:STAGE_CFG[normaliseStage(c.stage)].nextAction,nextDate:''})
+    setLogForm({outcome:'Positive',notes:'',objection:'None',nextAction:STAGE_CFG[normaliseStage(c.stage)].nextAction,nextDate:'',rationale:''})
   }
   async function saveLog(){
     if(!logModal||!userId)return
@@ -828,7 +828,11 @@ export default function Candidates(){
               <div style={SL}>Outcome</div>
               <div style={{display:'flex',gap:5,flexWrap:'wrap' as const}}>
                 {['Positive','Neutral','Negative','No Show','Not Yet'].map(o=>(
-                  <button key={o} onClick={()=>setLogForm(p=>({...p,outcome:o}))}
+                  <button key={o} onClick={()=>{
+                    const sugg=suggestFollowUpDays(o,7)
+                    const d=new Date();d.setDate(d.getDate()+sugg.days)
+                    setLogForm(p=>({...p,outcome:o,nextDate:d.toISOString().slice(0,10),rationale:sugg.rationale}))
+                  }}
                     style={{padding:'5px 10px',borderRadius:'var(--r)',border:`1px solid ${logForm.outcome===o?GOLD:'var(--br)'}`,background:logForm.outcome===o?'rgba(200,162,74,0.12)':'var(--s2)',color:logForm.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10,fontWeight:logForm.outcome===o?700:400}}>
                     {o}
                   </button>
@@ -849,6 +853,7 @@ export default function Candidates(){
               <div><div style={SL}>Next Action</div><input value={logForm.nextAction} onChange={e=>setLogForm(p=>({...p,nextAction:e.target.value}))} style={INP}/></div>
               <div><div style={SL}>Next Date</div><input type="date" value={logForm.nextDate} onChange={e=>setLogForm(p=>({...p,nextDate:e.target.value}))} style={INP}/></div>
             </div>
+            {logForm.rationale&&<div style={{fontSize:11,color:'var(--text4)',fontStyle:'italic',marginBottom:18,marginTop:-10}}>{logForm.rationale}</div>}
             <div style={{display:'flex',gap:8}}>
               <button onClick={saveLog} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save Log</button>
               <button onClick={()=>setLogModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
