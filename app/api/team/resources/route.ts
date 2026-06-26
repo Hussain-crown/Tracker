@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sbAdmin as sb, verifyUser } from '@/lib/supabase/admin'
 
+export const dynamic = 'force-dynamic'
+
 async function resolveAdminId(): Promise<string> {
   let adminId = process.env.ADMIN_USER_ID || ''
   if (adminId) return adminId

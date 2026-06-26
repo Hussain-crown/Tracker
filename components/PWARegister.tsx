@@ -16,7 +16,7 @@ export default function PWARegister() {
 
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((reg) => setInterval(() => reg.update(), 60000))
-      .catch((err) => console.log('Track SW registration failed:', err))
+      .catch(() => {})
 
     // Listen for online/offline events
     const handleOnline = () => {

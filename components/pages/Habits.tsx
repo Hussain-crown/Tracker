@@ -636,67 +636,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
         </div>
       )}
 
-      {/* ── RESOURCES TAB (tracker only, admin-controlled) ─────────── */}
-      {tab==='resources'&&hideMonth&&(
-        <div>
-          {resLoading&&<div style={{textAlign:'center' as const,padding:40,color:'var(--text4)',fontSize:13}}>Loading resources…</div>}
-          {!resLoading&&teamResources.length===0&&(
-            <div style={{textAlign:'center' as const,padding:48,color:'var(--text4)',fontSize:13,border:'1px dashed var(--br)',borderRadius:'var(--r2)'}}>No resources yet — your leader will add them here.</div>
-          )}
-          {!resLoading&&teamResources.map((r:any)=>{
-            const c:Record<string,string>={Leadership:'var(--gold)',Mindset:'var(--purple)',Business:'var(--green)',Skills:'var(--teal)',Health:'var(--blue)',Other:'var(--text3)'}
-            const col=c[r.category]||'var(--text3)'
-            const takeaway=(r.key_takeaway||'').replace(/\[\[PROG:\d+\]\]/g,'').replace(/\[\[ACT:[^\]]*\]\]/g,'').replace(/\[\[ACTDONE:1\]\]/g,'').trim()
-            return(
-              <div key={r.id} style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px 16px',marginBottom:10,borderLeft:'3px solid '+col}}>
-                <div style={{display:'flex',gap:8,alignItems:'flex-start',justifyContent:'space-between'}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' as const,marginBottom:4}}>
-                      <span style={{fontSize:13,fontWeight:700}}>{r.title}</span>
-                      <span style={{fontSize:9,padding:'1px 7px',borderRadius:8,background:col+'15',color:col}}>{r.type}</span>
-                      <span style={{fontSize:9,padding:'1px 7px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{r.category}</span>
-                    </div>
-                    {r.author&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:4}}>by {r.author}</div>}
-                    {takeaway&&<div style={{fontSize:11,color:'var(--text2)',lineHeight:1.5}}>{takeaway}</div>}
-                    {r.url&&<a href={r.url} target="_blank" rel="noopener noreferrer" style={{display:'inline-block',marginTop:8,fontSize:11,color:'var(--blue)',fontWeight:600}}>Open resource ↗</a>}
-                  </div>
-                  {r.rating>0&&r.status==='done'&&<div style={{fontSize:14,color:'var(--gold)',flexShrink:0}}>{'★'.repeat(r.rating)}</div>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ── RESOURCES TAB (tracker only) ── */}
-      {tab==='resources'&&hideMonth&&(
-        <div>
-          {resLoading&&<div style={{textAlign:'center' as const,padding:40,color:'var(--text4)',fontSize:13}}>Loading resources…</div>}
-          {!resLoading&&teamResources.length===0&&(
-            <div style={{textAlign:'center' as const,padding:48,color:'var(--text4)',fontSize:13,border:'1px dashed var(--br)',borderRadius:'var(--r2)'}}>No resources yet — your leader will add them here.</div>
-          )}
-          {!resLoading&&teamResources.map((r:any)=>{
-            const RCOLS:Record<string,string>={Leadership:'var(--gold)',Mindset:'var(--purple)',Business:'var(--green)',Skills:'var(--teal)',Health:'var(--blue)',Other:'var(--text3)'}
-            const col=RCOLS[r.category]||'var(--text3)'
-            const takeaway=(r.key_takeaway||'').replace(/\[\[PROG:\d+\]\]/g,'').replace(/\[\[ACT:[^\]]*\]\]/g,'').replace(/\[\[ACTDONE:1\]\]/g,'').trim()
-            return(
-              <div key={r.id} style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px 16px',marginBottom:10,borderLeft:'3px solid '+col}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' as const,marginBottom:4}}>
-                    <span style={{fontSize:13,fontWeight:700}}>{r.title}</span>
-                    <span style={{fontSize:9,padding:'1px 7px',borderRadius:8,background:col+'15',color:col}}>{r.type}</span>
-                    <span style={{fontSize:9,padding:'1px 7px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{r.category}</span>
-                  </div>
-                  {r.author&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:4}}>by {r.author}</div>}
-                  {takeaway&&<div style={{fontSize:11,color:'var(--text2)',lineHeight:1.5}}>{takeaway}</div>}
-                  {r.url&&<a href={r.url} target="_blank" rel="noopener noreferrer" style={{display:'inline-block',marginTop:8,fontSize:11,color:'var(--blue)',fontWeight:600}}>Open resource ↗</a>}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
       {/* ── MONTH TAB ─────────────────────────────────── */}
       {tab==='month'&&(
         <div>
