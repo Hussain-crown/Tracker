@@ -137,13 +137,13 @@ interface GEvent{id:string;summary:string;start:{dateTime?:string;date?:string};
 
 // ── CANDIDATE CARD — outside component ───────────────────
 interface CardProps{
-  c:Candidate; mode:Mode; partners:Partner[]; contactLogs:ContactLog[]
+  c:Candidate; partners:Partner[]; contactLogs:ContactLog[]
   calEvents:GEvent[]; scores:Record<string,number>
   onAdvance:(c:Candidate,dir?:'forward'|'back')=>void; onDq:(c:Candidate)=>void
   onView:(c:Candidate)=>void; onBrief:(c:Candidate)=>void
   onLaunch:(c:Candidate)=>void; onDisqualifyOffer:(c:Candidate)=>void
 }
-function CandCard({c,mode,contactLogs,calEvents,scores,onAdvance,onDq,onView,onLaunch,onDisqualifyOffer}:CardProps){
+function CandCard({c,contactLogs,calEvents,scores,onAdvance,onDq,onView,onLaunch,onDisqualifyOffer}:CardProps){
   const stage=normaliseStage(c.stage)
   const cfg=STAGE_CFG[stage]
   const score=scores[c.id]??0
@@ -270,8 +270,8 @@ export default function Candidates(){
   }
 
   // ── COMPUTED ─────────────────────────────────────────────
-  const my     = useMemo(()=>candidates.filter(c=>{const s=getSponsorIbo(c);return !s||s===MY_IBO}),[candidates])
-  const pool   = my
+  // candidates is already scoped to the logged-in user by the store's user_id filter
+  const pool   = candidates
 
   const active   = useMemo(()=>pool.filter(c=>c.status==='active'),[pool])
   const archived = useMemo(()=>pool.filter(c=>c.status==='disqualified'),[pool])
@@ -298,30 +298,11 @@ export default function Candidates(){
       if(as!==bs)return as?-1:1
       return (scores[b.id]??0)-(scores[a.id]??0)
     })
-  },[active,mode,teamFilter,search,scores,contactLogs])
-
-  const teamIbos = useMemo(()=>{
-    const ibos=new Set<string>()
-    team.forEach(c=>{const s=getSponsorIbo(c);if(s)ibos.add(s)})
-    return Array.from(ibos)
-  },[team])
+  },[active,search,scores,contactLogs])
 
   const iboNames = useMemo(()=>{
     const m:Record<string,string>={};partners.forEach(p=>{if(p.ibo_number)m[p.ibo_number]=p.name});return m
   },[partners])
-
-  // Team leaderboard (shown in My mode)
-  const teamLeaderboard = useMemo(()=>{
-    const stats:Record<string,{name:string;active:number;furthest:number}>={}
-    team.filter(c=>c.status==='active').forEach(c=>{
-      const ibo=getSponsorIbo(c)
-      if(!stats[ibo])stats[ibo]={name:iboNames[ibo]??'IBO '+ibo,active:0,furthest:0}
-      stats[ibo].active++
-      const idx=STAGES.indexOf(normaliseStage(c.stage))
-      if(idx>stats[ibo].furthest)stats[ibo].furthest=idx
-    })
-    return Object.values(stats).sort((a,b)=>b.active-a.active)
-  },[team,iboNames])
 
   const funnel = useMemo(()=>{
     const total=active.length||1
@@ -571,7 +552,7 @@ export default function Candidates(){
     setBriefLoading(false)
   }
 
-  const cardProps={mode,partners,contactLogs,calEvents,scores,onAdvance:(c,dir)=>openAdvance(c,dir||'forward'),onDq:setDqOpen,onView:(c:Candidate)=>{setDetail(c);setDetailTab('profile');setOfferAnswers(getOfferAnswers(c));setBriefText('')},onBrief:(c:Candidate)=>{setDetail(c);setDetailTab('brief');getBrief(c)},onLaunch:(c:Candidate)=>setLaunchConfirm(c),onDisqualifyOffer:(c:Candidate)=>setDqOpen(c)}
+  const cardProps={partners,contactLogs,calEvents,scores,onAdvance:(c:Candidate,dir?:'forward'|'back')=>openAdvance(c,dir||'forward'),onDq:setDqOpen,onView:(c:Candidate)=>{setDetail(c);setDetailTab('profile');setOfferAnswers(getOfferAnswers(c));setBriefText('')},onBrief:(c:Candidate)=>{setDetail(c);setDetailTab('brief');getBrief(c)},onLaunch:(c:Candidate)=>setLaunchConfirm(c),onDisqualifyOffer:(c:Candidate)=>setDqOpen(c)}
 
   // ── RENDER ────────────────────────────────────────────────
   return(
@@ -592,21 +573,6 @@ export default function Candidates(){
         ))}
       </div>
 
-      {/* Team leaderboard (My mode only) */}
-      {mode==='my'&&teamLeaderboard.length>0&&(
-        <div style={{...CARD,marginBottom:12}}>
-          <div style={SL}>Team Pipeline</div>
-          <div style={{display:'flex',gap:8,overflowX:'auto' as const}}>
-            {teamLeaderboard.map(t=>(
-              <div key={t.name} style={{flexShrink:0,background:'var(--s2)',borderRadius:'var(--r)',padding:'8px 12px',minWidth:100,textAlign:'center' as const}}>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--text2)',marginBottom:4}}>{t.name}</div>
-                <div className="mono" style={{fontSize:18,fontWeight:800,color:GOLD,lineHeight:1}}>{t.active}</div>
-                <div style={{fontSize:9,color:'var(--text4)',marginTop:2}}>active · furthest: {STAGES[t.furthest]?.split(' ')[0]}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Tabs */}
       <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto' as const}}>
@@ -715,7 +681,6 @@ export default function Candidates(){
                         <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(76,175,125,0.12)',color:GREEN,fontWeight:600}}>🚀 Launched</span>
                         {launchedAt&&<span style={{fontSize:10,color:'var(--text4)'}}>on {fmtDate(launchedAt)}</span>}
                         {c.primary_driver&&<span style={{fontSize:10,color:GOLD}}>{c.primary_driver}</span>}
-                        {mode==='team'&&<span style={{fontSize:10,color:'var(--text4)'}}>via {iboNames[getSponsorIbo(c)]??getSponsorIbo(c)}</span>}
                       </div>
                     </div>
                     <div className="mono" style={{fontSize:18,fontWeight:800,color:GREEN}}>{c.hxl_score??((c.hunger??5)*(c.looking??5))}</div>
