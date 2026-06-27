@@ -63,6 +63,37 @@ const OFFER_QS = [
 
 const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Not sure about products','Other']
 const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Ghosted','Chose another opportunity','Other']
+
+// ── CSV IMPORT HELPERS ─────────────────────────────────────
+const SOURCES_C   = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
+const RELATIONS_C = ['Family','Close friend','Friend / Acquaintance','C-list','Online contact']
+const AGE_RANGES_C= ['Under 25','25–35','35–45','45+']
+const LIFE_STAGES_C=['Student','Employed (9–5)','Self-employed','Stay-at-home parent','Retired']
+const DRIVERS_C   = ['Family','Growth','Community','Lifestyle','Freedom','Purpose','Financial']
+type CandImportStatus = 'valid'|'dupe'|'invalid'
+interface CandImportRow {
+  name:string; phone:string; email:string; stage:string; source:string
+  relationship:string; age_range:string; life_stage:string; primary_driver:string
+  pain_point:string; hunger:number; looking:number
+  status:CandImportStatus; missing:string[]; dupeOf?:string
+}
+function parseCSVC(text:string):Record<string,string>[]{
+  const parseRow=(line:string)=>{const cols:string[]=[];let cur='',inQ=false;for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){cols.push(cur);cur=''}else cur+=ch};cols.push(cur);return cols}
+  const lines=text.trim().split(/\r?\n/)
+  if(lines.length<2)return[]
+  const headers=parseRow(lines[0]).map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase())
+  return lines.slice(1).filter(l=>l.trim()).map(line=>{
+    const cols=parseRow(line).map(c=>c.trim().replace(/^"|"$/g,''))
+    const row:Record<string,string>={}
+    headers.forEach((h,i)=>{row[h]=cols[i]??''})
+    return row
+  })
+}
+function normColC(row:Record<string,string>,...keys:string[]):string{
+  for(const k of keys){const v=row[k]??row[k.replace(/_/g,' ')]??row[k.replace(/ /g,'_')]??'';if(v.trim())return v.trim()}
+  return''
+}
+
 const MY_IBO = '7013656028'
 const TZ = 'Australia/Brisbane'
 function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
@@ -217,6 +248,10 @@ export default function Candidates(){
   const [launchConfirm,setLaunchConfirm] = useState<Candidate|null>(null)
   const [addTeamOpen,setAddTeamOpen] = useState(false)
   const [addTeamForm,setAddTeamForm] = useState({name:'',phone:'',email:'',source:'',stage:'Pre-Filter' as Stage,sponsor_ibo:''})
+  const [importOpen,setImportOpen]   = useState(false)
+  const [importRows,setImportRows]   = useState<CandImportRow[]>([])
+  const [importDragging,setImportDragging] = useState(false)
+  const [importing,setImporting]     = useState(false)
   const [briefText,setBriefText] = useState('')
   const [briefLoading,setBriefLoading] = useState(false)
   const [calEvents,setCalEvents] = useState<GEvent[]>([])
@@ -448,6 +483,73 @@ export default function Candidates(){
     setAddTeamOpen(false);setAddTeamForm({name:'',phone:'',email:'',source:'',stage:'Pre-Filter',sponsor_ibo:''})
   }
 
+  function downloadCandTemplate(){
+    const header='name,phone,email,stage,source,relationship,age_range,life_stage,primary_driver,pain_point,hunger,looking'
+    const example='"Jane Smith","+61412345678","jane@email.com","Pre-Filter","Instagram","Friend / Acquaintance","25–35","Employed (9–5)","Freedom","Wants more time with family",7,6'
+    const blob=new Blob([header+'\n'+example],{type:'text/csv'})
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='candidates_template.csv';a.click()
+  }
+
+  function processCandFile(file:File){
+    const reader=new FileReader()
+    reader.onload=e=>{
+      const text=e.target?.result as string
+      const rawRows=parseCSVC(text)
+      const existingNames=new Set(candidates.map(c=>c.name.toLowerCase().trim()))
+      const existingPhones=new Set(candidates.map(c=>(c.phone||'').replace(/\D/g,'').replace(/^0/,'61')).filter(Boolean))
+      const batchNames=new Set<string>()
+      const batchPhones=new Set<string>()
+      const parsed:CandImportRow[]=rawRows.map(row=>{
+        const name=normColC(row,'name')
+        const phone=normColC(row,'phone')
+        const email=normColC(row,'email')
+        const stage=normColC(row,'stage')
+        const source=normColC(row,'source')
+        const relationship=normColC(row,'relationship')
+        const age_range=normColC(row,'age_range','age range')
+        const life_stage=normColC(row,'life_stage','life stage')
+        const primary_driver=normColC(row,'primary_driver','primary driver')
+        const pain_point=normColC(row,'pain_point','pain point','their why')
+        const hunger=Math.min(10,Math.max(1,parseInt(normColC(row,'hunger'))||5))
+        const looking=Math.min(10,Math.max(1,parseInt(normColC(row,'looking'))||5))
+        const missing:string[]=[]
+        if(!name)missing.push('name')
+        if(!stage||!(STAGES as readonly string[]).includes(stage))missing.push('stage')
+        if(!source||!SOURCES_C.includes(source))missing.push('source')
+        if(!relationship||!RELATIONS_C.includes(relationship))missing.push('relationship')
+        if(!age_range||!AGE_RANGES_C.includes(age_range))missing.push('age_range')
+        if(!life_stage||!LIFE_STAGES_C.includes(life_stage))missing.push('life_stage')
+        if(!primary_driver||!DRIVERS_C.includes(primary_driver))missing.push('primary_driver')
+        if(!pain_point)missing.push('pain_point')
+        const normName=name.toLowerCase().trim()
+        const normPhone=(phone||'').replace(/\D/g,'').replace(/^0/,'61')
+        const isDupeExisting=existingNames.has(normName)||(!!normPhone&&existingPhones.has(normPhone))
+        const isDupeBatch=batchNames.has(normName)||(!!normPhone&&batchPhones.has(normPhone))
+        let status:CandImportStatus='valid'
+        let dupeOf:string|undefined
+        if(isDupeExisting){status='dupe';dupeOf='existing candidate'}
+        else if(isDupeBatch){status='dupe';dupeOf='within batch'}
+        else if(missing.length>0)status='invalid'
+        if(!isDupeExisting&&!isDupeBatch){batchNames.add(normName);if(normPhone)batchPhones.add(normPhone)}
+        return{name,phone,email,stage,source,relationship,age_range,life_stage,primary_driver,pain_point,hunger,looking,status,missing,dupeOf}
+      })
+      setImportRows(parsed)
+    }
+    reader.readAsText(file)
+  }
+
+  async function confirmCandImport(){
+    if(!userId)return
+    setImporting(true)
+    const valid=importRows.filter(r=>r.status==='valid')
+    await Promise.all(valid.map(async row=>{
+      const c:any={id:uid(),user_id:userId,name:row.name,email:row.email||'',phone:row.phone||'',stage:row.stage||'Pre-Filter',source:row.source,status:'active',hxl_score:row.hunger*row.looking,hunger:row.hunger,looking:row.looking,relationship:row.relationship,age_range:row.age_range,life_stage:row.life_stage,primary_driver:row.primary_driver,pain_point:row.pain_point,interview_notes:JSON.stringify({__notes:'',__offers:{}}),created_at:now(),updated_at:now()}
+      await upsertCandidate(c)
+      await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'lead_created',outcome:'',notes:`Imported from ${c.source}`,fathom_link:'',next_action:STAGE_CFG[normaliseStage(c.stage)].nextAction,next_date:'',created_at:new Date().toISOString()} as any)
+    }))
+    setImporting(false);setImportOpen(false);setImportRows([])
+  }
+
   async function getBrief(c:Candidate){
     setBriefLoading(true);setBriefText('')
     const logs=contactLogs.filter(l=>l.entity_id===c.id).slice(0,5)
@@ -521,6 +623,7 @@ export default function Candidates(){
         <div>
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:140,...INP}}/>
+            <button onClick={()=>{setImportRows([]);setImportOpen(true)}} style={{padding:'9px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,flexShrink:0}}>↑ Import</button>
           </div>
           {/* Stage filter pills */}
           <div style={{display:'flex',gap:5,overflowX:'auto' as const,marginBottom:12,paddingBottom:4}}>
@@ -963,6 +1066,94 @@ export default function Candidates(){
               <button onClick={()=>setAddTeamOpen(false)} style={{padding:'9px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
               <button onClick={addTeamCandidate} style={{flex:1,padding:'9px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Add</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── IMPORT MODAL ──────────────────────────────────── */}
+      {importOpen&&(
+        <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget){setImportOpen(false);setImportRows([])}}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:640,overflow:'hidden',margin:'auto'}}>
+            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700}}>Import Candidates from CSV</div>
+                <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>All fields required · dupes and incomplete rows skipped</div>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <button onClick={downloadCandTemplate} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}08`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>↓ Template</button>
+                <button onClick={()=>{setImportOpen(false);setImportRows([])}} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
+              </div>
+            </div>
+            {importRows.length===0?(
+              <div style={{padding:'32px 24px'}}>
+                <div
+                  onDragOver={e=>{e.preventDefault();setImportDragging(true)}}
+                  onDragLeave={()=>setImportDragging(false)}
+                  onDrop={e=>{e.preventDefault();setImportDragging(false);const f=e.dataTransfer.files[0];if(f)processCandFile(f)}}
+                  style={{border:`2px dashed ${importDragging?GOLD:'var(--br2)'}`,borderRadius:'var(--r2)',padding:'48px 24px',textAlign:'center' as const,transition:'border-color 0.15s',background:importDragging?'rgba(200,162,74,0.04)':'transparent',cursor:'pointer'}}
+                  onClick={()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.csv,text/csv';inp.onchange=ev=>{const f=(ev.target as HTMLInputElement).files?.[0];if(f)processCandFile(f)};inp.click()}}
+                >
+                  <div style={{fontSize:32,marginBottom:12}}>📂</div>
+                  <div style={{fontSize:14,fontWeight:600,color:'var(--text2)',marginBottom:6}}>Drag & drop your CSV here</div>
+                  <div style={{fontSize:12,color:'var(--text4)'}}>or click to browse · CSV files only</div>
+                </div>
+                <div style={{marginTop:16,padding:'12px 14px',background:'var(--s2)',borderRadius:'var(--r)',fontSize:11,color:'var(--text4)',lineHeight:1.7}}>
+                  <strong style={{color:'var(--text3)'}}>Required columns:</strong> name, stage ({STAGES.join(', ')}), source, relationship, age_range, life_stage, primary_driver, pain_point<br/>
+                  <strong style={{color:'var(--text3)'}}>Optional:</strong> phone, email, hunger (1–10), looking (1–10)
+                </div>
+              </div>
+            ):(
+              <div style={{padding:'20px 24px',maxHeight:'70vh',overflowY:'auto' as const}}>
+                {(()=>{
+                  const valid=importRows.filter(r=>r.status==='valid').length
+                  const dupes=importRows.filter(r=>r.status==='dupe').length
+                  const invalid=importRows.filter(r=>r.status==='invalid').length
+                  return(
+                    <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap' as const}}>
+                      <div style={{padding:'8px 14px',borderRadius:'var(--r)',background:`${GREEN}10`,border:`1px solid ${GREEN}30`,fontSize:11,color:GREEN,fontWeight:700}}>{valid} ready to import</div>
+                      {dupes>0&&<div style={{padding:'8px 14px',borderRadius:'var(--r)',background:'rgba(200,162,74,0.1)',border:'1px solid rgba(200,162,74,0.3)',fontSize:11,color:GOLD,fontWeight:700}}>{dupes} dupes (skipped)</div>}
+                      {invalid>0&&<div style={{padding:'8px 14px',borderRadius:'var(--r)',background:`${RED}10`,border:`1px solid ${RED}30`,fontSize:11,color:RED,fontWeight:700}}>{invalid} incomplete (skipped)</div>}
+                    </div>
+                  )
+                })()}
+                <div style={{marginBottom:12,overflowX:'auto' as const}}>
+                  <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:11}}>
+                    <thead>
+                      <tr style={{borderBottom:'1px solid var(--br)'}}>
+                        {['Status','Name','Stage','Source','Relationship','Driver','Issue'].map(h=>(
+                          <th key={h} style={{padding:'6px 8px',textAlign:'left' as const,color:'var(--text4)',fontWeight:600,whiteSpace:'nowrap' as const}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.map((row,i)=>{
+                        const statusColor=row.status==='valid'?GREEN:row.status==='dupe'?GOLD:RED
+                        const statusLabel=row.status==='valid'?'✓':row.status==='dupe'?'dupe':'✗'
+                        return(
+                          <tr key={i} style={{borderBottom:'1px solid var(--br)',opacity:row.status==='valid'?1:0.6}}>
+                            <td style={{padding:'6px 8px'}}><span style={{fontSize:10,padding:'2px 7px',borderRadius:6,background:statusColor+'18',color:statusColor,fontWeight:700}}>{statusLabel}</span></td>
+                            <td style={{padding:'6px 8px',fontWeight:600,maxWidth:120,overflow:'hidden' as const,textOverflow:'ellipsis' as const,whiteSpace:'nowrap' as const}}>{row.name||'—'}</td>
+                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.stage||'—'}</td>
+                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.source||'—'}</td>
+                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.relationship||'—'}</td>
+                            <td style={{padding:'6px 8px',color:GOLD}}>{row.primary_driver||'—'}</td>
+                            <td style={{padding:'6px 8px',color:row.status==='dupe'?GOLD:RED,fontSize:10}}>{row.status==='dupe'?`Dupe of ${row.dupeOf}`:row.missing.length>0?row.missing.join(', '):''}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid var(--br)'}}>
+                  <button onClick={confirmCandImport} disabled={importing||importRows.filter(r=>r.status==='valid').length===0}
+                    style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:importing||importRows.filter(r=>r.status==='valid').length===0?'var(--s3)':`linear-gradient(135deg,${GREEN},var(--green2))`,color:importing||importRows.filter(r=>r.status==='valid').length===0?'var(--text4)':'#fff',fontWeight:700,cursor:importing||importRows.filter(r=>r.status==='valid').length===0?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                    {importing?'Importing…':`Import ${importRows.filter(r=>r.status==='valid').length} Candidates`}
+                  </button>
+                  <button onClick={()=>setImportRows([])} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>← Back</button>
+                  <button onClick={()=>{setImportOpen(false);setImportRows([])}} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
