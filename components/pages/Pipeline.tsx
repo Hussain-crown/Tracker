@@ -29,6 +29,31 @@ const HUNGER_ANCHORS = ['Happy where they are','Slightly unsatisfied','Open to c
 const LOOKING_ANCHORS= ['Not open at all','Hearing me out','Genuinely curious','Actively exploring','Ready to go now']
 const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Wrong timing','Other']
 
+// ── CSV IMPORT HELPERS ─────────────────────────────────────
+type ImportStatus = 'valid'|'dupe'|'invalid'
+interface ImportRow {
+  name:string; phone:string; instagram:string; source:string; stage:string
+  relationship:string; age_range:string; life_stage:string; primary_driver:string
+  pain_point:string; notes:string; hunger:number; looking:number
+  status:ImportStatus; missing:string[]; dupeOf?:string
+}
+function parseCSV(text:string):Record<string,string>[]{
+  const parseRow=(line:string)=>{const cols:string[]=[];let cur='',inQ=false;for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){cols.push(cur);cur=''}else cur+=ch};cols.push(cur);return cols}
+  const lines=text.trim().split(/\r?\n/)
+  if(lines.length<2)return[]
+  const headers=parseRow(lines[0]).map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase())
+  return lines.slice(1).filter(l=>l.trim()).map(line=>{
+    const cols=parseRow(line).map(c=>c.trim().replace(/^"|"$/g,''))
+    const row:Record<string,string>={}
+    headers.forEach((h,i)=>{row[h]=cols[i]??''})
+    return row
+  })
+}
+function normCol(row:Record<string,string>,...keys:string[]):string{
+  for(const k of keys){const v=row[k]??row[k.replace(/_/g,' ')]??row[k.replace(/ /g,'_')]??'';if(v.trim())return v.trim()}
+  return''
+}
+
 function parseNotes(raw:string):{text:string;linkedin:string;facebook:string}{
   try{const p=JSON.parse(raw||'');if(p&&typeof p==='object'&&('_t' in p||'_li' in p||'_fb' in p)){return{text:p._t??'',linkedin:p._li??'',facebook:p._fb??''}}return{text:raw||'',linkedin:'',facebook:''}}catch{return{text:raw||'',linkedin:'',facebook:''}}
 }
@@ -204,6 +229,10 @@ export default function Pipeline(){
   const [selectMode,setSelectMode]     = useState(false)
   const [selectedIds,setSelectedIds]   = useState<Set<string>>(new Set())
   const [socialForm,setSocialForm]     = useState({linkedin:'',facebook:''})
+  const [importOpen,setImportOpen]     = useState(false)
+  const [importRows,setImportRows]     = useState<ImportRow[]>([])
+  const [importDragging,setImportDragging] = useState(false)
+  const [importing,setImporting]       = useState(false)
 
   useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs() },[]) // eslint-disable-line
 
@@ -280,6 +309,74 @@ export default function Pipeline(){
   }
 
   async function restoreLead(l:Lead){await upsertLead({...l,archived:false,archived_reason:'',updated_at:now()})}
+
+  function downloadTemplate(){
+    const header='name,phone,instagram,source,stage,relationship,age_range,life_stage,primary_driver,pain_point,notes,hunger,looking'
+    const example='"Jane Smith","+61412345678","janesmith","Instagram","New","Friend / Acquaintance","25–35","Employed (9–5)","Freedom","Wants more time with family","Met at gym event",7,6'
+    const blob=new Blob([header+'\n'+example],{type:'text/csv'})
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='leads_template.csv';a.click()
+  }
+
+  function processFile(file:File){
+    const reader=new FileReader()
+    reader.onload=e=>{
+      const text=e.target?.result as string
+      const rawRows=parseCSV(text)
+      const existingNames=new Set(leads.map(l=>l.name.toLowerCase().trim()))
+      const existingPhones=new Set(leads.map(l=>(l.phone||'').replace(/\D/g,'').replace(/^0/,'61')).filter(Boolean))
+      const batchNames=new Set<string>()
+      const batchPhones=new Set<string>()
+      const parsed:ImportRow[]=rawRows.map(row=>{
+        const name=normCol(row,'name')
+        const phone=normCol(row,'phone')
+        const instagram=normCol(row,'instagram')
+        const source=normCol(row,'source')
+        const stage=normCol(row,'stage')
+        const relationship=normCol(row,'relationship')
+        const age_range=normCol(row,'age_range','age range')
+        const life_stage=normCol(row,'life_stage','life stage')
+        const primary_driver=normCol(row,'primary_driver','primary driver')
+        const pain_point=normCol(row,'pain_point','pain point','their why')
+        const notes=normCol(row,'notes')
+        const hunger=Math.min(10,Math.max(1,parseInt(normCol(row,'hunger'))||5))
+        const looking=Math.min(10,Math.max(1,parseInt(normCol(row,'looking'))||5))
+        const missing:string[]=[]
+        if(!name)missing.push('name')
+        if(!source||!SOURCES.includes(source))missing.push('source')
+        if(!stage||!(STAGES as readonly string[]).includes(stage))missing.push('stage')
+        if(!relationship||!RELATIONS.includes(relationship))missing.push('relationship')
+        if(!age_range||!AGE_RANGES.includes(age_range))missing.push('age_range')
+        if(!life_stage||!LIFE_STAGES.includes(life_stage))missing.push('life_stage')
+        if(!primary_driver||!DRIVERS.includes(primary_driver))missing.push('primary_driver')
+        if(!pain_point)missing.push('pain_point')
+        const normName=name.toLowerCase().trim()
+        const normPhone=(phone||'').replace(/\D/g,'').replace(/^0/,'61')
+        const isDupeExisting=existingNames.has(normName)||(!!normPhone&&existingPhones.has(normPhone))
+        const isDupeBatch=batchNames.has(normName)||(!!normPhone&&batchPhones.has(normPhone))
+        let status:ImportStatus='valid'
+        let dupeOf:string|undefined
+        if(isDupeExisting){status='dupe';dupeOf='existing lead'}
+        else if(isDupeBatch){status='dupe';dupeOf='within batch'}
+        else if(missing.length>0)status='invalid'
+        if(!isDupeExisting&&!isDupeBatch){batchNames.add(normName);if(normPhone)batchPhones.add(normPhone)}
+        return{name,phone,instagram,source,stage,relationship,age_range,life_stage,primary_driver,pain_point,notes,hunger,looking,status,missing,dupeOf}
+      })
+      setImportRows(parsed)
+    }
+    reader.readAsText(file)
+  }
+
+  async function confirmImport(){
+    if(!userId)return
+    setImporting(true)
+    const valid=importRows.filter(r=>r.status==='valid')
+    await Promise.all(valid.map(async row=>{
+      const l:Lead={id:uid(),user_id:userId,name:row.name,phone:row.phone,instagram:row.instagram,contact:row.phone||row.instagram,source:row.source||'Instagram',stage:(STAGES.includes(row.stage as Stage)?row.stage:'New') as Stage,hunger:row.hunger,looking:row.looking,score:hxl(row.hunger,row.looking),relationship:row.relationship,age_range:row.age_range,life_stage:row.life_stage,primary_driver:row.primary_driver,pain_point:row.pain_point,archived:false,archived_reason:'',notes:row.notes,next_action:'Call',next_action_date:'',created_at:now(),updated_at:now()}
+      await upsertLead(l)
+      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Imported from ${l.source}`,fathom_link:'',next_action:'Call',next_date:'',created_at:new Date().toISOString()})
+    }))
+    setImporting(false);setImportOpen(false);setImportRows([])
+  }
 
   async function advanceStage(l:Lead){
     const cfg=STAGE_CFG[l.stage as Stage];if(!cfg?.next)return
@@ -369,6 +466,7 @@ export default function Pipeline(){
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone, Instagram…" style={{flex:1,minWidth:160,...INP}}/>
             <button onClick={openAdd} style={{padding:'9px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>+ Add Lead</button>
+            <button onClick={()=>{setImportRows([]);setImportOpen(true)}} style={{padding:'9px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,flexShrink:0}}>↑ Import</button>
             <button onClick={()=>{setSelectMode(m=>{if(m){setSelectedIds(new Set());return false}return true})}} style={{padding:'9px 12px',borderRadius:'var(--r)',border:`1px solid ${selectMode?GOLD:'var(--br)'}`,background:selectMode?'rgba(200,162,74,0.1)':'var(--s1)',color:selectMode?GOLD:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:selectMode?700:400,flexShrink:0}}>{selectMode?`✓ ${selectedIds.size} selected`:'Select'}</button>
             <select value={filter} onChange={e=>setFilter(e.target.value as any)} style={{...SEL,width:'auto'}}>
               <option value="all">All Active</option>
@@ -745,6 +843,94 @@ export default function Pipeline(){
         style={{position:'fixed',bottom:24,right:24,zIndex:100,padding:'13px 20px',borderRadius:999,border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:800,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:14,boxShadow:'0 4px 20px rgba(200,162,74,0.4)'}}>
         + Add Lead
       </button>
+
+      {/* ── IMPORT MODAL ──────────────────────────────────── */}
+      {importOpen&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setImportOpen(false);setImportRows([])}}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:640,overflow:'hidden',margin:'auto'}}>
+            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+              <div>
+                <div style={{fontSize:16,fontWeight:700}}>Import Leads from CSV</div>
+                <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>All fields required · dupes and incomplete rows skipped</div>
+              </div>
+              <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                <button onClick={downloadTemplate} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}08`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>↓ Template</button>
+                <button onClick={()=>{setImportOpen(false);setImportRows([])}} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
+              </div>
+            </div>
+            {importRows.length===0?(
+              <div style={{padding:'32px 24px'}}>
+                <div
+                  onDragOver={e=>{e.preventDefault();setImportDragging(true)}}
+                  onDragLeave={()=>setImportDragging(false)}
+                  onDrop={e=>{e.preventDefault();setImportDragging(false);const f=e.dataTransfer.files[0];if(f)processFile(f)}}
+                  style={{border:`2px dashed ${importDragging?GOLD:'var(--br2)'}`,borderRadius:'var(--r2)',padding:'48px 24px',textAlign:'center' as const,transition:'border-color 0.15s',background:importDragging?'rgba(200,162,74,0.04)':'transparent',cursor:'pointer'}}
+                  onClick={()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.csv,text/csv';inp.onchange=ev=>{const f=(ev.target as HTMLInputElement).files?.[0];if(f)processFile(f)};inp.click()}}
+                >
+                  <div style={{fontSize:32,marginBottom:12}}>📂</div>
+                  <div style={{fontSize:14,fontWeight:600,color:'var(--text2)',marginBottom:6}}>Drag & drop your CSV here</div>
+                  <div style={{fontSize:12,color:'var(--text4)'}}>or click to browse · CSV files only</div>
+                </div>
+                <div style={{marginTop:16,padding:'12px 14px',background:'var(--s2)',borderRadius:'var(--r)',fontSize:11,color:'var(--text4)',lineHeight:1.7}}>
+                  <strong style={{color:'var(--text3)'}}>Required columns:</strong> name, source ({SOURCES.join(', ')}), stage ({STAGES.join(', ')}), relationship, age_range, life_stage, primary_driver, pain_point<br/>
+                  <strong style={{color:'var(--text3)'}}>Optional:</strong> phone, instagram, notes, hunger (1–10), looking (1–10)
+                </div>
+              </div>
+            ):(
+              <div style={{padding:'20px 24px',maxHeight:'70vh',overflowY:'auto' as const}}>
+                {(()=>{
+                  const valid=importRows.filter(r=>r.status==='valid').length
+                  const dupes=importRows.filter(r=>r.status==='dupe').length
+                  const invalid=importRows.filter(r=>r.status==='invalid').length
+                  return(
+                    <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap' as const}}>
+                      <div style={{padding:'8px 14px',borderRadius:'var(--r)',background:`${GREEN}10`,border:`1px solid ${GREEN}30`,fontSize:11,color:GREEN,fontWeight:700}}>{valid} ready to import</div>
+                      {dupes>0&&<div style={{padding:'8px 14px',borderRadius:'var(--r)',background:'rgba(200,162,74,0.1)',border:'1px solid rgba(200,162,74,0.3)',fontSize:11,color:GOLD,fontWeight:700}}>{dupes} dupes (skipped)</div>}
+                      {invalid>0&&<div style={{padding:'8px 14px',borderRadius:'var(--r)',background:`${RED}10`,border:`1px solid ${RED}30`,fontSize:11,color:RED,fontWeight:700}}>{invalid} incomplete (skipped)</div>}
+                    </div>
+                  )
+                })()}
+                <div style={{marginBottom:12,overflowX:'auto' as const}}>
+                  <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:11}}>
+                    <thead>
+                      <tr style={{borderBottom:'1px solid var(--br)'}}>
+                        {['Status','Name','Source','Stage','Relationship','Driver','Issue'].map(h=>(
+                          <th key={h} style={{padding:'6px 8px',textAlign:'left' as const,color:'var(--text4)',fontWeight:600,whiteSpace:'nowrap' as const}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importRows.map((row,i)=>{
+                        const statusColor=row.status==='valid'?GREEN:row.status==='dupe'?GOLD:RED
+                        const statusLabel=row.status==='valid'?'✓':row.status==='dupe'?'dupe':'✗'
+                        return(
+                          <tr key={i} style={{borderBottom:'1px solid var(--br)',opacity:row.status==='valid'?1:0.6}}>
+                            <td style={{padding:'6px 8px'}}><span style={{fontSize:10,padding:'2px 7px',borderRadius:6,background:statusColor+'18',color:statusColor,fontWeight:700}}>{statusLabel}</span></td>
+                            <td style={{padding:'6px 8px',fontWeight:600,maxWidth:120,overflow:'hidden' as const,textOverflow:'ellipsis' as const,whiteSpace:'nowrap' as const}}>{row.name||'—'}</td>
+                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.source||'—'}</td>
+                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.stage||'—'}</td>
+                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.relationship||'—'}</td>
+                            <td style={{padding:'6px 8px',color:GOLD}}>{row.primary_driver||'—'}</td>
+                            <td style={{padding:'6px 8px',color:row.status==='dupe'?GOLD:RED,fontSize:10}}>{row.status==='dupe'?`Dupe of ${row.dupeOf}`:row.missing.length>0?row.missing.join(', '):''}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid var(--br)'}}>
+                  <button onClick={confirmImport} disabled={importing||importRows.filter(r=>r.status==='valid').length===0}
+                    style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:importing||importRows.filter(r=>r.status==='valid').length===0?'var(--s3)':`linear-gradient(135deg,${GREEN},var(--green2))`,color:importing||importRows.filter(r=>r.status==='valid').length===0?'var(--text4)':'#fff',fontWeight:700,cursor:importing||importRows.filter(r=>r.status==='valid').length===0?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                    {importing?'Importing…':`Import ${importRows.filter(r=>r.status==='valid').length} Leads`}
+                  </button>
+                  <button onClick={()=>setImportRows([])} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>← Back</button>
+                  <button onClick={()=>{setImportOpen(false);setImportRows([])}} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── ARCHIVE MODAL ─────────────────────────────────── */}
       {archiveModal&&(
