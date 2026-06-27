@@ -196,7 +196,7 @@ export default function Pipeline(){
   const [form,setForm]         = useState<Partial<Lead>>(blankLead())
   const [err,setErr]           = useState('')
   const [contactModal,setContactModal] = useState<Lead|null>(null)
-  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',fathom_link:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
   const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
   const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
   const [briefModal,setBriefModal]     = useState<{lead:Lead;text:string;loading:boolean}|null>(null)
@@ -291,7 +291,7 @@ export default function Pipeline(){
     if(!contactModal||!userId)return
     const l=contactModal
     await upsertLead({...l,next_action:contactLog.nextAction,next_action_date:contactLog.nextDate,updated_at:now()})
-    const logObj:any={id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()}
+    const logObj:any={id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:contactLog.fathom_link||'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()}
     if(contactLog.objection&&contactLog.objection!=='None')logObj.objection=contactLog.objection
     await addContactLog(logObj)
     setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
@@ -490,12 +490,13 @@ export default function Pipeline(){
                       <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
                     </div>
                     {log.notes&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.5}}>{log.notes}</div>}
+                    {log.fathom_link&&<a href={log.fathom_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'#8B5CF6',textDecoration:'none',marginTop:2,display:'block'}}>▶ Fathom recording</a>}
                     {log.next_action&&<div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>Next: {log.next_action}{log.next_date?` · ${fmtDate(log.next_date)}`:''}</div>}
                   </div>
                 ))
               }
               <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const}}>
-                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:'',objection:'None'});setDrawerLead(null)}}
+                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',fathom_link:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:'',objection:'None'});setDrawerLead(null)}}
                   style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
                   ✓ Log Contact
                 </button>
@@ -642,6 +643,10 @@ export default function Pipeline(){
             <div style={{marginBottom:12}}>
               <div style={SL}>Notes</div>
               <textarea value={contactLog.notes} onChange={e=>setContactLog(p=>({...p,notes:e.target.value}))} rows={3} placeholder="What happened? Key moments, commitments…" style={{...INP,resize:'vertical' as const}}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Fathom Recording Link</div>
+              <input value={contactLog.fathom_link} onChange={e=>setContactLog(p=>({...p,fathom_link:e.target.value}))} placeholder="https://fathom.video/calls/…" style={INP}/>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
               <div>

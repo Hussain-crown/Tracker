@@ -213,7 +213,7 @@ export default function Candidates(){
   const [booking,setBooking]   = useState(false)
   const [dqOpen,setDqOpen]     = useState<Candidate|null>(null)
   const [logModal,setLogModal] = useState<Candidate|null>(null)
-  const [logForm,setLogForm]   = useState({outcome:'Positive',notes:'',objection:'None',nextAction:'',nextDate:'',rationale:''})
+  const [logForm,setLogForm]   = useState({outcome:'Positive',notes:'',fathom_link:'',objection:'None',nextAction:'',nextDate:'',rationale:''})
   const [launchConfirm,setLaunchConfirm] = useState<Candidate|null>(null)
   const [addTeamOpen,setAddTeamOpen] = useState(false)
   const [addTeamForm,setAddTeamForm] = useState({name:'',phone:'',email:'',source:'',stage:'Pre-Filter' as Stage,sponsor_ibo:''})
@@ -309,11 +309,11 @@ export default function Candidates(){
   // ── ACTIONS ──────────────────────────────────────────────
   function openLog(c:Candidate){
     setLogModal(c)
-    setLogForm({outcome:'Positive',notes:'',objection:'None',nextAction:STAGE_CFG[normaliseStage(c.stage)].nextAction,nextDate:'',rationale:''})
+    setLogForm({outcome:'Positive',notes:'',fathom_link:'',objection:'None',nextAction:STAGE_CFG[normaliseStage(c.stage)].nextAction,nextDate:'',rationale:''})
   }
   async function saveLog(){
     if(!logModal||!userId)return
-    await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:logModal.id,entity_name:logModal.name,event_type:'contacted',outcome:logForm.outcome,notes:logForm.notes,fathom_link:'',next_action:logForm.nextAction,next_date:logForm.nextDate,created_at:new Date().toISOString()} as any)
+    await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:logModal.id,entity_name:logModal.name,event_type:'contacted',outcome:logForm.outcome,notes:logForm.notes,fathom_link:logForm.fathom_link||'',next_action:logForm.nextAction,next_date:logForm.nextDate,created_at:new Date().toISOString()} as any)
     await upsertCandidate({...logModal,next_action:logForm.nextAction,updated_at:now()} as any)
     setLogModal(null)
   }
@@ -731,6 +731,7 @@ export default function Candidates(){
                           <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
                         </div>
                         {log.notes&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.5}}>{log.notes}</div>}
+                        {log.fathom_link&&<a href={log.fathom_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'#8B5CF6',textDecoration:'none',marginTop:2,display:'block'}}>▶ Fathom recording</a>}
                         {log.next_action&&<div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>Next: {log.next_action}{log.next_date?` · ${fmtDate(log.next_date)}`:''}</div>}
                       </div>
                     ))
@@ -820,6 +821,10 @@ export default function Candidates(){
             <div style={{marginBottom:12}}>
               <div style={SL}>Notes</div>
               <textarea value={logForm.notes} onChange={e=>setLogForm(p=>({...p,notes:e.target.value}))} rows={3} placeholder="Key moments, commitments, energy…" style={{...INP,resize:'vertical' as const}}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Fathom Recording Link</div>
+              <input value={logForm.fathom_link} onChange={e=>setLogForm(p=>({...p,fathom_link:e.target.value}))} placeholder="https://fathom.video/calls/…" style={INP}/>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
               <div><div style={SL}>Next Action</div><input value={logForm.nextAction} onChange={e=>setLogForm(p=>({...p,nextAction:e.target.value}))} style={INP}/></div>
