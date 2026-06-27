@@ -100,7 +100,6 @@ function healthScore(c:Candidate, lastContact:string):number{
 function healthColor(s:number){return s>=70?GREEN:s>=45?GOLD:RED}
 
 type Tab = 'active'|'funnel'|'launched'|'archive'
-type Mode = 'my'|'team'
 type DetailTab = 'profile'|'history'|'timeline'|'brief'
 
 interface GEvent{id:string;summary:string;start:{dateTime?:string;date?:string};attendees?:{email:string}[]}
@@ -152,7 +151,6 @@ function CandCard({c,mode,contactLogs,calEvents,scores,onAdvance,onDq,onView,onL
             {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'15',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in stage</span>}
             {isStalling&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.12)',color:RED,fontWeight:700}}>⚠ Stalling</span>}
             {getNoShows(c)>0&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(232,145,58,0.15)',color:'#E8913A',fontWeight:700}}>✗ {getNoShows(c)} no-show{getNoShows(c)>1?'s':''}</span>}
-            {mode==='team'&&sponsorIbo&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>via IBO {sponsorIbo}</span>}
           </div>
         </div>
         <div style={{textAlign:'right' as const,flexShrink:0,marginLeft:8}}>
@@ -199,7 +197,6 @@ export default function Candidates(){
          partners,loadPartners,upsertPartner,
          addContactLog,loadContactLogs,contactLogs} = useStore()
 
-  const [mode,setMode]         = useState<Mode>('my')
   const [tab,setTab]           = useState<Tab>('active')
   const [teamFilter,setTeamFilter] = useState('all')
   const [search,setSearch]     = useState('')
@@ -239,8 +236,7 @@ export default function Candidates(){
 
   // ── COMPUTED ─────────────────────────────────────────────
   const my     = useMemo(()=>candidates.filter(c=>{const s=getSponsorIbo(c);return !s||s===MY_IBO}),[candidates])
-  const team   = useMemo(()=>candidates.filter(c=>{const s=getSponsorIbo(c);return s&&s!==MY_IBO}),[candidates])
-  const pool   = mode==='my'?my:team
+  const pool   = my
 
   const active   = useMemo(()=>pool.filter(c=>c.status==='active'),[pool])
   const archived = useMemo(()=>pool.filter(c=>c.status==='disqualified'),[pool])
@@ -259,7 +255,6 @@ export default function Candidates(){
 
   const displayList = useMemo(()=>{
     let l=active
-    if(mode==='team'&&teamFilter!=='all')l=l.filter(c=>getSponsorIbo(c)===teamFilter)
     if(search)l=l.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()))
     return [...l].sort((a,b)=>{
       // Stalling FU first
@@ -480,16 +475,6 @@ export default function Candidates(){
   return(
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
 
-      {/* Mode toggle */}
-      <div style={{display:'flex',gap:4,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)'}}>
-        {([['my','👤 My Candidates'],['team','👥 Team Candidates']] as const).map(([m,l])=>(
-          <button key={m} onClick={()=>{setMode(m);setTab('active')}}
-            style={{flex:1,padding:'9px',borderRadius:'var(--r)',border:'none',background:mode===m?'var(--s3)':'transparent',color:mode===m?GOLD:'var(--text3)',fontSize:11,fontWeight:mode===m?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",transition:'all 0.15s'}}>
-            {l}
-          </button>
-        ))}
-      </div>
-
       {/* Intelligence strip */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
         {[
@@ -521,18 +506,6 @@ export default function Candidates(){
         </div>
       )}
 
-      {/* Team IBO filter */}
-      {mode==='team'&&teamIbos.length>0&&(
-        <div style={{display:'flex',gap:5,overflowX:'auto' as const,marginBottom:12,paddingBottom:2}}>
-          {['all',...teamIbos].map(ibo=>(
-            <div key={ibo} onClick={()=>setTeamFilter(ibo)}
-              style={{padding:'5px 12px',borderRadius:20,border:`1px solid ${teamFilter===ibo?GOLD:'rgba(255,255,255,0.08)'}`,background:teamFilter===ibo?'rgba(200,162,74,0.1)':'transparent',cursor:'pointer',flexShrink:0,fontSize:10,color:teamFilter===ibo?GOLD:'var(--text4)',fontWeight:teamFilter===ibo?600:400}}>
-              {ibo==='all'?'All IBOs':(iboNames[ibo]??'IBO '+ibo)}
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Tabs */}
       <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto' as const}}>
         {([['active',`🎯 Active (${active.length})`],['funnel','📊 Funnel'],['launched',`✅ Launched (${launched.length})`],['archive',`🗄 Archive (${archived.length})`]] as const).map(([id,label])=>(
@@ -548,7 +521,6 @@ export default function Candidates(){
         <div>
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:140,...INP}}/>
-            {mode==='team'&&<button onClick={()=>setAddTeamOpen(true)} style={{padding:'9px 14px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,whiteSpace:'nowrap' as const}}>+ Add Team</button>}
           </div>
           {/* Stage filter pills */}
           <div style={{display:'flex',gap:5,overflowX:'auto' as const,marginBottom:12,paddingBottom:4}}>

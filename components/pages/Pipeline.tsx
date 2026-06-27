@@ -21,12 +21,21 @@ const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','L
 const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
 const NEXT_ACTS  = ['Call','WhatsApp','MPA','Catch-Up','DTM','Send Info','Other']
 const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
-const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only']
-const AGE_RANGES = ['Under 25','25-35','35-45','45+']
-const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
-const DRIVERS    = ['Time freedom','Extra income','Full-time income','Business ownership','Products only']
-const HUNGER_ANCHORS = ['Content with life','Mild dissatisfaction','Wants change','Unhappy, exploring','Desperate to change']
-const LOOKING_ANCHORS= ['Completely closed','Politely listening','Curious, open','Actively searching','Ready to start now']
+const RELATIONS  = ['Family','Close friend','Friend / Acquaintance','C-list','Online contact']
+const AGE_RANGES = ['Under 25','25–35','35–45','45+']
+const LIFE_STAGES= ['Student','Employed (9–5)','Self-employed','Stay-at-home parent','Retired']
+const DRIVERS    = ['Family','Growth','Community','Lifestyle','Freedom','Purpose','Financial']
+const HUNGER_ANCHORS = ['Happy where they are','Slightly unsatisfied','Open to change','Actively unhappy','Must change their situation']
+const LOOKING_ANCHORS= ['Not open at all','Hearing me out','Genuinely curious','Actively exploring','Ready to go now']
+const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Wrong timing','Other']
+
+function parseNotes(raw:string):{text:string;linkedin:string;facebook:string}{
+  try{const p=JSON.parse(raw||'');if(p&&typeof p==='object'&&('_t' in p||'_li' in p||'_fb' in p)){return{text:p._t??'',linkedin:p._li??'',facebook:p._fb??''}}return{text:raw||'',linkedin:'',facebook:''}}catch{return{text:raw||'',linkedin:'',facebook:''}}
+}
+function serializeNotes(text:string,linkedin:string,facebook:string):string{
+  if(!linkedin&&!facebook)return text
+  return JSON.stringify({_t:text,_li:linkedin,_fb:facebook})
+}
 
 // ── HELPERS ────────────────────────────────────────────────
 function hxl(h:number,l:number){return Math.round(h*l)}
@@ -65,14 +74,17 @@ interface LeadCardProps {
   candidates: {name:string}[]
   contactLogs: ContactLog[]
   setContactModal: (l:Lead)=>void
-  setContactLog: (v:{outcome:string;notes:string;nextAction:string;nextDate:string;rationale:string})=>void
+  setContactLog: (v:{outcome:string;notes:string;nextAction:string;nextDate:string;rationale:string;objection:string})=>void
   setBookPFModal: (l:Lead)=>void
   setBriefModal: (v:{lead:Lead;text:string;loading:boolean})=>void
   setDrawerLead: (l:Lead)=>void
   openEdit: (l:Lead)=>void
   advanceStage: (l:Lead)=>void
+  selectMode?: boolean
+  isSelected?: boolean
+  onToggleSelect?: (id:string)=>void
 }
-function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}:LeadCardProps){
+function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,selectMode,isSelected,onToggleSelect}:LeadCardProps){
   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['New']
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
@@ -90,8 +102,9 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
   const health=healthScore(l, lastLog?.created_at??l.updated_at)
   const outcomeColor:{[k:string]:string}={Positive:GREEN,Neutral:GOLD,Negative:RED,'No Show':RED,'Not Yet':'var(--text4)'}
   const dotColor=outcomeColor[lastLog?.outcome??'']??'var(--text4)'
+  const social=parseNotes(l.notes)
   return(
-    <div style={{...CARD,marginBottom:10,borderLeft:`3px solid ${cfg.color}`,position:'relative',transition:'all 0.15s'}}>
+    <div style={{...CARD,marginBottom:10,borderLeft:`3px solid ${isSelected?'var(--gold)':cfg.color}`,position:'relative',transition:'all 0.15s',...(isSelected?{background:'rgba(200,162,74,0.06)'}:{})}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:14,fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:8}}>
@@ -107,10 +120,26 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
             {!stale&&!overdue&&<span style={{fontSize:10,color:'var(--text4)'}}>{days===0?'Today':days+'d ago'}</span>}
             {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'20',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in {l.stage}</span>}
           </div>
+          {/* Social links on card */}
+          <div style={{display:'flex',gap:8,marginTop:4,flexWrap:'wrap' as const}}>
+            {l.phone&&<span style={{fontSize:10,color:'var(--text4)'}}>📞 {l.phone}</span>}
+            {l.instagram&&<span style={{fontSize:10,color:PURPLE}}>IG @{l.instagram}</span>}
+            {social.linkedin&&<a href={social.linkedin} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'#0A66C2',textDecoration:'none'}}>in</a>}
+            {social.facebook&&<a href={social.facebook} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'#1877F2',textDecoration:'none'}}>fb</a>}
+          </div>
         </div>
-        <div style={{textAlign:'right' as const,flexShrink:0}}>
-          <div className="mono" style={{fontSize:22,fontWeight:800,color:healthColor(health),lineHeight:1}}>{health}</div>
-          <div style={{fontSize:8,color:'var(--text4)'}}>H{l.hunger}×L{l.looking}</div>
+        <div style={{flexShrink:0,marginLeft:8}}>
+          {selectMode?(
+            <button onClick={()=>onToggleSelect?.(l.id)}
+              style={{width:26,height:26,borderRadius:'50%',border:`2px solid ${isSelected?'var(--gold)':'var(--br2)'}`,background:isSelected?'var(--gold)':'transparent',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
+              {isSelected&&<span style={{color:'#000',fontSize:11,fontWeight:800,lineHeight:1}}>✓</span>}
+            </button>
+          ):(
+            <div style={{textAlign:'right' as const}}>
+              <div className="mono" style={{fontSize:22,fontWeight:800,color:healthColor(health),lineHeight:1}}>{health}</div>
+              <div style={{fontSize:8,color:'var(--text4)'}}>H{l.hunger}×L{l.looking}</div>
+            </div>
+          )}
         </div>
       </div>
       {(l.primary_driver||l.pain_point)&&(
@@ -128,7 +157,7 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
       )}
       {lastLog?.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>Last: "{lastLog.notes.slice(0,80)}"</div>}
       <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,alignItems:'center'}}>
-        <button onClick={()=>{setContactModal(l);setContactLog({outcome:'Positive',notes:'',nextAction:l.next_action||'Call',nextDate:'',rationale:''})}}
+        <button onClick={()=>{setContactModal(l);setContactLog({outcome:'Positive',notes:'',nextAction:l.next_action||'Call',nextDate:'',rationale:'',objection:'None'})}}
           style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
           ✓ Log
         </button>
@@ -167,11 +196,14 @@ export default function Pipeline(){
   const [form,setForm]         = useState<Partial<Lead>>(blankLead())
   const [err,setErr]           = useState('')
   const [contactModal,setContactModal] = useState<Lead|null>(null)
-  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:''})
+  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
   const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
   const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
   const [briefModal,setBriefModal]     = useState<{lead:Lead;text:string;loading:boolean}|null>(null)
   const [archiveModal,setArchiveModal] = useState<Lead|null>(null)
+  const [selectMode,setSelectMode]     = useState(false)
+  const [selectedIds,setSelectedIds]   = useState<Set<string>>(new Set())
+  const [socialForm,setSocialForm]     = useState({linkedin:'',facebook:''})
 
   useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs() },[]) // eslint-disable-line
 
@@ -215,14 +247,27 @@ export default function Pipeline(){
     const map:Record<string,{total:number;dtm:number;score:number}>={};active.forEach(l=>{const s=l.source||'Other';if(!map[s])map[s]={total:0,dtm:0,score:0};map[s].total++;if(l.stage==='DTM'||l.stage==='Catch-Up')map[s].dtm++;map[s].score+=hxl(l.hunger,l.looking)});return Object.entries(map).map(([src,v])=>({src,total:v.total,dtm:v.dtm,avgScore:Math.round(v.score/v.total)})).sort((a,b)=>b.dtm-a.dtm)
   },[active])
 
+  async function massMove(stage:Stage){
+    const ids=Array.from(selectedIds)
+    await Promise.all(ids.map(id=>{const l=leads.find(x=>x.id===id);if(!l)return;return upsertLead({...l,stage,updated_at:now()})}))
+    setSelectedIds(new Set());setSelectMode(false)
+  }
+  function toggleSelect(id:string){setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})}
+
   function leadLogs(id:string){return contactLogs.filter(c=>c.entity_id===id).sort((a,b)=>b.created_at.localeCompare(a.created_at))}
-  function openAdd(){setEd(null);setForm(blankLead());setErr('');setOpen(true)}
-  function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setOpen(true)}
+  function openAdd(){setEd(null);setForm(blankLead());setSocialForm({linkedin:'',facebook:''});setErr('');setOpen(true)}
+  function openEdit(l:Lead){
+    setEd(l)
+    const {text,linkedin,facebook}=parseNotes(l.notes)
+    setForm({...l,notes:text})
+    setSocialForm({linkedin,facebook})
+    setErr('');setOpen(true)
+  }
 
   async function saveLead(){
     if(!form.name?.trim()||!userId)return setErr('Name required')
     const score=hxl(form.hunger??5,form.looking??5)
-    const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'New',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:form.life_stage||'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'Call',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
+    const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'New',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:form.life_stage||'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:serializeNotes(form.notes||'',socialForm.linkedin,socialForm.facebook),next_action:form.next_action||'Call',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
     await upsertLead(l)
     if(!ed)await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
     setOpen(false)
@@ -246,8 +291,10 @@ export default function Pipeline(){
     if(!contactModal||!userId)return
     const l=contactModal
     await upsertLead({...l,next_action:contactLog.nextAction,next_action_date:contactLog.nextDate,updated_at:now()})
-    await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()})
-    setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:''})
+    const logObj:any={id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()}
+    if(contactLog.objection&&contactLog.objection!=='None')logObj.objection=contactLog.objection
+    await addContactLog(logObj)
+    setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
   }
 
   async function bookPF(){
@@ -276,7 +323,7 @@ export default function Pipeline(){
     }catch{setBriefModal(p=>p?{...p,text:'Failed.',loading:false}:null)}
   }
 
-  const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}
+  const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,selectMode,onToggleSelect:toggleSelect}
 
   return(
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
@@ -321,6 +368,8 @@ export default function Pipeline(){
         <div>
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone, Instagram…" style={{flex:1,minWidth:160,...INP}}/>
+            <button onClick={openAdd} style={{padding:'9px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>+ Add Lead</button>
+            <button onClick={()=>{setSelectMode(m=>{if(m){setSelectedIds(new Set());return false}return true})}} style={{padding:'9px 12px',borderRadius:'var(--r)',border:`1px solid ${selectMode?GOLD:'var(--br)'}`,background:selectMode?'rgba(200,162,74,0.1)':'var(--s1)',color:selectMode?GOLD:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:selectMode?700:400,flexShrink:0}}>{selectMode?`✓ ${selectedIds.size} selected`:'Select'}</button>
             <select value={filter} onChange={e=>setFilter(e.target.value as any)} style={{...SEL,width:'auto'}}>
               <option value="all">All Active</option>
               {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
@@ -335,8 +384,24 @@ export default function Pipeline(){
           </div>
           {displayed.length===0
             ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No leads in this view</div>
-            :displayed.map(l=><LeadCard key={l.id} l={l} {...cardProps}/>)
+            :displayed.map(l=><LeadCard key={l.id} l={l} {...cardProps} isSelected={selectedIds.has(l.id)}/>)
           }
+        </div>
+      )}
+
+      {/* ── MASS MOVE BAR ──────────────────────────────────── */}
+      {selectMode&&selectedIds.size>0&&(
+        <div style={{position:'fixed' as const,bottom:80,left:0,right:0,zIndex:200,display:'flex',justifyContent:'center',padding:'0 16px'}}>
+          <div style={{background:'var(--s1)',border:`1px solid ${GOLD}40`,borderRadius:999,padding:'10px 16px',display:'flex',gap:8,alignItems:'center',boxShadow:'0 4px 24px rgba(0,0,0,0.6)',flexWrap:'wrap' as const,maxWidth:480}}>
+            <span style={{fontSize:11,color:GOLD,fontWeight:700,flexShrink:0}}>Move {selectedIds.size} to →</span>
+            {STAGES.map(s=>(
+              <button key={s} onClick={()=>massMove(s)}
+                style={{padding:'6px 14px',borderRadius:999,border:`1px solid ${STAGE_CFG[s].color}40`,background:`${STAGE_CFG[s].color}10`,color:STAGE_CFG[s].color,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600,flexShrink:0}}>
+                {s}
+              </button>
+            ))}
+            <button onClick={()=>{setSelectedIds(new Set());setSelectMode(false)}} style={{padding:'6px 10px',borderRadius:999,border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,flexShrink:0}}>✕</button>
+          </div>
         </div>
       )}
 
@@ -392,8 +457,10 @@ export default function Pipeline(){
                 <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
                   <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['New']).bg,color:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['New']).color,fontWeight:600}}>{drawerLead.stage}</span>
                   <span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.source}</span>
-                  {drawerLead.phone&&<span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.phone}</span>}
-                  {drawerLead.instagram&&<span style={{fontSize:10,color:PURPLE}}>@{drawerLead.instagram}</span>}
+                  {drawerLead.phone&&<a href={`tel:${drawerLead.phone}`} style={{fontSize:10,color:'var(--text4)',textDecoration:'none'}}>📞 {drawerLead.phone}</a>}
+                  {drawerLead.instagram&&<span style={{fontSize:10,color:PURPLE}}>IG @{drawerLead.instagram}</span>}
+                  {(()=>{const s=parseNotes(drawerLead.notes);return(<>{s.linkedin&&<a href={s.linkedin} target="_blank" rel="noopener noreferrer" style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:'rgba(10,102,194,0.12)',color:'#0A66C2',textDecoration:'none',fontWeight:600}}>LinkedIn</a>}{s.facebook&&<a href={s.facebook} target="_blank" rel="noopener noreferrer" style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:'rgba(24,119,242,0.12)',color:'#1877F2',textDecoration:'none',fontWeight:600}}>Facebook</a>}</>)})()}
+                  {waLink(drawerLead)&&<a href={waLink(drawerLead)!} target="_blank" rel="noopener noreferrer" style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:'rgba(37,211,102,0.12)',color:'#25D366',textDecoration:'none',fontWeight:600}}>WhatsApp</a>}
                 </div>
               </div>
               <button onClick={()=>setDrawerLead(null)} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
@@ -409,7 +476,7 @@ export default function Pipeline(){
               </div>
               {drawerLead.pain_point&&(
                 <div style={{marginBottom:16,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}>
-                  <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div>
+                  <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>THEIR WHY</div>
                   <div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{drawerLead.pain_point}"</div>
                 </div>
               )}
@@ -428,7 +495,7 @@ export default function Pipeline(){
                 ))
               }
               <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const}}>
-                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:''});setDrawerLead(null)}}
+                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:'',objection:'None'});setDrawerLead(null)}}
                   style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
                   ✓ Log Contact
                 </button>
@@ -451,14 +518,6 @@ export default function Pipeline(){
                 <div style={{gridColumn:'1/-1'}}>
                   <div style={SL}>Name *</div>
                   <input value={form.name||''} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full name" style={INP}/>
-                </div>
-                <div>
-                  <div style={SL}>Phone</div>
-                  <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={INP}/>
-                </div>
-                <div>
-                  <div style={SL}>Instagram</div>
-                  <input value={form.instagram||''} onChange={e=>setForm(p=>({...p,instagram:e.target.value}))} placeholder="@handle" style={INP}/>
                 </div>
                 <div>
                   <div style={SL}>Source</div>
@@ -501,8 +560,27 @@ export default function Pipeline(){
                 ))}
               </div>
               <div style={{marginBottom:10}}>
-                <div style={SL}>Pain Point (their words)</div>
-                <input value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} placeholder="What are they trying to solve?" style={INP}/>
+                <div style={SL}>Their Why</div>
+                <textarea value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} rows={3} placeholder="Tell me more about this person — what drives them, what they're looking for…" style={{...INP,resize:'vertical' as const}}/>
+              </div>
+              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Social</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                <div>
+                  <div style={SL}>Instagram</div>
+                  <input value={form.instagram||''} onChange={e=>setForm(p=>({...p,instagram:e.target.value}))} placeholder="@handle" style={INP}/>
+                </div>
+                <div>
+                  <div style={SL}>Phone</div>
+                  <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={INP}/>
+                </div>
+                <div>
+                  <div style={SL}>LinkedIn URL</div>
+                  <input value={socialForm.linkedin} onChange={e=>setSocialForm(p=>({...p,linkedin:e.target.value}))} placeholder="https://linkedin.com/in/…" style={INP}/>
+                </div>
+                <div>
+                  <div style={SL}>Facebook URL</div>
+                  <input value={socialForm.facebook} onChange={e=>setSocialForm(p=>({...p,facebook:e.target.value}))} placeholder="https://facebook.com/…" style={INP}/>
+                </div>
               </div>
               <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Tracking</div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
@@ -554,6 +632,12 @@ export default function Pipeline(){
                   </button>
                 ))}
               </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Objection</div>
+              <select value={contactLog.objection} onChange={e=>setContactLog(p=>({...p,objection:e.target.value}))} style={SEL}>
+                {OBJECTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
             </div>
             <div style={{marginBottom:12}}>
               <div style={SL}>Notes</div>
@@ -651,6 +735,12 @@ export default function Pipeline(){
           }
         </div>
       )}
+      {/* ── FLOATING ADD LEAD ────────────────────────────── */}
+      <button onClick={openAdd}
+        style={{position:'fixed',bottom:24,right:24,zIndex:100,padding:'13px 20px',borderRadius:999,border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:800,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:14,boxShadow:'0 4px 20px rgba(200,162,74,0.4)'}}>
+        + Add Lead
+      </button>
+
       {/* ── ARCHIVE MODAL ─────────────────────────────────── */}
       {archiveModal&&(
         <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setArchiveModal(null)}}>
