@@ -264,19 +264,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
     },800)
   },[userId,habits,saveHabit])
 
-  async function save(){
-    if(!userId)return;setSaving(true)
-    const ex=habits[selDate] as HabitEntry|undefined
-    try{
-      await saveHabit({id:ex?.id??uid(),user_id:userId,date:selDate,...form,created_at:ex?.created_at??now(),updated_at:now()} as any)
-      setSaved(true)
-    }catch{
-      const q=getOfflineQueue().filter((e:any)=>e.date!==selDate)
-      q.push({id:ex?.id??uid(),user_id:userId,date:selDate,...form,created_at:ex?.created_at??now(),updated_at:now()})
-      setOfflineQueue(q)
-    }
-    setSaving(false);setTimeout(()=>setSaved(false),2000)
-  }
   async function saveChecklist(key:'reading'|'audio',val:boolean){
     const next={...checklist,[key]:val};setChecklist(next)
     setMeta('checklist_'+selDate,JSON.stringify(next))
@@ -331,7 +318,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
     const mS=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)+'-01'
     const days=allDates.filter(d=>d>=mS);const result:Record<string,number>={}
     FIELDS.forEach(f=>{result[f.key]=days.reduce((s,d)=>s+getV(habits[d] as HabitEntry|undefined,f.key),0)});return result
-  },[habits,allDates])
+  },[habits,allDates,FIELDS])
   const calcScore=useCallback((h:Record<FieldKey,number>,checkBonus=0):number=>{
     const maxScore=FIELDS.filter(f=>f.key!=='interruptions').reduce((s,f)=>s+f.weight*15,0)
     const score=FIELDS.filter(f=>f.key!=='interruptions').reduce((s,f)=>{
@@ -344,9 +331,9 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const todayScore=useMemo(()=>calcScore(form,checklistBonus),[form,calcScore,checklistBonus])
   const streak=useMemo(()=>{
     let s=0;const d=new Date()
-    while(true){const ds=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});const h=habits[ds] as HabitEntry|undefined;const any=h&&FIELDS.some(f=>((h as any)[f.key]??0)>0);if(!any)break;s++;d.setDate(d.getDate()-1)}
+    while(s<1825){const ds=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});const h=habits[ds] as HabitEntry|undefined;const any=h&&FIELDS.some(f=>((h as any)[f.key]??0)>0);if(!any)break;s++;d.setDate(d.getDate()-1)}
     return s
-  },[habits])
+  },[habits,FIELDS])
   const consistency=useMemo(()=>{
     const last30:string[]=[];for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
     return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>(h as any)[f.key]>0)}).length/30*100)
@@ -368,7 +355,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const monthTotals=useMemo(()=>{
     const t:Record<string,number>={convo:0,mg1:0,mpa:0,catch_up:0,dtm:0,pre_filter:0,launch:0,interruptions:0,contact:0}
     monthData.days.forEach(d=>{const h=habits[d] as any;if(h)FIELDS.forEach(f=>{t[f.key]+=getV(h,f.key)})});return t
-  },[monthData,habits])
+  },[monthData,habits,FIELDS])
 
   // Activity breakdown data for trends (computed outside render to avoid IIFE JSX issues)
   const BDFIELDS=[
@@ -608,12 +595,13 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
             const loggedDays=monthData.days.filter(d=>habits[d])
             const totalDays=monthData.days.length
             const activeDays=loggedDays.length
-            const dayScores=loggedDays.map(d=>{const h=(habits[d] as any);const s=(h?.convo??0)+(h?.mg1??0)*4+(h?.mpa??0)*2;return{d,s}}).sort((a,b)=>b.s-a.s)
+            const dayScores=loggedDays.map(d=>{const h=(habits[d] as any);const s=h?calcScore({convo:h.convo??0,mg1:h.mg1??0,mpa:h.mpa??0,catch_up:h.catch_up??0,dtm:h.dtm??0,pre_filter:h.pre_filter??0,launch:h.launch??0,interruptions:h.interruptions??0,contact:h.contact??0}):0;return{d,s}}).sort((a,b)=>b.s-a.s)
             const bestDay=dayScores[0]
             const weeks:string[][]=[];const wk:string[]=[]
             monthData.days.forEach(d=>{wk.push(d);if(wk.length===7){weeks.push([...wk]);wk.length=0}});if(wk.length>0)weeks.push([...wk])
-            const weekTotals=weeks.map(w=>({label:'Wk '+(weeks.indexOf(w)+1),mg1:w.reduce((s,d)=>s+((habits[d] as any)?.mg1??0),0),convo:w.reduce((s,d)=>s+((habits[d] as any)?.convo??0),0),active:w.filter(d=>habits[d]).length}))
-            const maxWkMg1=Math.max(...weekTotals.map(w=>w.mg1),1)
+            const wkField=coreGoals.goalField;const wkLabel=FIELDS.find(f=>f.key===wkField)?.label??wkField
+            const weekTotals=weeks.map(w=>({label:'Wk '+(weeks.indexOf(w)+1),goal:w.reduce((s,d)=>s+((habits[d] as any)?.[wkField]??0),0),convo:w.reduce((s,d)=>s+((habits[d] as any)?.convo??0),0),active:w.filter(d=>habits[d]).length}))
+            const maxWkGoal=Math.max(...weekTotals.map(w=>w.goal),1)
             const isCurrentMonth=monthData.days[0]?.slice(0,7)===currMo
             const dayOfMonth=isCurrentMonth?parseInt(todayStr.slice(8)):totalDays
             const pGoal=coreGoals.goalMonthly;const pField=coreGoals.goalField;const pLabel=FIELDS.find(f=>f.key===pField)?.label??pField;const pDone=monthTotals[pField]??0
@@ -647,7 +635,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
                     <div style={{display:'flex',gap:3,alignItems:'flex-end',height:50,marginBottom:6}}>
                       {weekTotals.map((w,i)=>(
                         <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-                          <div style={{width:'100%',height:Math.max(2,(w.mg1/maxWkMg1)*46),background:w.mg1>0?GREEN:TEAL,borderRadius:'2px 2px 0 0'}}/>
+                          <div style={{width:'100%',height:Math.max(2,(w.goal/maxWkGoal)*46),background:w.goal>0?GREEN:TEAL,borderRadius:'2px 2px 0 0'}}/>
                         </div>
                       ))}
                     </div>
@@ -655,8 +643,8 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
                       {weekTotals.map((w,i)=>(
                         <div key={i} style={{flex:1,textAlign:'center'}}>
                           <div style={{fontSize:8,color:'var(--text4)'}}>{w.label}</div>
-                          <div className="mono" style={{fontSize:10,color:w.mg1>0?GREEN:'var(--text4)',fontWeight:700}}>{w.mg1}m</div>
-                          <div style={{fontSize:8,color:'var(--text4)'}}>{w.convo}c</div>
+                          <div className="mono" style={{fontSize:10,color:w.goal>0?GREEN:'var(--text4)',fontWeight:700}}>{w.goal}</div>
+                          <div style={{fontSize:8,color:'var(--text4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wkLabel.slice(0,3)}</div>
                           <div style={{fontSize:8,color:w.active>3?GREEN:GOLD}}>{w.active}d</div>
                         </div>
                       ))}
@@ -665,17 +653,17 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
                 )}
                 {bestDay&&bestDay.s>0&&(
                   <div style={{...CARD,background:'rgba(200,162,74,0.04)',border:'1px solid rgba(200,162,74,0.25)'}}>
-                    <div style={SL}>Best Day</div>
+                    <div style={SL}>Best Day This Month</div>
                     {(()=>{
                       const h=(habits[bestDay.d] as any)
+                      const goalVal=h?.[pField]??0
                       return(
                         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                           <div>
                             <div style={{fontSize:12,fontWeight:700,color:GOLD}}>{new Date(bestDay.d+'T12:00:00').toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'})}</div>
                             <div style={{fontSize:10,color:'var(--text4)',marginTop:3}}>
-                              {h?.convo>0&&<span style={{marginRight:8}}>{h.convo} convos</span>}
-                              {h?.mg1>0&&<span style={{marginRight:8,color:GREEN}}>{h.mg1} MG1s</span>}
-                              {h?.mpa>0&&<span>{h.mpa} MPAs</span>}
+                              {goalVal>0&&<span style={{marginRight:8,color:FIELDS.find(f=>f.key===pField)?.color??GOLD}}>{goalVal} {pLabel}</span>}
+                              <span style={{color:'var(--text4)'}}>Score: {bestDay.s}</span>
                             </div>
                           </div>
                           <button onClick={()=>{setSelDate(bestDay.d);setTab('log')}} style={{padding:'5px 10px',borderRadius:'var(--r)',border:'1px solid rgba(200,162,74,0.3)',background:'rgba(200,162,74,0.06)',color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>View →</button>
@@ -1003,24 +991,22 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
 
           {/* Conversion rates */}
           <div style={CARD}>
-            <div style={SL}>Your Conversion Rates</div>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:0}}>
+              <div style={SL}>Your Conversion Rates — All Time</div>
+              <button onClick={()=>{
+                const pre:Record<string,string>={interruptions:'',convo:'',mpa:'',contact:'',catch_up:'',dtm:'',pre_filter:'',mg1:'',launch:''}
+                Object.entries(baselineTotals).forEach(([k,v])=>{if(v>0)pre[k]=String(v)})
+                setOnboardingForm(pre);setShowOnboarding(true)
+              }} style={{fontSize:9,color:'var(--text4)',background:'none',border:'none',cursor:'pointer',fontFamily:"'Sora',sans-serif",textDecoration:'underline',padding:0,marginBottom:8}}>Edit baseline</button>
+            </div>
+            <div style={{fontSize:10,color:'var(--text4)',marginBottom:12}}>{allTimeTotals.convo>0?`Based on ${allTimeTotals.convo} total conversations`:'Log conversations to see your rates'}{Object.keys(baselineTotals).length>0?' (inc. baseline)':''}</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
               {[{l:'Convo → MG1',v:conv.mg1Rate+'%',c:TEAL},{l:'Convo → MPA',v:conv.convoToMpa+'%',c:BLUE},{l:'MPA → MG1',v:conv.mpaToMg1+'%',c:PURPLE}].map(r=>(
                 <div key={r.l} style={{background:'var(--s2)',borderRadius:'var(--r)',padding:'10px',textAlign:'center'}}>
                   <div className="mono" style={{fontSize:18,fontWeight:800,color:r.c,lineHeight:1}}>{r.v}</div>
                   <div style={{fontSize:9,color:'var(--text3)',marginTop:4}}>{r.l}</div>
                 </div>
               ))}
-            </div>
-            <div style={{padding:'8px 10px',background:'var(--s2)',borderRadius:'var(--r)',fontSize:10,color:'var(--text4)'}}>
-              <div style={{display:'flex',justifyContent:'space-between'}}>
-                <span style={{fontWeight:600,color:'var(--text3)'}}>All-time (logged)</span>
-                <span>
-                  Convo→MG1: <strong style={{color:TEAL}}>{conv.mg1Rate}%</strong>
-                  {' · '}
-                  Convo→MPA: <strong style={{color:BLUE}}>{conv.convoToMpa}%</strong>
-                </span>
-              </div>
             </div>
           </div>
         </div>
@@ -1073,8 +1059,8 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
       {showOnboarding&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.96)',zIndex:700,display:'flex',flexDirection:'column',backdropFilter:'blur(12px)'}}>
           <div style={{background:'var(--s1)',borderBottom:'1px solid var(--br)',padding:'20px 20px 16px',flexShrink:0}}>
-            <div style={{fontSize:17,fontWeight:800,color:GOLD,marginBottom:4}}>Welcome — set up your history</div>
-            <div style={{fontSize:11,color:'var(--text4)',lineHeight:1.6}}>Enter your total activity from <strong style={{color:'var(--text2)'}}>before you started using this app</strong>. This makes your conversion rates accurate from day one. Leave 0 if you're starting fresh.</div>
+            <div style={{fontSize:17,fontWeight:800,color:GOLD,marginBottom:4}}>{Object.keys(baselineTotals).length>0?'Edit your historical baseline':'Welcome — set up your history'}</div>
+            <div style={{fontSize:11,color:'var(--text4)',lineHeight:1.6}}>Enter your <strong style={{color:'var(--text2)'}}>total activity before this app</strong>. This makes conversion rates accurate from day one. Leave 0 to start fresh.</div>
           </div>
           <div style={{flex:1,overflowY:'auto',padding:'16px 20px 20px'}}>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
