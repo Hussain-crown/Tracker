@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase/client'
 import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
-import Candidates from '@/components/pages/Candidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
@@ -49,10 +48,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'habits'|'pipeline'|'candidates'>('habits')
-  const memberLevel = member?.level ?? 1
-  const isAdmin = member?.role === 'admin'
-  const hasHabits = isAdmin || memberLevel >= 2
+  const [tab,setTab] = useState<'habits'|'pipeline'>('habits')
 
   // ── THE FIX: handle every possible auth state on mount ──────
   useEffect(()=>{
@@ -85,8 +81,6 @@ export default function TrackPage(){
       .then(({data}:any)=>{
         if(data){
           setMember(data)
-          // Level 1 users don't have Habits — send them to Pipeline
-          if((data.level??1)<2 && data.role!=='admin')setTab('pipeline')
           setNeedsProfile(false)
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
           if(data.first_login)setShowOnboard(true)
@@ -345,18 +339,30 @@ export default function TrackPage(){
       )}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 18px',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
         <div>
-          <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Habit Tracker</div>
+          <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Growth Tracker</div>
           <div style={{fontSize:10,color:'#555'}}>{member?.name||'Member'} · IBO {member?.ibo_number}</div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          {streak>0&&<div style={{fontSize:11,fontWeight:700,color:GOLD}}>🔥 {streak}d</div>}
+          {streak>0&&tab==='habits'&&<div style={{fontSize:11,fontWeight:700,color:GOLD}}>🔥 {streak}d</div>}
           <button onClick={signOut} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #2a2a35',background:'transparent',color:'#888',cursor:'pointer',fontSize:11}}>Sign out</button>
         </div>
+      </div>
+      {/* Tab nav */}
+      <div style={{display:'flex',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
+        {(['habits','pipeline'] as const).map(t=>(
+          <button key={t} onClick={()=>setTab(t)}
+            style={{flex:1,padding:'10px',border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',
+              fontSize:12,fontWeight:tab===t?700:400,
+              color:tab===t?GOLD:'#555',
+              borderBottom:`2px solid ${tab===t?GOLD:'transparent'}`,transition:'color 0.15s'}}>
+            {t==='habits'?'Habits':'Pipeline'}
+          </button>
+        ))}
       </div>
 
       <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px'}}>
         {/* Streak protection warning */}
-        {missedYesterday&&(
+        {tab==='habits'&&missedYesterday&&(
           <div style={{background:'rgba(232,145,58,0.08)',border:'1px solid rgba(232,145,58,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
             <span style={{fontSize:18}}>⚠️</span>
             <div>
@@ -367,7 +373,7 @@ export default function TrackPage(){
         )}
 
         {/* Personal best */}
-        {personalBest&&(
+        {tab==='habits'&&personalBest&&(
           <div style={{fontSize:11,color:'#555',padding:'6px 12px',background:'#13131a',borderRadius:8,marginBottom:10,textAlign:'center' as const}}>
             🏆 Personal best: {personalBest}
           </div>
@@ -401,7 +407,7 @@ export default function TrackPage(){
 
 
         {/* Weekly summary — this week at a glance */}
-        {member&&habits&&(()=>{
+        {tab==='habits'&&member&&habits&&(()=>{
           const HABIT_DEFS=[
             {key:'interruptions',label:'Int.'},
             {key:'convo',label:'Convos'},
@@ -438,24 +444,8 @@ export default function TrackPage(){
           )
         })()}
 
-        <div style={{display:'flex',gap:6,marginBottom:14}}>
-          {([
-            ...(hasHabits ? [{key:'habits' as const, label:'Habits'}] : []),
-            {key:'pipeline'   as const, label:'Pipeline'},
-            {key:'candidates' as const, label:'Candidates'},
-          ]).map(t=>(
-            <button key={t.key} onClick={()=>setTab(t.key)} style={{
-              flex:1,padding:'9px 10px',borderRadius:8,border:'1px solid '+(tab===t.key?GOLD:'#2a2a35'),
-              background:tab===t.key?'rgba(200,162,74,0.12)':'#16161c',
-              color:tab===t.key?GOLD:'#888',fontWeight:700,fontSize:12,cursor:'pointer',
-              fontFamily:'inherit',letterSpacing:'0.5px',
-            }}>{t.label}</button>
-          ))}
-        </div>
-
-        {tab==='habits' && hasHabits && <Habits hideMonth goalOverride={adminGoals} level={memberLevel}/>}
-        {tab==='pipeline'   && <Pipeline/>}
-        {tab==='candidates' && <Candidates/>}
+        {tab==='habits'&&<Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>}
+        {tab==='pipeline'&&<Pipeline/>}
       </div>
     </div>
   )
