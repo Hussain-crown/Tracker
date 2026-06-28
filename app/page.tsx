@@ -3,8 +3,6 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
-import Pipeline from '@/components/pages/Pipeline'
-import Candidates from '@/components/pages/Candidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
@@ -49,7 +47,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'habits'|'pipeline'|'candidates'>('habits')
+  const [tab,setTab] = useState<'habits'>('habits')
 
   // ── THE FIX: handle every possible auth state on mount ──────
   useEffect(()=>{
@@ -433,24 +431,7 @@ export default function TrackPage(){
           )
         })()}
 
-        <div style={{display:'flex',gap:6,marginBottom:14}}>
-          {([
-            {key:'habits',     label:'Habits'},
-            {key:'pipeline',   label:'Pipeline'},
-            {key:'candidates', label:'Candidates'},
-          ] as const).map(t=>(
-            <button key={t.key} onClick={()=>setTab(t.key)} style={{
-              flex:1,padding:'9px 10px',borderRadius:8,border:'1px solid '+(tab===t.key?GOLD:'#2a2a35'),
-              background:tab===t.key?'rgba(200,162,74,0.12)':'#16161c',
-              color:tab===t.key?GOLD:'#888',fontWeight:700,fontSize:12,cursor:'pointer',
-              fontFamily:'inherit',letterSpacing:'0.5px',
-            }}>{t.label}</button>
-          ))}
-        </div>
-
-        {tab==='habits'     && <Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>}
-        {tab==='pipeline'   && <Pipeline/>}
-        {tab==='candidates' && <Candidates/>}
+        <Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>
       </div>
     </div>
   )
