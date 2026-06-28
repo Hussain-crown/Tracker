@@ -3,19 +3,21 @@ import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
-const sb = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSb() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 async function getAdminId(): Promise<string|null> {
   if(process.env.ADMIN_USER_ID) return process.env.ADMIN_USER_ID
-  const { data } = await sb.from('meta').select('user_id').in('key',[
+  const { data } = await getSb().from('meta').select('user_id').in('key',[
     'booking_availability','booking_rules','booking_zoom_link',
     'booking_display_name','booking_admin_email','booking_custom_type'
   ]).order('updated_at',{ascending:false}).limit(1)
   if(data?.[0]?.user_id) return data[0].user_id
-  const { data: t } = await sb.from('google_tokens').select('user_id').limit(1)
+  const { data: t } = await getSb().from('google_tokens').select('user_id').limit(1)
   return t?.[0]?.user_id ?? null
 }
 
@@ -35,7 +37,7 @@ export async function GET(req: Request) {
     const adminIbo = process.env.ADMIN_IBO || ADMIN_IBO
     if (ibo === adminIbo) {
       // Get admin's display name
-      const { data: nameMeta } = await sb.from('meta')
+      const { data: nameMeta } = await getSb().from('meta')
         .select('value, updated_at').eq('user_id', adminId).eq('key', 'booking_display_name')
         .order('updated_at', { ascending: false }).limit(1)
       return NextResponse.json({
@@ -51,7 +53,7 @@ export async function GET(req: Request) {
     }
 
     // ── CHECK 2: Partners table ──
-    const { data: partners } = await sb
+    const { data: partners } = await getSb()
       .from('partners')
       .select('id, name, email, phone, ibo_number')
       .eq('user_id', adminId)
