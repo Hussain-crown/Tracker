@@ -173,8 +173,19 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const [mrSaving,setMrSaving]   =useState(false)
   const [activeQ,setActiveQ]     =useState<string|null>(null)
   const [reviewMonth,setReviewMonth]=useState('')
+  const [baselineTotals,setBaselineTotals]=useState<Record<string,number>>({})
+  const [showOnboarding,setShowOnboarding]=useState(false)
+  const [onboardingForm,setOnboardingForm]=useState<Record<string,string>>({interruptions:'',convo:'',mpa:'',contact:'',catch_up:'',dtm:'',pre_filter:'',mg1:'',launch:''})
+  const [onboardingSaving,setOnboardingSaving]=useState(false)
 
   useEffect(()=>{ loadHabits();loadResources() },[]) // eslint-disable-line
+  useEffect(()=>{
+    if(!userId)return
+    getMeta('historical_baseline').then(b=>{
+      if(b){try{setBaselineTotals(JSON.parse(b))}catch{}}
+      else setShowOnboarding(true)
+    })
+  },[userId]) // eslint-disable-line
   useEffect(()=>{
     if(!selDate)return
     getMeta('checklist_'+selDate).then(v=>{
@@ -290,6 +301,15 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
     Object.entries(coreForm.overrides).forEach(([k,v])=>{const n=parseInt(v as string)||0;if(n>0)(g.overrides as any)[k]=n})
     setCoreGoals(g);await setMeta('core_goals_v4',JSON.stringify(g));setEditCore(false)
   }
+  async function saveBaseline(skip=false){
+    setOnboardingSaving(true)
+    const totals:Record<string,number>={}
+    if(!skip)Object.entries(onboardingForm).forEach(([k,v])=>{const n=parseInt(v)||0;if(n>0)totals[k]=n})
+    await setMeta('historical_baseline',JSON.stringify(totals))
+    setBaselineTotals(totals)
+    setShowOnboarding(false)
+    setOnboardingSaving(false)
+  }
   // ── DATA ─────────────────────────────────────────────
   const allDates=useMemo(()=>Object.keys(habits).sort(),[habits])
   const liveTotals=useMemo(()=>{
@@ -297,6 +317,11 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
     allDates.forEach(d=>{const h=habits[d] as any;if(h)Object.keys(t).forEach(k=>{t[k]+=(h[k]??0)})})
     return t
   },[habits,allDates])
+  const allTimeTotals=useMemo(()=>{
+    const t:Record<string,number>={...liveTotals}
+    Object.entries(baselineTotals).forEach(([k,v])=>{t[k]=(t[k]??0)+v})
+    return t
+  },[liveTotals,baselineTotals])
   const targets=useMemo(()=>deriveTargets(coreGoals),[coreGoals])
   const dailyTargets=useMemo(()=>{
     const daysInMonth=new Date(parseInt(todayStr.slice(0,4)),parseInt(todayStr.slice(5,7)),0).getDate()
@@ -327,10 +352,10 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
     return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>(h as any)[f.key]>0)}).length/30*100)
   },[habits,FIELDS])
   const conv=useMemo(()=>({
-    mg1Rate:liveTotals.convo>0?Math.round((liveTotals.mg1??0)/liveTotals.convo*100):0,
-    convoToMpa:liveTotals.convo>0?Math.round((liveTotals.mpa??0)/liveTotals.convo*100):0,
-    mpaToMg1:liveTotals.mpa>0?Math.round((liveTotals.mg1??0)/liveTotals.mpa*100):0,
-  }),[liveTotals])
+    mg1Rate:allTimeTotals.convo>0?Math.round((allTimeTotals.mg1??0)/allTimeTotals.convo*100):0,
+    convoToMpa:allTimeTotals.convo>0?Math.round((allTimeTotals.mpa??0)/allTimeTotals.convo*100):0,
+    mpaToMg1:allTimeTotals.mpa>0?Math.round((allTimeTotals.mg1??0)/allTimeTotals.mpa*100):0,
+  }),[allTimeTotals])
   const personalBests=useMemo(()=>{
     const b:Partial<Record<FieldKey,{val:number;date:string}>>={};FIELDS.forEach(f=>{let best=0;let bd='';allDates.forEach(d=>{const v=getV(habits[d] as HabitEntry|undefined,f.key);if(v>best){best=v;bd=d}});if(best>0)b[f.key]={val:best,date:bd}});return b
   },[habits,allDates])
@@ -722,15 +747,15 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
             <div style={{fontSize:10,color:'var(--text4)',marginBottom:14}}>Where are you losing people at each stage</div>
             {(()=>{
               const steps=[
-                {l:'Interruptions',     v:liveTotals.interruptions??0, c:RED},
-                {l:'Conversations',     v:liveTotals.convo??0,         c:GOLD},
-                {l:'MPAs done',         v:liveTotals.mpa??0,           c:BLUE},
-                {l:'Contacts made',     v:liveTotals.contact??0,       c:'#5B9BD5'},
-                {l:'Catch Ups',         v:liveTotals.catch_up??0,      c:PURPLE},
-                {l:'DTMs',             v:liveTotals.dtm??0,           c:TEAL},
-                {l:'Pre-Filters',       v:liveTotals.pre_filter??0,    c:'#E8913A'},
-                {l:'MG1s run',          v:liveTotals.mg1??0,           c:GREEN},
-                {l:'Launches',          v:liveTotals.launch??0,        c:GOLD},
+                {l:'Interruptions',     v:allTimeTotals.interruptions??0, c:RED},
+                {l:'Conversations',     v:allTimeTotals.convo??0,         c:GOLD},
+                {l:'MPAs done',         v:allTimeTotals.mpa??0,           c:BLUE},
+                {l:'Contacts made',     v:allTimeTotals.contact??0,       c:'#5B9BD5'},
+                {l:'Catch Ups',         v:allTimeTotals.catch_up??0,      c:PURPLE},
+                {l:'DTMs',             v:allTimeTotals.dtm??0,           c:TEAL},
+                {l:'Pre-Filters',       v:allTimeTotals.pre_filter??0,    c:'#E8913A'},
+                {l:'MG1s run',          v:allTimeTotals.mg1??0,           c:GREEN},
+                {l:'Launches',          v:allTimeTotals.launch??0,        c:GOLD},
               ]
               const maxVal=Math.max(...steps.map(s=>s.v),1)
               const flowSteps=steps.slice(1)
@@ -764,7 +789,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
                       <div style={{fontSize:10,color:'var(--text4)'}}>{bigDrop.drop}% drop — this is where most people fall out</div>
                     </div>
                   )}
-                  <div style={{marginTop:10,fontSize:9,color:'var(--text4)',borderTop:'1px solid var(--br)',paddingTop:8}}>All-time · {allDates.length} days of activity</div>
+                  <div style={{marginTop:10,fontSize:9,color:'var(--text4)',borderTop:'1px solid var(--br)',paddingTop:8}}>All-time · {allDates.length} days logged{Object.keys(baselineTotals).length>0?' + historical baseline':''}</div>
                 </div>
               )
             })()}
@@ -1044,6 +1069,45 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
           })}
         </div>
       )}
+      {/* ── HISTORICAL BASELINE ONBOARDING ─────────────── */}
+      {showOnboarding&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.96)',zIndex:700,display:'flex',flexDirection:'column',backdropFilter:'blur(12px)'}}>
+          <div style={{background:'var(--s1)',borderBottom:'1px solid var(--br)',padding:'20px 20px 16px',flexShrink:0}}>
+            <div style={{fontSize:17,fontWeight:800,color:GOLD,marginBottom:4}}>Welcome — set up your history</div>
+            <div style={{fontSize:11,color:'var(--text4)',lineHeight:1.6}}>Enter your total activity from <strong style={{color:'var(--text2)'}}>before you started using this app</strong>. This makes your conversion rates accurate from day one. Leave 0 if you're starting fresh.</div>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:'16px 20px 20px'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {ALL_FIELDS.map(f=>(
+                <div key={f.key} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'var(--s2)',border:'1px solid var(--br)',borderRadius:'var(--r)',borderLeft:`3px solid ${f.color}`}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,fontWeight:700,color:f.color}}>{f.label}</div>
+                    <div style={{fontSize:10,color:'var(--text4)',marginTop:1}}>{f.desc}</div>
+                  </div>
+                  <input
+                    type="number" min={0} inputMode="numeric"
+                    value={onboardingForm[f.key]??''}
+                    placeholder="0"
+                    onChange={e=>setOnboardingForm(p=>({...p,[f.key]:e.target.value}))}
+                    style={{...INP,width:80,fontSize:18,fontWeight:800,color:f.key==='interruptions'&&parseInt(onboardingForm[f.key]||'0')>0?RED:f.color,padding:'8px 6px'}}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{background:'var(--s1)',borderTop:'1px solid var(--br)',padding:'16px 20px',flexShrink:0,display:'flex',gap:10}}>
+            <button onClick={()=>saveBaseline(false)} disabled={onboardingSaving}
+              style={{flex:1,padding:'13px',borderRadius:'var(--r)',border:'none',background:'linear-gradient(135deg,var(--gold),var(--gold3))',color:'#000',fontWeight:800,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+              {onboardingSaving?'Saving…':'Save History'}
+            </button>
+            <button onClick={()=>saveBaseline(true)} disabled={onboardingSaving}
+              style={{padding:'13px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
+              Starting fresh
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── MONTH REVIEW MODAL ─────────────────────────── */}
       {showMonthReview&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:600,display:'flex',flexDirection:'column',backdropFilter:'blur(8px)'}}>
