@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
 import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
@@ -18,91 +18,24 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null;nextAction
   'Offer Questions':{color:'var(--orange)', bg:'rgba(232,145,58,0.10)', next:'Offer Call',      nextAction:'Complete offer questions'},
   'Offer Call':     {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:null,              nextAction:'Run offer call'},
 }
-const FU_STAGES:Stage[] = ['FU1','FU2','FU3']
+const FU_STAGES: Stage[] = ['FU1','FU2','FU3']
 
-// Maps a stage to the booking-page meeting sub-type used to schedule it —
-// mirrors the "Interview Process" subtypes defined in Booking.tsx.
-const STAGE_MEETING: Record<string,{type:string;duration:number}> = {
-  'MG1': {type:'Meet & Greet 1',        duration:45},
-  'MG2': {type:'Meet & Greet 2',        duration:45},
-  'FU1': {type:'Compensation Plan',     duration:45},
-  'FU2': {type:'Partnership Guidelines',duration:45},
-  'FU3': {type:'Operations Blueprint',  duration:45},
-}
 function getNextMeeting(c:Candidate):{type:string;start_iso:string}|null{
   try{ return JSON.parse(c.interview_notes||'{}')._next_meeting ?? null }catch{ return null }
 }
-
 function normaliseStage(s:string):Stage{
   const map:Record<string,Stage>={'Pre-Filter':'Pre-Filter','PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1','MG1':'MG1','MG2 Booked':'MG2','MG2 Completed':'MG2','MG2':'MG2','FU1':'FU1','FU2':'FU2','FU3':'FU3','Follow-Up':'FU1','Offer Questions':'Offer Questions','Offer':'Offer Call','Offer Call':'Offer Call','Review':'Offer Call'}
   return map[s]??'Pre-Filter'
 }
 
-// ── OFFER QUESTIONS ───────────────────────────────────────
-const OFFER_QS = [
-  'What does this partnership mean to you?',
-  'What are the expectations from both sides?',
-  'Are you comfortable taking mentorship from your coach?',
-  'What are the daily, weekly and quarterly habits for success?',
-  'Please list all known upcoming function dates.',
-  'How do you feel about a 5-year commitment?',
-  'What have you learned through the education process?',
-  'Are you open to seeking perspective on life decisions?',
-  'Are you comfortable using Zoom, WhatsApp, and Google Calendar?',
-  'Is there anything that will hold you back?',
-  'What is your reason for committing to this partnership?',
-  'Are you prepared to do a budget session and set up Autoship?',
-  'Are you open to seeking perspective on financial decisions?',
-  'Will you purchase function tickets when available?',
-  'What is your understanding of the financial commitment?',
-  'Do you understand that everything in this partnership is optional?',
-  'Do you have a clear understanding of the mentoring relationship?',
-  'What have you appreciated most about the education process?',
-  'Is there anything else you would like to tell us?',
-]
-
 const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Not sure about products','Other']
-const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Ghosted','Chose another opportunity','Other']
 
-// ── CSV IMPORT HELPERS ─────────────────────────────────────
-const SOURCES_C   = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
-const RELATIONS_C = ['Family','Close friend','Friend / Acquaintance','C-list','Online contact']
-const AGE_RANGES_C= ['Under 25','25–35','35–45','45+']
-const LIFE_STAGES_C=['Student','Employed (9–5)','Self-employed','Stay-at-home parent','Retired']
-const DRIVERS_C   = ['Family','Growth','Community','Lifestyle','Freedom','Purpose','Financial']
-type CandImportStatus = 'valid'|'dupe'|'invalid'
-interface CandImportRow {
-  name:string; phone:string; email:string; stage:string; source:string
-  relationship:string; age_range:string; life_stage:string; primary_driver:string
-  pain_point:string; hunger:number; looking:number
-  status:CandImportStatus; missing:string[]; dupeOf?:string
-}
-function parseCSVC(text:string):Record<string,string>[]{
-  const parseRow=(line:string)=>{const cols:string[]=[];let cur='',inQ=false;for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){cols.push(cur);cur=''}else cur+=ch};cols.push(cur);return cols}
-  const lines=text.trim().split(/\r?\n/)
-  if(lines.length<2)return[]
-  const headers=parseRow(lines[0]).map(h=>h.trim().replace(/^"|"$/g,'').toLowerCase())
-  return lines.slice(1).filter(l=>l.trim()).map(line=>{
-    const cols=parseRow(line).map(c=>c.trim().replace(/^"|"$/g,''))
-    const row:Record<string,string>={}
-    headers.forEach((h,i)=>{row[h]=cols[i]??''})
-    return row
-  })
-}
-function normColC(row:Record<string,string>,...keys:string[]):string{
-  for(const k of keys){const v=row[k]??row[k.replace(/_/g,' ')]??row[k.replace(/ /g,'_')]??'';if(v.trim())return v.trim()}
-  return''
-}
-
-const MY_IBO = '7013656028'
 const TZ = 'Australia/Brisbane'
 function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
 function fmtTime(iso:string){return new Date(iso).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:TZ})}
 
-// ── HELPERS ───────────────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
-const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
-const ORANGE='var(--orange)'
+const BLUE='var(--blue)';const ORANGE='var(--orange)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:6}
 const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box' as const}
@@ -120,8 +53,7 @@ function getNoShows(c:Candidate):number{try{return JSON.parse(c.interview_notes|
 function buildNotes(c:Candidate,patch:object):string{
   try{const p=JSON.parse(c.interview_notes||'{}');return JSON.stringify({...p,...patch})}catch{return JSON.stringify(patch)}
 }
-
-function healthScore(c:Candidate, lastContact:string):number{
+function healthScore(c:Candidate,lastContact:string):number{
   const hxl=Math.min(100,(c.hxl_score??((c.hunger??5)*(c.looking??5))))
   const daysSinceContact=lastContact?daysSince(lastContact):daysSince(c.updated_at)
   const recency=Math.max(0,100-daysSinceContact*14)
@@ -132,32 +64,27 @@ function healthColor(s:number){return s>=70?GREEN:s>=45?GOLD:RED}
 
 type Tab = 'active'|'funnel'|'launched'|'archive'
 type DetailTab = 'profile'|'history'|'timeline'|'brief'
-
 interface GEvent{id:string;summary:string;start:{dateTime?:string;date?:string};attendees?:{email:string}[]}
 
-// ── CANDIDATE CARD — outside component ───────────────────
+// ── CANDIDATE CARD ────────────────────────────────────────
 interface CardProps{
-  c:Candidate; partners:Partner[]; contactLogs:ContactLog[]
-  calEvents:GEvent[]; scores:Record<string,number>
-  onAdvance:(c:Candidate,dir?:'forward'|'back')=>void; onDq:(c:Candidate)=>void
-  onView:(c:Candidate)=>void; onBrief:(c:Candidate)=>void
-  onLaunch:(c:Candidate)=>void; onDisqualifyOffer:(c:Candidate)=>void
+  c:Candidate; contactLogs:ContactLog[]; calEvents:GEvent[]
+  scores:Record<string,number>
+  onAdvance:(c:Candidate,dir?:'forward'|'back')=>void
+  onDq:(c:Candidate)=>void
+  onView:(c:Candidate)=>void
+  onLaunch:(c:Candidate)=>void
 }
-function CandCard({c,contactLogs,calEvents,scores,onAdvance,onDq,onView,onLaunch,onDisqualifyOffer}:CardProps){
+function CandCard({c,contactLogs,calEvents,scores,onAdvance,onDq,onView,onLaunch}:CardProps){
   const stage=normaliseStage(c.stage)
   const cfg=STAGE_CFG[stage]
   const score=scores[c.id]??0
   const logs=contactLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
-  const days=daysSince(c.updated_at)
   const daysInStage=daysSince(lastLog?.created_at??c.created_at)
   const stageAlertColor=daysInStage>=14?RED:daysInStage>=7?GOLD:null
   const isStalling=FU_STAGES.includes(stage)&&daysSince(lastLog?.created_at??c.updated_at)>=21
   const isOfferCall=stage==='Offer Call'
-  const isOfferQ=stage==='Offer Questions'
-  const offerAnswers=getOfferAnswers(c)
-  const answeredCount=Object.values(offerAnswers).filter(v=>v?.trim().length>0).length
-  const sponsorIbo=getSponsorIbo(c)
   const name=c.name.toLowerCase();const first=name.split(' ')[0]
   const nextCalEvent=calEvents.filter(e=>{
     const sum=(e.summary||'').toLowerCase()
@@ -181,7 +108,7 @@ function CandCard({c,contactLogs,calEvents,scores,onAdvance,onDq,onView,onLaunch
             <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{stage}</span>
             {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'15',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in stage</span>}
             {isStalling&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.12)',color:RED,fontWeight:700}}>⚠ Stalling</span>}
-            {getNoShows(c)>0&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(232,145,58,0.15)',color:'#E8913A',fontWeight:700}}>✗ {getNoShows(c)} no-show{getNoShows(c)>1?'s':''}</span>}
+            {getNoShows(c)>0&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(232,145,58,0.15)',color:ORANGE,fontWeight:700}}>✗ {getNoShows(c)} no-show{getNoShows(c)>1?'s':''}</span>}
           </div>
         </div>
         <div style={{textAlign:'right' as const,flexShrink:0,marginLeft:8}}>
@@ -189,31 +116,20 @@ function CandCard({c,contactLogs,calEvents,scores,onAdvance,onDq,onView,onLaunch
           <div style={{fontSize:8,color:'var(--text4)'}}>health</div>
         </div>
       </div>
-      {/* Next action */}
-      <div style={{fontSize:11,color:'var(--text3)',marginBottom:8,fontWeight:600}}>
-        → {cfg.nextAction}
-        {isOfferQ&&<span style={{marginLeft:6,fontSize:10,color:ORANGE,fontWeight:700}}>{answeredCount}/{OFFER_QS.length} Qs</span>}
-      </div>
-      {nextMeeting&&<div style={{fontSize:10,color:GOLD,marginBottom:6,padding:'2px 8px',background:'rgba(200,162,74,0.1)',borderRadius:'var(--r)',display:'inline-block'}}>📅 {nextMeeting.type} booked · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</div>}
-      {/* Objection tag */}
+      <div style={{fontSize:11,color:'var(--text3)',marginBottom:8,fontWeight:600}}>→ {cfg.nextAction}</div>
+      {nextMeeting&&<div style={{fontSize:10,color:GOLD,marginBottom:6,padding:'2px 8px',background:'rgba(200,162,74,0.1)',borderRadius:'var(--r)',display:'inline-block'}}>📅 {nextMeeting.type} · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</div>}
       {objection&&objection!=='None'&&<div style={{fontSize:10,color:RED,marginBottom:6,padding:'2px 8px',background:'rgba(224,85,85,0.08)',borderRadius:'var(--r)',display:'inline-block'}}>Objection: {objection}</div>}
-      {/* Pain point */}
       {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,70)}{c.pain_point.length>70?'…':''}"</div>}
-      {/* Next calendar event */}
       {nextCalEvent&&<div style={{fontSize:10,color:BLUE,marginBottom:6,padding:'3px 8px',background:'rgba(91,155,213,0.08)',borderRadius:'var(--r)'}}>📅 {nextCalEvent.summary} — {fmtDate(nextCalEvent.start.dateTime||nextCalEvent.start.date||'')}</div>}
-      {/* Last contact */}
       {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
-      {/* Actions */}
       <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
         {isOfferCall?(
-          <>
-            <button onClick={()=>onLaunch(c)} style={{flex:1,padding:'8px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>🚀 Launch</button>
-            <button onClick={()=>onDisqualifyOffer(c)} style={{padding:'8px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}40`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>✗ Disqualify</button>
-          </>
+          <button onClick={()=>onLaunch(c)} style={{flex:1,padding:'8px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>🚀 Launch</button>
         ):(
-          <><button onClick={()=>onAdvance(c,'forward')} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${cfg.color}40`,background:`${cfg.color}0C`,color:cfg.color,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
-            → {cfg.next??'Launch'}
-          </button>{stage!=='Pre-Filter'&&<button onClick={()=>onAdvance(c,'back')} title="Move back" style={{padding:'7px 9px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>←</button>}</>
+          <>
+            <button onClick={()=>onAdvance(c,'forward')} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${cfg.color}40`,background:`${cfg.color}0C`,color:cfg.color,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>→ {cfg.next??'Launch'}</button>
+            {stage!=='Pre-Filter'&&<button onClick={()=>onAdvance(c,'back')} style={{padding:'7px 9px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>←</button>}
+          </>
         )}
         <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
         <button onClick={()=>onDq(c)} style={{padding:'7px 10px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>DQ</button>
@@ -228,30 +144,15 @@ export default function Candidates(){
          partners,loadPartners,upsertPartner,
          addContactLog,loadContactLogs,contactLogs} = useStore()
 
-  const [tab,setTab]           = useState<Tab>('active')
-  const [teamFilter,setTeamFilter] = useState('all')
-  const [search,setSearch]     = useState('')
-  const [detail,setDetail]     = useState<Candidate|null>(null)
+  const [tab,setTab]             = useState<Tab>('active')
+  const [search,setSearch]       = useState('')
+  const [detail,setDetail]       = useState<Candidate|null>(null)
   const [detailTab,setDetailTab] = useState<DetailTab>('profile')
-  const [offerAnswers,setOfferAnswers] = useState<Record<number,string>>({})
   const [advancing,setAdvancing] = useState<Candidate|null>(null)
   const [advDir,setAdvDir]       = useState<'forward'|'back'>('forward')
-  const [advLog,setAdvLog]       = useState({date:'',notes:'',fathom:''})
-  const [fathomLoading,setFathomLoading] = useState(false)
-  const [slots,setSlots]       = useState<Record<string,string[]>>({})
-  const [slotsLoading,setSlotsLoading] = useState(false)
-  const [selSlot,setSelSlot]   = useState('')
-  const [booking,setBooking]   = useState(false)
-  const [dqOpen,setDqOpen]     = useState<Candidate|null>(null)
-  const [logModal,setLogModal] = useState<Candidate|null>(null)
-  const [logForm,setLogForm]   = useState({outcome:'Positive',notes:'',fathom_link:'',objection:'None',nextAction:'',nextDate:'',rationale:''})
-  const [launchConfirm,setLaunchConfirm] = useState<Candidate|null>(null)
-  const [addTeamOpen,setAddTeamOpen] = useState(false)
-  const [addTeamForm,setAddTeamForm] = useState({name:'',phone:'',email:'',source:'',stage:'Pre-Filter' as Stage,sponsor_ibo:''})
-  const [importOpen,setImportOpen]   = useState(false)
-  const [importRows,setImportRows]   = useState<CandImportRow[]>([])
-  const [importDragging,setImportDragging] = useState(false)
-  const [importing,setImporting]     = useState(false)
+  const [advNotes,setAdvNotes]   = useState('')
+  const [logModal,setLogModal]   = useState<Candidate|null>(null)
+  const [logForm,setLogForm]     = useState({outcome:'Positive',notes:'',fathom_link:'',objection:'None',nextAction:'',nextDate:'',rationale:''})
   const [briefText,setBriefText] = useState('')
   const [briefLoading,setBriefLoading] = useState(false)
   const [calEvents,setCalEvents] = useState<GEvent[]>([])
@@ -269,15 +170,12 @@ export default function Candidates(){
     }catch{}
   }
 
-  // ── COMPUTED ─────────────────────────────────────────────
-  // candidates is already scoped to the logged-in user by the store's user_id filter
-  const pool   = candidates
+  // ── COMPUTED ──────────────────────────────────────────────
+  const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
+  const archived = useMemo(()=>candidates.filter(c=>c.status==='disqualified'),[candidates])
+  const launched = useMemo(()=>candidates.filter(c=>c.status==='launched'),[candidates])
 
-  const active   = useMemo(()=>pool.filter(c=>c.status==='active'),[pool])
-  const archived = useMemo(()=>pool.filter(c=>c.status==='disqualified'),[pool])
-  const launched = useMemo(()=>pool.filter(c=>c.status==='launched'),[pool])
-
-  const scores = useMemo(()=>{
+  const scores=useMemo(()=>{
     const m:Record<string,number>={}
     candidates.forEach(c=>{
       const last=contactLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
@@ -286,13 +184,14 @@ export default function Candidates(){
     return m
   },[candidates,contactLogs])
 
-  const stageCounts=useMemo(()=>{const c:Record<string,number>={};STAGES.forEach(s=>{c[s]=active.filter(c=>normaliseStage(c.stage)===s).length});return c},[active])
+  const stageCounts=useMemo(()=>{
+    const c:Record<string,number>={};STAGES.forEach(s=>{c[s]=active.filter(c=>normaliseStage(c.stage)===s).length});return c
+  },[active])
 
-  const displayList = useMemo(()=>{
+  const displayList=useMemo(()=>{
     let l=active
     if(search)l=l.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()))
     return [...l].sort((a,b)=>{
-      // Stalling FU first
       const as=FU_STAGES.includes(normaliseStage(a.stage))&&daysSince(contactLogs.filter(l=>l.entity_id===a.id)[0]?.created_at??a.updated_at)>=21
       const bs=FU_STAGES.includes(normaliseStage(b.stage))&&daysSince(contactLogs.filter(l=>l.entity_id===b.id)[0]?.created_at??b.updated_at)>=21
       if(as!==bs)return as?-1:1
@@ -300,11 +199,11 @@ export default function Candidates(){
     })
   },[active,search,scores,contactLogs])
 
-  const iboNames = useMemo(()=>{
-    const m:Record<string,string>={};partners.forEach(p=>{if(p.ibo_number)m[p.ibo_number]=p.name});return m
+  const iboNames=useMemo(()=>{
+    const m:Record<string,string>={};partners.forEach((p:Partner)=>{if(p.ibo_number)m[p.ibo_number]=p.name});return m
   },[partners])
 
-  const funnel = useMemo(()=>{
+  const funnel=useMemo(()=>{
     const total=active.length||1
     return STAGES.map((s,i)=>({
       stage:s,count:stageCounts[s]||0,
@@ -314,7 +213,7 @@ export default function Candidates(){
     }))
   },[active,stageCounts])
 
-  const objectionBreakdown = useMemo(()=>{
+  const objectionBreakdown=useMemo(()=>{
     const m:Record<string,number>={}
     contactLogs.filter(l=>l.entity_type==='candidate'&&(l as any).objection&&(l as any).objection!=='None').forEach(l=>{
       const o=(l as any).objection;m[o]=(m[o]||0)+1
@@ -322,7 +221,7 @@ export default function Candidates(){
     return Object.entries(m).sort((a,b)=>b[1]-a[1])
   },[contactLogs])
 
-  // ── ACTIONS ──────────────────────────────────────────────
+  // ── ACTIONS ───────────────────────────────────────────────
   function openLog(c:Candidate){
     setLogModal(c)
     setLogForm({outcome:'Positive',notes:'',fathom_link:'',objection:'None',nextAction:STAGE_CFG[normaliseStage(c.stage)].nextAction,nextDate:'',rationale:''})
@@ -334,83 +233,32 @@ export default function Candidates(){
     setLogModal(null)
   }
 
-  async function openAdvance(c:Candidate, dir:'forward'|'back'='forward'){
-    setAdvancing(c)
-    setAdvDir(dir)
-    setAdvLog({date:new Date().toISOString().slice(0,10),notes:'',fathom:''})
-    setSelSlot('');setSlots({})
-    // Auto-fetch latest Fathom meeting — search by email first (exact match), then name
-    setFathomLoading(true)
-    try{
-      // Use email if available — much more precise than name
-      const searchParam = c.email?.trim()
-        ? 'email='+encodeURIComponent(c.email.trim())
-        : 'name='+encodeURIComponent(c.name)
-      const res=await fetch('/api/fathom/latest?'+searchParam)
-      const d=await res.json()
-      if(d.url)setAdvLog(l=>({...l,fathom:d.url}))
-    }catch{}
-    setFathomLoading(false)
-    // If advancing forward lands on a bookable stage, fetch open slots so
-    // the admin can book the next meeting in the same step as the advance
-    if(dir==='forward'){
-      const ns=STAGE_CFG[normaliseStage(c.stage)].next
-      const meeting=ns?STAGE_MEETING[ns]:null
-      if(meeting){
-        setSlotsLoading(true)
-        try{
-          const res=await fetch(`/api/book/slots?duration=${meeting.duration}&days=14`)
-          const d=await res.json()
-          if(d.slots)setSlots(d.slots)
-        }catch{}
-        setSlotsLoading(false)
-      }
-    }
-  }
-  async function confirmBacktrack(){
-    if(!advancing||!userId)return
-    const c=advancing
-    const cur=normaliseStage(c.stage)
-    const curIdx=STAGES.indexOf(cur)
-    if(curIdx<=0){setAdvancing(null);return}
-    const prev=STAGES[curIdx-1]
-    const stageHistory=[...getStageHistory(c),{stage:cur,date:new Date().toISOString().slice(0,10)}]
-    const notes=buildNotes(c,{__notes:getNotes(c),__offers:getOfferAnswers(c),_stage_history:stageHistory})
-    const updated={...c,stage:prev,interview_notes:notes,updated_at:now()}
-    await upsertCandidate(updated as any)
-    await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'stage_back',outcome:'Neutral',notes:advLog.notes||`Moved back to ${prev}`,fathom_link:advLog.fathom,next_action:STAGE_CFG[prev as Stage]?.nextAction??'',next_date:'',created_at:new Date().toISOString()} as any)
-    if(detail?.id===c.id)setDetail(updated as any)
-    setAdvancing(null)
+  function openAdvance(c:Candidate,dir:'forward'|'back'='forward'){
+    setAdvancing(c);setAdvDir(dir);setAdvNotes('')
   }
 
   async function confirmAdvance(){
     if(!advancing||!userId)return
-    const c=advancing;const cur=normaliseStage(c.stage);const cfg=STAGE_CFG[cur];const ns=cfg.next??cur
-    const stageHistory=[...getStageHistory(c),{stage:cur,date:new Date().toISOString().slice(0,10)}]
-    const meeting=STAGE_MEETING[ns]
-    let nextMeetingPatch:any={}
-    // Book the next meeting on the admin's calendar in the same step as the
-    // stage advance — reuses the public booking pipeline (calendar event +
-    // confirmation emails) without going through the public /book form.
-    if(meeting&&selSlot){
-      setBooking(true)
-      try{
-        const res=await fetch('/api/book/submit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-          meetingTypeId:'interview', meetingTypeName:meeting.type, parentTypeName:'Interview Process',
-          startISO:selSlot, duration:meeting.duration, needsCandidate:false,
-          name:c.name, email:c.email||'', phone:c.phone||'',
-          bookerName:'Hussain', bookerIbo:MY_IBO,
-        })})
-        const d=await res.json()
-        if(d.ok)nextMeetingPatch={_next_meeting:{type:meeting.type,start_iso:selSlot}}
-      }catch{}
-      setBooking(false)
+    const c=advancing
+    if(advDir==='back'){
+      const curIdx=STAGES.indexOf(normaliseStage(c.stage))
+      if(curIdx<=0){setAdvancing(null);return}
+      const prev=STAGES[curIdx-1]
+      const stageHistory=[...getStageHistory(c),{stage:normaliseStage(c.stage),date:new Date().toISOString().slice(0,10)}]
+      const notes=buildNotes(c,{__notes:getNotes(c),__offers:getOfferAnswers(c),_stage_history:stageHistory})
+      const updated={...c,stage:prev,interview_notes:notes,updated_at:now()}
+      await upsertCandidate(updated as any)
+      await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'stage_back',outcome:'Neutral',notes:advNotes||`Moved back to ${prev}`,fathom_link:'',next_action:STAGE_CFG[prev as Stage]?.nextAction??'',next_date:'',created_at:new Date().toISOString()} as any)
+      if(detail?.id===c.id)setDetail(updated as any)
+    } else {
+      const cur=normaliseStage(c.stage);const cfg=STAGE_CFG[cur];const ns=cfg.next??cur
+      const stageHistory=[...getStageHistory(c),{stage:cur,date:new Date().toISOString().slice(0,10)}]
+      const notes=buildNotes(c,{__notes:getNotes(c),__offers:getOfferAnswers(c),_stage_history:stageHistory})
+      const updated={...c,stage:ns,interview_notes:notes,updated_at:now()}
+      await upsertCandidate(updated as any)
+      await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:ns.toLowerCase().replace(/ /g,'_'),outcome:'Positive',notes:advNotes||`Advanced to ${ns}`,fathom_link:'',next_action:STAGE_CFG[ns as Stage]?.nextAction??'',next_date:'',created_at:new Date().toISOString()} as any)
+      if(detail?.id===c.id)setDetail(updated as any)
     }
-    const notes=buildNotes(c,{__notes:getNotes(c),__offers:getOfferAnswers(c),_stage_history:stageHistory,...nextMeetingPatch})
-    const updated={...c,stage:ns,interview_notes:notes,updated_at:now()}
-    await upsertCandidate(updated as any)
-    await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:ns.toLowerCase().replace(/ /g,'_'),outcome:'Positive',notes:advLog.notes||`Advanced to ${ns}`,fathom_link:advLog.fathom,next_action:STAGE_CFG[ns as Stage]?.nextAction??'',next_date:'',created_at:new Date().toISOString()} as any)
-    if(detail?.id===c.id)setDetail(updated as any)
     setAdvancing(null)
   }
 
@@ -420,22 +268,19 @@ export default function Candidates(){
     const notes=buildNotes(c,{__notes:getNotes(c),__offers:getOfferAnswers(c),_stage_history:stageHistory,_launched_at:new Date().toISOString().slice(0,10)})
     await upsertCandidate({...c,status:'launched',interview_notes:notes,updated_at:now()} as any)
     await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'launched',outcome:'Positive',notes:'Launched to Organisation',fathom_link:'',next_action:'Launch Call',next_date:'',created_at:new Date().toISOString()} as any)
-    setLaunchConfirm(null);if(detail?.id===c.id)setDetail(null)
+    if(detail?.id===c.id)setDetail(null)
   }
 
   async function addToOrg(c:Candidate){
-    if(!userId)return
-    const exists=partners.find(p=>p.name===c.name)
-    if(exists)return
+    if(!userId||partners.find((p:Partner)=>p.name===c.name))return
     await upsertPartner({id:uid(),user_id:userId,name:c.name,ibo_number:'',phone:c.phone||'',email:c.email||'',stage:'Launch',gpv:0,ppv:0,bonus:0,group_size:0,sponsoring:0,gpv_goal:0,notes:c.primary_driver?`Driver: ${c.primary_driver}\nPain: ${c.pain_point||''}`:'',last_contact:'',next_call:'',activation_done:'[]',archived:false,parent_id:'',created_at:now(),updated_at:now()} as any)
   }
 
-  async function disqualify(c:Candidate,reason:string){
+  async function disqualify(c:Candidate){
     if(!userId)return
     await upsertCandidate({...c,status:'disqualified',updated_at:now()} as any)
-    await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'disqualified',outcome:'Negative',notes:reason||'Disqualified',fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()} as any)
+    await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'disqualified',outcome:'Negative',notes:'Disqualified',fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()} as any)
     if(detail?.id===c.id)setDetail(null)
-    setDqOpen(null)
   }
 
   async function saveNotes(c:Candidate,val:string){
@@ -443,128 +288,36 @@ export default function Candidates(){
     const up={...c,interview_notes:n,updated_at:now()}
     await upsertCandidate(up as any);if(detail?.id===c.id)setDetail(up as any)
   }
-  async function moveCandidate(c:Candidate, toSponsorIbo:string){
-    const notes=buildNotes(c,{...JSON.parse(c.interview_notes||'{}'),_sponsor_ibo:toSponsorIbo})
-    const updated={...c,interview_notes:notes,updated_at:now()}
-    await upsertCandidate(updated as any)
-    if(detail?.id===c.id)setDetail(updated as any)
-  }
-
-  async function saveOfferAnswers(c:Candidate,answers:Record<number,string>){
-    const n=buildNotes(c,{__notes:getNotes(c),__offers:answers})
-    const up={...c,interview_notes:n,updated_at:now()}
-    await upsertCandidate(up as any);if(detail?.id===c.id)setDetail(up as any)
-  }
-
-  async function addTeamCandidate(){
-    if(!addTeamForm.name.trim()||!userId)return
-    const c:any={id:uid(),user_id:userId,name:addTeamForm.name.trim(),email:addTeamForm.email,phone:addTeamForm.phone||'',stage:addTeamForm.stage,source:addTeamForm.source||'',status:'active',created_at:now(),updated_at:now()}
-    c.interview_notes=JSON.stringify({_sponsor_ibo:addTeamForm.sponsor_ibo,__notes:'',__offers:{}})
-    await upsertCandidate(c)
-    setAddTeamOpen(false);setAddTeamForm({name:'',phone:'',email:'',source:'',stage:'Pre-Filter',sponsor_ibo:''})
-  }
-
-  function downloadCandTemplate(){
-    const header='name,phone,email,stage,source,relationship,age_range,life_stage,primary_driver,pain_point,hunger,looking'
-    const example='"Jane Smith","+61412345678","jane@email.com","Pre-Filter","Instagram","Friend / Acquaintance","25–35","Employed (9–5)","Freedom","Wants more time with family",7,6'
-    const blob=new Blob([header+'\n'+example],{type:'text/csv'})
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='candidates_template.csv';a.click()
-  }
-
-  function processCandFile(file:File){
-    const reader=new FileReader()
-    reader.onload=e=>{
-      const text=e.target?.result as string
-      const rawRows=parseCSVC(text)
-      const existingNames=new Set(candidates.map(c=>c.name.toLowerCase().trim()))
-      const existingPhones=new Set(candidates.map(c=>(c.phone||'').replace(/\D/g,'').replace(/^0/,'61')).filter(Boolean))
-      const batchNames=new Set<string>()
-      const batchPhones=new Set<string>()
-      const parsed:CandImportRow[]=rawRows.map(row=>{
-        const name=normColC(row,'name')
-        const phone=normColC(row,'phone')
-        const email=normColC(row,'email')
-        const stage=normColC(row,'stage')
-        const source=normColC(row,'source')
-        const relationship=normColC(row,'relationship')
-        const age_range=normColC(row,'age_range','age range')
-        const life_stage=normColC(row,'life_stage','life stage')
-        const primary_driver=normColC(row,'primary_driver','primary driver')
-        const pain_point=normColC(row,'pain_point','pain point','their why')
-        const hunger=Math.min(10,Math.max(1,parseInt(normColC(row,'hunger'))||5))
-        const looking=Math.min(10,Math.max(1,parseInt(normColC(row,'looking'))||5))
-        const missing:string[]=[]
-        if(!name)missing.push('name')
-        if(!stage||!(STAGES as readonly string[]).includes(stage))missing.push('stage')
-        if(!source||!SOURCES_C.includes(source))missing.push('source')
-        if(!relationship||!RELATIONS_C.includes(relationship))missing.push('relationship')
-        if(!age_range||!AGE_RANGES_C.includes(age_range))missing.push('age_range')
-        if(!life_stage||!LIFE_STAGES_C.includes(life_stage))missing.push('life_stage')
-        if(!primary_driver||!DRIVERS_C.includes(primary_driver))missing.push('primary_driver')
-        if(!pain_point)missing.push('pain_point')
-        const normName=name.toLowerCase().trim()
-        const normPhone=(phone||'').replace(/\D/g,'').replace(/^0/,'61')
-        const isDupeExisting=existingNames.has(normName)||(!!normPhone&&existingPhones.has(normPhone))
-        const isDupeBatch=batchNames.has(normName)||(!!normPhone&&batchPhones.has(normPhone))
-        let status:CandImportStatus='valid'
-        let dupeOf:string|undefined
-        if(isDupeExisting){status='dupe';dupeOf='existing candidate'}
-        else if(isDupeBatch){status='dupe';dupeOf='within batch'}
-        else if(missing.length>0)status='invalid'
-        if(!isDupeExisting&&!isDupeBatch){batchNames.add(normName);if(normPhone)batchPhones.add(normPhone)}
-        return{name,phone,email,stage,source,relationship,age_range,life_stage,primary_driver,pain_point,hunger,looking,status,missing,dupeOf}
-      })
-      setImportRows(parsed)
-    }
-    reader.readAsText(file)
-  }
-
-  async function confirmCandImport(){
-    if(!userId)return
-    setImporting(true)
-    const valid=importRows.filter(r=>r.status==='valid')
-    await Promise.all(valid.map(async row=>{
-      const c:any={id:uid(),user_id:userId,name:row.name,email:row.email||'',phone:row.phone||'',stage:row.stage||'Pre-Filter',source:row.source,status:'active',hxl_score:row.hunger*row.looking,hunger:row.hunger,looking:row.looking,relationship:row.relationship,age_range:row.age_range,life_stage:row.life_stage,primary_driver:row.primary_driver,pain_point:row.pain_point,interview_notes:JSON.stringify({__notes:'',__offers:{}}),created_at:now(),updated_at:now()}
-      await upsertCandidate(c)
-      await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:c.id,entity_name:c.name,event_type:'lead_created',outcome:'',notes:`Imported from ${c.source}`,fathom_link:'',next_action:STAGE_CFG[normaliseStage(c.stage)].nextAction,next_date:'',created_at:new Date().toISOString()} as any)
-    }))
-    setImporting(false);setImportOpen(false);setImportRows([])
-  }
 
   async function getBrief(c:Candidate){
     setBriefLoading(true);setBriefText('')
     const logs=contactLogs.filter(l=>l.entity_id===c.id).slice(0,5)
     const stage=normaliseStage(c.stage)
     try{
-      const text=buildPreCallBrief({
-        name:c.name,
-        stageLabel:stage,
-        daysSinceContact:daysSince(c.updated_at),
-        driver:c.primary_driver,
-        painPoint:c.pain_point,
-        metricLabel:'HxL',metricValue:c.hxl_score,
-        notes:getNotes(c).slice(0,200),
-        nextAction:STAGE_CFG[stage].nextAction,
-        recentOutcomes:logs.map(l=>l.outcome),
-      })
+      const text=buildPreCallBrief({name:c.name,stageLabel:stage,daysSinceContact:daysSince(c.updated_at),driver:c.primary_driver,painPoint:c.pain_point,metricLabel:'HxL',metricValue:c.hxl_score,notes:getNotes(c).slice(0,200),nextAction:STAGE_CFG[stage].nextAction,recentOutcomes:logs.map(l=>l.outcome)})
       setBriefText(text)
     }catch{setBriefText('Failed.')}
     setBriefLoading(false)
   }
 
-  const cardProps={partners,contactLogs,calEvents,scores,onAdvance:(c:Candidate,dir?:'forward'|'back')=>openAdvance(c,dir||'forward'),onDq:setDqOpen,onView:(c:Candidate)=>{setDetail(c);setDetailTab('profile');setOfferAnswers(getOfferAnswers(c));setBriefText('')},onBrief:(c:Candidate)=>{setDetail(c);setDetailTab('brief');getBrief(c)},onLaunch:(c:Candidate)=>setLaunchConfirm(c),onDisqualifyOffer:(c:Candidate)=>setDqOpen(c)}
+  const cardProps={contactLogs,calEvents,scores,
+    onAdvance:(c:Candidate,dir?:'forward'|'back')=>openAdvance(c,dir||'forward'),
+    onDq:disqualify,
+    onView:(c:Candidate)=>{setDetail(c);setDetailTab('profile');setBriefText('')},
+    onLaunch:launchCandidate,
+  }
 
   // ── RENDER ────────────────────────────────────────────────
   return(
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
 
-      {/* Intelligence strip */}
+      {/* Stats strip */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
         {[
-          {l:'Active',v:active.length,c:GOLD},
+          {l:'Active',   v:active.length,c:GOLD},
           {l:'Hot (70+)',v:active.filter(c=>(scores[c.id]??0)>=70).length,c:GREEN},
-          {l:'Stalling',v:active.filter(c=>FU_STAGES.includes(normaliseStage(c.stage))&&daysSince(contactLogs.filter(l=>l.entity_id===c.id)[0]?.created_at??c.updated_at)>=21).length,c:RED},
-          {l:'At Offer',v:active.filter(c=>normaliseStage(c.stage)==='Offer Call').length,c:GREEN},
+          {l:'Stalling', v:active.filter(c=>FU_STAGES.includes(normaliseStage(c.stage))&&daysSince(contactLogs.filter(l=>l.entity_id===c.id)[0]?.created_at??c.updated_at)>=21).length,c:RED},
+          {l:'At Offer', v:active.filter(c=>normaliseStage(c.stage)==='Offer Call').length,c:GREEN},
         ].map(k=>(
           <div key={k.l} style={{background:'var(--s1)',border:`1px solid ${k.c}20`,borderRadius:'var(--r2)',padding:'10px',textAlign:'center' as const}}>
             <div className="mono" style={{fontSize:20,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div>
@@ -572,7 +325,6 @@ export default function Candidates(){
           </div>
         ))}
       </div>
-
 
       {/* Tabs */}
       <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto' as const}}>
@@ -584,22 +336,16 @@ export default function Candidates(){
         ))}
       </div>
 
-      {/* ── ACTIVE TAB ─────────────────────────────────────── */}
+      {/* ── ACTIVE TAB ──────────────────────────────────────── */}
       {tab==='active'&&(
         <div>
-          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:140,...INP}}/>
-            <button onClick={()=>{setImportRows([]);setImportOpen(true)}} style={{padding:'9px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,flexShrink:0}}>↑ Import</button>
-          </div>
-          {/* Stage filter pills */}
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{...INP,marginBottom:12}}/>
           <div style={{display:'flex',gap:5,overflowX:'auto' as const,marginBottom:12,paddingBottom:4}}>
             {(['all',...STAGES] as const).map(s=>{
               const col=s==='all'?GOLD:(STAGE_CFG[s as Stage]?.color??GOLD)
-              const isA=s==='all'?displayList.length===active.length:displayList.filter(c=>normaliseStage(c.stage)===s).length>0
               const count=s==='all'?active.length:active.filter(c=>normaliseStage(c.stage)===s).length
               return(
-                <div key={s} onClick={()=>setSearch(s==='all'?'':'')}
-                  style={{padding:'4px 10px',borderRadius:20,border:`1px solid rgba(255,255,255,0.08)`,background:'transparent',cursor:'default',flexShrink:0,display:'flex',gap:5,alignItems:'center'}}>
+                <div key={s} style={{padding:'4px 10px',borderRadius:20,border:'1px solid rgba(255,255,255,0.08)',background:'transparent',flexShrink:0,display:'flex',gap:5,alignItems:'center'}}>
                   <span className="mono" style={{fontSize:10,fontWeight:700,color:col}}>{count}</span>
                   <span style={{fontSize:9,color:'var(--text4)'}}>{s}</span>
                 </div>
@@ -607,13 +353,13 @@ export default function Candidates(){
             })}
           </div>
           {displayList.length===0
-            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No candidates yet. They'll appear here when booked from Calendar.</div>
+            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No candidates yet. They appear here when booked from Pipeline or Calendar.</div>
             :displayList.map(c=><CandCard key={c.id} c={c} {...cardProps}/>)
           }
         </div>
       )}
 
-      {/* ── FUNNEL TAB ─────────────────────────────────────── */}
+      {/* ── FUNNEL TAB ──────────────────────────────────────── */}
       {tab==='funnel'&&(
         <div>
           <div style={{...CARD,marginBottom:12}}>
@@ -641,7 +387,7 @@ export default function Candidates(){
           <div style={{...CARD,marginBottom:12}}>
             <div style={SL}>Overall Stats</div>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:10}}>
-              {[{l:'Total',v:pool.length,c:'var(--text2)'},{l:'Active',v:active.length,c:GOLD},{l:'Launched',v:launched.length,c:GREEN},{l:'Archived',v:archived.length,c:RED},{l:'Conv rate',v:pool.length>0?Math.round(launched.length/pool.length*100)+'%':'0%',c:PURPLE}].map(k=>(
+              {[{l:'Total',v:candidates.length,c:'var(--text2)'},{l:'Active',v:active.length,c:GOLD},{l:'Launched',v:launched.length,c:GREEN},{l:'Archived',v:archived.length,c:RED},{l:'Conv rate',v:candidates.length>0?Math.round(launched.length/candidates.length*100)+'%':'0%',c:'var(--purple)'}].map(k=>(
                 <div key={k.l} style={{background:'var(--s2)',borderRadius:'var(--r)',padding:'10px',textAlign:'center' as const}}>
                   <div className="mono" style={{fontSize:18,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div>
                   <div style={{fontSize:9,color:'var(--text4)',marginTop:3}}>{k.l}</div>
@@ -663,15 +409,14 @@ export default function Candidates(){
         </div>
       )}
 
-      {/* ── LAUNCHED TAB ───────────────────────────────────── */}
+      {/* ── LAUNCHED TAB ────────────────────────────────────── */}
       {tab==='launched'&&(
         <div>
           {launched.length===0
             ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No launched candidates yet</div>
             :launched.map(c=>{
               const launchedAt=getLaunchedAt(c)
-              const alreadyInOrg=partners.some(p=>p.name===c.name)
-              const cfg=STAGE_CFG[normaliseStage(c.stage)]
+              const alreadyInOrg=partners.some((p:Partner)=>p.name===c.name)
               return(
                 <div key={c.id} style={CARD}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
@@ -687,8 +432,10 @@ export default function Candidates(){
                   </div>
                   {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>"{c.pain_point}"</div>}
                   <div style={{display:'flex',gap:6}}>
-                    {!alreadyInOrg&&<button onClick={()=>addToOrg(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>+ Add to Organisation</button>}
-                    {alreadyInOrg&&<span style={{fontSize:11,color:GREEN,padding:'7px 0',fontWeight:600}}>✓ In Organisation</span>}
+                    {!alreadyInOrg
+                      ?<button onClick={()=>addToOrg(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>+ Add to Organisation</button>
+                      :<span style={{fontSize:11,color:GREEN,padding:'7px 0',fontWeight:600}}>✓ In Organisation</span>
+                    }
                   </div>
                 </div>
               )
@@ -697,7 +444,7 @@ export default function Candidates(){
         </div>
       )}
 
-      {/* ── ARCHIVE TAB ────────────────────────────────────── */}
+      {/* ── ARCHIVE TAB ─────────────────────────────────────── */}
       {tab==='archive'&&(
         <div>
           {archived.length===0
@@ -707,13 +454,11 @@ export default function Candidates(){
               const reason=logs[0]?.notes||'Archived'
               return(
                 <div key={c.id} style={{...CARD,opacity:0.85}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{c.name}</div>
-                      <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.1)',color:RED}}>{normaliseStage(c.stage)}</span>
-                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{reason}</span>
-                      </div>
+                  <div style={{marginBottom:8}}>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{c.name}</div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
+                      <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.1)',color:RED}}>{normaliseStage(c.stage)}</span>
+                      <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{reason}</span>
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6}}>
@@ -727,11 +472,10 @@ export default function Candidates(){
         </div>
       )}
 
-      {/* ── DETAIL DRAWER ──────────────────────────────────── */}
+      {/* ── DETAIL DRAWER ───────────────────────────────────── */}
       {detail&&(
         <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDetail(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:580,overflow:'hidden',margin:'auto'}}>
-            {/* Header */}
             <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
               <div>
                 <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{detail.name}</div>
@@ -747,7 +491,6 @@ export default function Candidates(){
                 <button onClick={()=>setDetail(null)} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
               </div>
             </div>
-            {/* Sub-tabs */}
             <div style={{display:'flex',borderBottom:'1px solid var(--br)',overflowX:'auto' as const}}>
               {(['profile','history','timeline','brief'] as DetailTab[]).map(t=>(
                 <button key={t} onClick={()=>{setDetailTab(t);if(t==='brief')getBrief(detail)}}
@@ -758,33 +501,27 @@ export default function Candidates(){
             </div>
             <div style={{padding:'18px 24px',maxHeight:'55vh',overflowY:'auto' as const}}>
 
-              {/* PROFILE */}
               {detailTab==='profile'&&(
                 <div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                    {[{l:'HxL Score',v:`H${detail.hunger??5}×L${detail.looking??5} = ${detail.hxl_score??((detail.hunger??5)*(detail.looking??5))}`,c:healthColor(scores[detail.id]??0)},{l:'Relationship',v:detail.relationship||'—',c:'var(--text2)'},{l:'Age Range',v:detail.age_range||'—',c:'var(--text2)'},{l:'Life Stage',v:detail.life_stage||'—',c:'var(--text2)'},{l:'Source',v:detail.source||'—',c:'var(--text2)'},{l:'Phone',v:detail.phone||'—',c:'var(--text2)'}].map(x=>(
+                    {[
+                      {l:'HxL Score',v:`H${detail.hunger??5}×L${detail.looking??5} = ${detail.hxl_score??((detail.hunger??5)*(detail.looking??5))}`,c:healthColor(scores[detail.id]??0)},
+                      {l:'Relationship',v:detail.relationship||'—',c:'var(--text2)'},
+                      {l:'Age Range',v:detail.age_range||'—',c:'var(--text2)'},
+                      {l:'Life Stage',v:detail.life_stage||'—',c:'var(--text2)'},
+                      {l:'Source',v:detail.source||'—',c:'var(--text2)'},
+                      {l:'Phone',v:detail.phone||'—',c:'var(--text2)'},
+                    ].map(x=>(
                       <div key={x.l}><div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div><div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div></div>
                     ))}
                   </div>
                   {detail.pain_point&&<div style={{marginBottom:12,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}><div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div><div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{detail.pain_point}"</div></div>}
-                  {getSponsorIbo(detail)&&<div style={{marginBottom:8,fontSize:11,color:'var(--text4)'}}>Booked by: {iboNames[getSponsorIbo(detail)]??getSponsorIbo(detail)}</div>}
-                  {/* Attribution — move to my/team */}
-                  <div style={{marginBottom:12,paddingBottom:12,borderBottom:'1px solid var(--br)'}}>
-                    <div style={{fontSize:9,color:'var(--text3)',letterSpacing:'2px',fontWeight:700,textTransform:'uppercase' as const,marginBottom:8}}>Move attribution</div>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-                      <button onClick={()=>moveCandidate(detail,'7013656028')} style={{padding:'5px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}30`,background:`${GOLD}10`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>→ My candidates</button>
-                      <select defaultValue="" onChange={e=>{if(e.target.value)moveCandidate(detail,e.target.value)}} style={{flex:1,background:'var(--s2)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'5px 10px',color:'var(--text)',fontFamily:"'Sora',sans-serif",fontSize:11,outline:'none',cursor:'pointer'}}>
-                        <option value="">→ Partner's candidates…</option>
-                        {partners.filter((pt:Partner)=>pt.ibo_number&&pt.ibo_number!=='7013656028').map((pt:Partner)=>(<option key={pt.id} value={pt.ibo_number}>{pt.name} (IBO {pt.ibo_number})</option>))}
-                      </select>
-                    </div>
-                  </div>
+                  {getSponsorIbo(detail)&&<div style={{marginBottom:12,fontSize:11,color:'var(--text4)'}}>Booked by: {iboNames[getSponsorIbo(detail)]??getSponsorIbo(detail)}</div>}
                   <div style={SL}>Notes</div>
                   <textarea value={getNotes(detail)} onChange={e=>saveNotes(detail,e.target.value)} rows={5} placeholder="Notes, observations, key moments…" style={{...INP,resize:'vertical' as const,fontSize:12}}/>
                 </div>
               )}
 
-              {/* HISTORY */}
               {detailTab==='history'&&(
                 <div>
                   {contactLogs.filter(l=>l.entity_id===detail.id).sort((a,b)=>b.created_at.localeCompare(a.created_at)).length===0
@@ -807,7 +544,6 @@ export default function Candidates(){
                 </div>
               )}
 
-              {/* TIMELINE */}
               {detailTab==='timeline'&&(()=>{
                 const history=getStageHistory(detail)
                 const allStages=[...history,{stage:normaliseStage(detail.stage),date:detail.updated_at?.slice(0,10)??''}]
@@ -815,42 +551,40 @@ export default function Candidates(){
                   <div>
                     {allStages.length===0
                       ?<div style={{fontSize:12,color:'var(--text4)',padding:'24px 0',textAlign:'center' as const}}>No stage history yet</div>
-                      :<div>
-                        {allStages.map((h,i)=>{
-                          const cfg=STAGE_CFG[normaliseStage(h.stage)]
-                          const nextDate=allStages[i+1]?.date
-                          const daysAtStage=nextDate?Math.floor((new Date(nextDate).getTime()-new Date(h.date).getTime())/86400000):daysSince(h.date)
-                          const isCurrent=i===allStages.length-1
-                          return(
-                            <div key={i} style={{display:'flex',gap:12,marginBottom:0}}>
-                              <div style={{display:'flex',flexDirection:'column' as const,alignItems:'center',width:24,flexShrink:0}}>
-                                <div style={{width:12,height:12,borderRadius:'50%',background:isCurrent?cfg.color:'var(--s3)',border:`2px solid ${cfg.color}`,flexShrink:0,marginTop:4}}/>
-                                {i<allStages.length-1&&<div style={{width:2,flex:1,background:'var(--br)',margin:'2px 0'}}/>}
-                              </div>
-                              <div style={{flex:1,paddingBottom:16}}>
-                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                                  <span style={{fontSize:12,fontWeight:600,color:isCurrent?cfg.color:'var(--text2)'}}>{h.stage}</span>
-                                  <span style={{fontSize:9,color:'var(--text4)'}}>{fmtDate(h.date)}</span>
-                                </div>
-                                <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>
-                                  {isCurrent?`${daysAtStage}d so far`:`${daysAtStage}d`}
-                                </div>
-                              </div>
+                      :allStages.map((h,i)=>{
+                        const cfg=STAGE_CFG[normaliseStage(h.stage)]
+                        const nextDate=allStages[i+1]?.date
+                        const daysAtStage=nextDate?Math.floor((new Date(nextDate).getTime()-new Date(h.date).getTime())/86400000):daysSince(h.date)
+                        const isCurrent=i===allStages.length-1
+                        return(
+                          <div key={i} style={{display:'flex',gap:12}}>
+                            <div style={{display:'flex',flexDirection:'column' as const,alignItems:'center',width:24,flexShrink:0}}>
+                              <div style={{width:12,height:12,borderRadius:'50%',background:isCurrent?cfg.color:'var(--s3)',border:`2px solid ${cfg.color}`,flexShrink:0,marginTop:4}}/>
+                              {i<allStages.length-1&&<div style={{width:2,flex:1,background:'var(--br)',margin:'2px 0'}}/>}
                             </div>
-                          )
-                        })}
-                      </div>
+                            <div style={{flex:1,paddingBottom:16}}>
+                              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                <span style={{fontSize:12,fontWeight:600,color:isCurrent?cfg.color:'var(--text2)'}}>{h.stage}</span>
+                                <span style={{fontSize:9,color:'var(--text4)'}}>{fmtDate(h.date)}</span>
+                              </div>
+                              <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>{isCurrent?`${daysAtStage}d so far`:`${daysAtStage}d`}</div>
+                            </div>
+                          </div>
+                        )
+                      })
                     }
                   </div>
                 )
               })()}
 
-{detailTab==='brief'&&(
+              {detailTab==='brief'&&(
                 <div>
                   <div style={{...SL,marginBottom:10}}>Pre-Call Brief</div>
-                  {briefLoading?<div style={{fontSize:13,color:'var(--text3)',fontStyle:'italic',padding:'20px 0'}}>Generating…</div>
-                    :briefText?<div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8,whiteSpace:'pre-wrap' as const}}>{briefText}</div>
-                    :<div style={{fontSize:12,color:'var(--text4)',padding:'12px 0'}}>Generate a stage-specific pre-call brief.</div>
+                  {briefLoading
+                    ?<div style={{fontSize:13,color:'var(--text3)',fontStyle:'italic',padding:'20px 0'}}>Generating…</div>
+                    :briefText
+                      ?<div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8,whiteSpace:'pre-wrap' as const}}>{briefText}</div>
+                      :<div style={{fontSize:12,color:'var(--text4)',padding:'12px 0'}}>Generate a stage-specific pre-call brief.</div>
                   }
                   {!briefLoading&&<button onClick={()=>getBrief(detail)} style={{marginTop:12,padding:'7px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:'rgba(200,162,74,0.08)',color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>{briefText?'↻ Refresh':'Generate Brief'}</button>}
                 </div>
@@ -860,7 +594,7 @@ export default function Candidates(){
         </div>
       )}
 
-      {/* ── LOG CONTACT MODAL ──────────────────────────────── */}
+      {/* ── LOG CONTACT MODAL ───────────────────────────────── */}
       {logModal&&(
         <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget)setLogModal(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:28,margin:'auto'}}>
@@ -873,8 +607,7 @@ export default function Candidates(){
                     const sugg=suggestFollowUpDays(o,7)
                     const d=new Date();d.setDate(d.getDate()+sugg.days)
                     setLogForm(p=>({...p,outcome:o,nextDate:d.toISOString().slice(0,10),rationale:sugg.rationale}))
-                  }}
-                    style={{padding:'5px 10px',borderRadius:'var(--r)',border:`1px solid ${logForm.outcome===o?GOLD:'var(--br)'}`,background:logForm.outcome===o?'rgba(200,162,74,0.12)':'var(--s2)',color:logForm.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10,fontWeight:logForm.outcome===o?700:400}}>
+                  }} style={{padding:'5px 10px',borderRadius:'var(--r)',border:`1px solid ${logForm.outcome===o?GOLD:'var(--br)'}`,background:logForm.outcome===o?'rgba(200,162,74,0.12)':'var(--s2)',color:logForm.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10,fontWeight:logForm.outcome===o?700:400}}>
                     {o}
                   </button>
                 ))}
@@ -907,11 +640,10 @@ export default function Candidates(){
         </div>
       )}
 
-      {/* ── ADVANCE MODAL ──────────────────────────────────── */}
+      {/* ── ADVANCE MODAL ───────────────────────────────────── */}
       {advancing&&(
         <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget)setAdvancing(null)}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:28,margin:'auto'}}>
-            {/* Direction selector */}
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:400,padding:28,margin:'auto'}}>
             <div style={{display:'flex',gap:6,marginBottom:16,background:'var(--s2)',borderRadius:'var(--r)',padding:4}}>
               <button onClick={()=>setAdvDir('forward')} style={{flex:1,padding:'7px',borderRadius:'var(--r)',border:'none',background:advDir==='forward'?'var(--s3)':'transparent',color:advDir==='forward'?GOLD:'var(--text4)',fontWeight:advDir==='forward'?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>→ Advance</button>
               <button onClick={()=>setAdvDir('back')} disabled={STAGES.indexOf(normaliseStage(advancing.stage))<=0}
@@ -924,201 +656,17 @@ export default function Candidates(){
                 :<>{normaliseStage(advancing.stage)} → <strong style={{color:RED}}>{STAGES[Math.max(0,STAGES.indexOf(normaliseStage(advancing.stage))-1)]}</strong></>
               }
             </div>
-            <div style={{marginBottom:12}}><div style={SL}>Date</div><input type="date" value={advLog.date} onChange={e=>setAdvLog(p=>({...p,date:e.target.value}))} style={INP}/></div>
-            <div style={{marginBottom:12}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                <div style={{...SL,marginBottom:0,color:PURPLE}}>Fathom Recording</div>
-                {fathomLoading&&<div style={{fontSize:9,color:PURPLE}}>Fetching latest…</div>}
-                {advLog.fathom&&!fathomLoading&&<div style={{fontSize:9,color:GREEN}}>✓ Auto-filled</div>}
-              </div>
-              <input value={advLog.fathom} onChange={e=>setAdvLog(p=>({...p,fathom:e.target.value}))} placeholder={fathomLoading?'Searching Fathom…':'Fathom recording link'} style={{...INP,opacity:fathomLoading?0.6:1}}/>
+            <div style={{marginBottom:20}}>
+              <div style={SL}>Notes (optional)</div>
+              <textarea value={advNotes} onChange={e=>setAdvNotes(e.target.value)} rows={3} placeholder="Key moments, commitments…" style={{...INP,resize:'vertical' as const}}/>
             </div>
-            <div style={{marginBottom:18}}><div style={SL}>Notes</div><textarea value={advLog.notes} onChange={e=>setAdvLog(p=>({...p,notes:e.target.value}))} rows={3} placeholder="Key moments, commitments…" style={{...INP,resize:'vertical' as const}}/></div>
-            {advDir==='forward'&&STAGE_MEETING[STAGE_CFG[normaliseStage(advancing.stage)].next??'']&&(
-              <div style={{marginBottom:18}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                  <div style={{...SL,marginBottom:0,color:GOLD}}>Book {STAGE_MEETING[STAGE_CFG[normaliseStage(advancing.stage)].next!].type}</div>
-                  {slotsLoading&&<div style={{fontSize:9,color:GOLD}}>Loading slots…</div>}
-                </div>
-                {!slotsLoading&&Object.keys(slots).length===0&&(
-                  <div style={{fontSize:11,color:'var(--text4)'}}>No open slots in the next 14 days — admin calendar may not be connected.</div>
-                )}
-                {Object.keys(slots).length>0&&(
-                  <select value={selSlot} onChange={e=>setSelSlot(e.target.value)} style={SEL}>
-                    <option value="">Skip — don't book yet</option>
-                    {Object.entries(slots).map(([day,times])=>(
-                      <optgroup key={day} label={fmtDay(day)}>
-                        {times.map(t=><option key={t} value={t}>{fmtTime(t)}</option>)}
-                      </optgroup>
-                    ))}
-                  </select>
-                )}
-              </div>
-            )}
             <div style={{display:'flex',gap:8}}>
-              <button onClick={advDir==='forward'?confirmAdvance:confirmBacktrack} disabled={booking}
-                style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:advDir==='back'?`1px solid ${RED}40`:'none',
-                  background:advDir==='forward'?`linear-gradient(135deg,${GOLD},var(--gold3))`:'transparent',
-                  color:advDir==='forward'?'#000':RED,fontWeight:700,cursor:booking?'wait':'pointer',fontFamily:"'Sora',sans-serif",fontSize:13,opacity:booking?0.6:1}}>
-                {booking?'Booking…':advDir==='forward'?(selSlot?'Advance & Book →':'Advance Stage →'):'← Move Back'}
+              <button onClick={confirmAdvance}
+                style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:advDir==='back'?`1px solid ${RED}40`:'none',background:advDir==='forward'?`linear-gradient(135deg,${GOLD},var(--gold3))`:'transparent',color:advDir==='forward'?'#000':RED,fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                {advDir==='forward'?'Advance Stage →':'← Move Back'}
               </button>
               <button onClick={()=>setAdvancing(null)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── LAUNCH CONFIRM MODAL ───────────────────────────── */}
-      {launchConfirm&&(
-        <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget)setLaunchConfirm(null)}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:4,color:GREEN}}>🚀 Launch {launchConfirm.name}?</div>
-            <div style={{fontSize:11,color:'var(--text4)',marginBottom:20,lineHeight:1.6}}>
-              This moves {launchConfirm.name} to Launched. A partner record will be available in Organisation on your next LOS drop.
-            </div>
-            {launchConfirm.primary_driver&&<div style={{marginBottom:16,padding:'8px 12px',background:'var(--s2)',borderRadius:'var(--r)',fontSize:11,color:GOLD}}>Driver: {launchConfirm.primary_driver}{launchConfirm.pain_point?` · "${launchConfirm.pain_point}"`:''}</div>}
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>launchCandidate(launchConfirm)} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>🚀 Confirm Launch</button>
-              <button onClick={()=>setLaunchConfirm(null)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── DQ MODAL ───────────────────────────────────────── */}
-      {dqOpen&&(
-        <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget)setDqOpen(null)}}>
-          <div style={{background:'var(--s1)',border:`1px solid ${RED}40`,borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Disqualify {dqOpen.name}?</div>
-            <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>Select a reason:</div>
-            <div style={{display:'flex',flexDirection:'column' as const,gap:8,marginBottom:16}}>
-              {DQ_REASONS.map(r=>(
-                <button key={r} onClick={()=>disqualify(dqOpen,r)} style={{padding:'10px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,textAlign:'left' as const}}>
-                  {r}
-                </button>
-              ))}
-            </div>
-            <button onClick={()=>setDqOpen(null)} style={{width:'100%',padding:'10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── ADD TEAM CANDIDATE MODAL ───────────────────────── */}
-      {addTeamOpen&&(
-        <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget)setAddTeamOpen(false)}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:400,padding:28,margin:'auto'}}>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:20}}>Add Team Candidate</div>
-            {[{l:'Name *',k:'name' as const,t:'text',ph:'Full name'},{l:'Phone',k:'phone' as const,t:'tel',ph:'+61 4XX XXX XXX'},{l:'Email',k:'email' as const,t:'email',ph:'Email address'},{l:'Source',k:'source' as const,t:'text',ph:'Instagram / Referral / etc'}].map(f=>(
-              <div key={f.k} style={{marginBottom:12}}>
-                <div style={SL}>{f.l}</div>
-                <input type={f.t} value={addTeamForm[f.k]} onChange={e=>setAddTeamForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} style={INP}/>
-              </div>
-            ))}
-            <div style={{marginBottom:12}}>
-              <div style={SL}>Sponsor IBO</div>
-              <select value={addTeamForm.sponsor_ibo} onChange={e=>setAddTeamForm(p=>({...p,sponsor_ibo:e.target.value}))} style={{...INP,cursor:'pointer'}}>
-                <option value="">Select IBO…</option>
-                {partners.filter(p=>p.ibo_number).map(p=><option key={p.ibo_number} value={p.ibo_number}>{p.name}</option>)}
-              </select>
-            </div>
-            <div style={{marginBottom:20}}>
-              <div style={SL}>Starting Stage</div>
-              <select value={addTeamForm.stage} onChange={e=>setAddTeamForm(p=>({...p,stage:e.target.value as Stage}))} style={{...INP,cursor:'pointer'}}>
-                {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>setAddTeamOpen(false)} style={{padding:'9px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-              <button onClick={addTeamCandidate} style={{flex:1,padding:'9px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Add</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── IMPORT MODAL ──────────────────────────────────── */}
-      {importOpen&&(
-        <div style={{...OVERLAY,zIndex:500}} onClick={e=>{if(e.target===e.currentTarget){setImportOpen(false);setImportRows([])}}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:640,overflow:'hidden',margin:'auto'}}>
-            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div>
-                <div style={{fontSize:16,fontWeight:700}}>Import Candidates from CSV</div>
-                <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>All fields required · dupes and incomplete rows skipped</div>
-              </div>
-              <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                <button onClick={downloadCandTemplate} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}08`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>↓ Template</button>
-                <button onClick={()=>{setImportOpen(false);setImportRows([])}} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
-              </div>
-            </div>
-            {importRows.length===0?(
-              <div style={{padding:'32px 24px'}}>
-                <div
-                  onDragOver={e=>{e.preventDefault();setImportDragging(true)}}
-                  onDragLeave={()=>setImportDragging(false)}
-                  onDrop={e=>{e.preventDefault();setImportDragging(false);const f=e.dataTransfer.files[0];if(f)processCandFile(f)}}
-                  style={{border:`2px dashed ${importDragging?GOLD:'var(--br2)'}`,borderRadius:'var(--r2)',padding:'48px 24px',textAlign:'center' as const,transition:'border-color 0.15s',background:importDragging?'rgba(200,162,74,0.04)':'transparent',cursor:'pointer'}}
-                  onClick={()=>{const inp=document.createElement('input');inp.type='file';inp.accept='.csv,text/csv';inp.onchange=ev=>{const f=(ev.target as HTMLInputElement).files?.[0];if(f)processCandFile(f)};inp.click()}}
-                >
-                  <div style={{fontSize:32,marginBottom:12}}>📂</div>
-                  <div style={{fontSize:14,fontWeight:600,color:'var(--text2)',marginBottom:6}}>Drag & drop your CSV here</div>
-                  <div style={{fontSize:12,color:'var(--text4)'}}>or click to browse · CSV files only</div>
-                </div>
-                <div style={{marginTop:16,padding:'12px 14px',background:'var(--s2)',borderRadius:'var(--r)',fontSize:11,color:'var(--text4)',lineHeight:1.7}}>
-                  <strong style={{color:'var(--text3)'}}>Required columns:</strong> name, stage ({STAGES.join(', ')}), source, relationship, age_range, life_stage, primary_driver, pain_point<br/>
-                  <strong style={{color:'var(--text3)'}}>Optional:</strong> phone, email, hunger (1–10), looking (1–10)
-                </div>
-              </div>
-            ):(
-              <div style={{padding:'20px 24px',maxHeight:'70vh',overflowY:'auto' as const}}>
-                {(()=>{
-                  const valid=importRows.filter(r=>r.status==='valid').length
-                  const dupes=importRows.filter(r=>r.status==='dupe').length
-                  const invalid=importRows.filter(r=>r.status==='invalid').length
-                  return(
-                    <div style={{display:'flex',gap:12,marginBottom:16,flexWrap:'wrap' as const}}>
-                      <div style={{padding:'8px 14px',borderRadius:'var(--r)',background:`${GREEN}10`,border:`1px solid ${GREEN}30`,fontSize:11,color:GREEN,fontWeight:700}}>{valid} ready to import</div>
-                      {dupes>0&&<div style={{padding:'8px 14px',borderRadius:'var(--r)',background:'rgba(200,162,74,0.1)',border:'1px solid rgba(200,162,74,0.3)',fontSize:11,color:GOLD,fontWeight:700}}>{dupes} dupes (skipped)</div>}
-                      {invalid>0&&<div style={{padding:'8px 14px',borderRadius:'var(--r)',background:`${RED}10`,border:`1px solid ${RED}30`,fontSize:11,color:RED,fontWeight:700}}>{invalid} incomplete (skipped)</div>}
-                    </div>
-                  )
-                })()}
-                <div style={{marginBottom:12,overflowX:'auto' as const}}>
-                  <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:11}}>
-                    <thead>
-                      <tr style={{borderBottom:'1px solid var(--br)'}}>
-                        {['Status','Name','Stage','Source','Relationship','Driver','Issue'].map(h=>(
-                          <th key={h} style={{padding:'6px 8px',textAlign:'left' as const,color:'var(--text4)',fontWeight:600,whiteSpace:'nowrap' as const}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {importRows.map((row,i)=>{
-                        const statusColor=row.status==='valid'?GREEN:row.status==='dupe'?GOLD:RED
-                        const statusLabel=row.status==='valid'?'✓':row.status==='dupe'?'dupe':'✗'
-                        return(
-                          <tr key={i} style={{borderBottom:'1px solid var(--br)',opacity:row.status==='valid'?1:0.6}}>
-                            <td style={{padding:'6px 8px'}}><span style={{fontSize:10,padding:'2px 7px',borderRadius:6,background:statusColor+'18',color:statusColor,fontWeight:700}}>{statusLabel}</span></td>
-                            <td style={{padding:'6px 8px',fontWeight:600,maxWidth:120,overflow:'hidden' as const,textOverflow:'ellipsis' as const,whiteSpace:'nowrap' as const}}>{row.name||'—'}</td>
-                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.stage||'—'}</td>
-                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.source||'—'}</td>
-                            <td style={{padding:'6px 8px',color:'var(--text4)'}}>{row.relationship||'—'}</td>
-                            <td style={{padding:'6px 8px',color:GOLD}}>{row.primary_driver||'—'}</td>
-                            <td style={{padding:'6px 8px',color:row.status==='dupe'?GOLD:RED,fontSize:10}}>{row.status==='dupe'?`Dupe of ${row.dupeOf}`:row.missing.length>0?row.missing.join(', '):''}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid var(--br)'}}>
-                  <button onClick={confirmCandImport} disabled={importing||importRows.filter(r=>r.status==='valid').length===0}
-                    style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:importing||importRows.filter(r=>r.status==='valid').length===0?'var(--s3)':`linear-gradient(135deg,${GREEN},var(--green2))`,color:importing||importRows.filter(r=>r.status==='valid').length===0?'var(--text4)':'#fff',fontWeight:700,cursor:importing||importRows.filter(r=>r.status==='valid').length===0?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
-                    {importing?'Importing…':`Import ${importRows.filter(r=>r.status==='valid').length} Candidates`}
-                  </button>
-                  <button onClick={()=>setImportRows([])} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>← Back</button>
-                  <button onClick={()=>{setImportOpen(false);setImportRows([])}} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
