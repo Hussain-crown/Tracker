@@ -51,6 +51,8 @@ export default function TrackPage(){
   const [adminGoals,setAdminGoals]   = useState<any>(null)
   const [tab,setTab] = useState<'habits'|'pipeline'|'candidates'>('habits')
   const memberLevel = member?.level ?? 1
+  const isAdmin = member?.role === 'admin'
+  const hasHabits = isAdmin || memberLevel >= 2
 
   // ── THE FIX: handle every possible auth state on mount ──────
   useEffect(()=>{
@@ -84,7 +86,7 @@ export default function TrackPage(){
         if(data){
           setMember(data)
           // Level 1 users don't have Habits — send them to Pipeline
-          if((data.level??1)<2)setTab('pipeline')
+          if((data.level??1)<2 && data.role!=='admin')setTab('pipeline')
           setNeedsProfile(false)
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
           if(data.first_login)setShowOnboard(true)
@@ -438,7 +440,7 @@ export default function TrackPage(){
 
         <div style={{display:'flex',gap:6,marginBottom:14}}>
           {([
-            ...(memberLevel>=2 ? [{key:'habits' as const, label:'Habits'}] : []),
+            ...(hasHabits ? [{key:'habits' as const, label:'Habits'}] : []),
             {key:'pipeline'   as const, label:'Pipeline'},
             {key:'candidates' as const, label:'Candidates'},
           ]).map(t=>(
@@ -451,7 +453,7 @@ export default function TrackPage(){
           ))}
         </div>
 
-        {tab==='habits' && memberLevel>=2 && <Habits hideMonth goalOverride={adminGoals} level={memberLevel}/>}
+        {tab==='habits' && hasHabits && <Habits hideMonth goalOverride={adminGoals} level={memberLevel}/>}
         {tab==='pipeline'   && <Pipeline/>}
         {tab==='candidates' && <Candidates/>}
       </div>
