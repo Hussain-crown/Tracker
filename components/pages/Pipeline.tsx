@@ -2,33 +2,43 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
-import type { Lead } from '@/lib/stores/types'
+import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
+import type { Lead, ContactLog } from '@/lib/stores/types'
 
-const STAGES=['New','Connected','MPA','Catch-Up','DTM'] as const
-type Stage=typeof STAGES[number]
-type View='focus'|'leads'|'funnel'|'archived'
+// ── CONSTANTS ─────────────────────────────────────────────
+const STAGES = ['New','Connected','MPA','Catch-Up','DTM'] as const
+type Stage = typeof STAGES[number]
 
-const STAGE_CFG:Record<Stage,{color:string;bg:string;next:Stage|null}>={
-  'New':{color:'var(--blue)',bg:'rgba(91,155,213,0.12)',next:'Connected'},
-  'Connected':{color:'var(--gold)',bg:'rgba(200,162,74,0.12)',next:'MPA'},
-  'MPA':{color:'var(--green)',bg:'rgba(76,175,125,0.12)',next:'Catch-Up'},
-  'Catch-Up':{color:'var(--purple)',bg:'rgba(155,91,213,0.12)',next:'DTM'},
-  'DTM':{color:'var(--orange)',bg:'rgba(232,145,58,0.12)',next:null},
+const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
+  'New':       {color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'Connected'},
+  'Connected': {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'MPA'},
+  'MPA':       {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:'Catch-Up'},
+  'Catch-Up':  {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'DTM'},
+  'DTM':       {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:null},
 }
 
-const SOURCES=['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
-const RELATIONS=['Close friend','Acquaintance','Stranger','Online only']
-const AGE_RANGES=['Under 25','25-35','35-45','45+']
-const LIFE_STAGES=['Student','Working','Business owner','Parent','Retired']
-const DRIVERS=['Time freedom','Extra income','Full-time income','Business ownership','Products only']
+const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
+const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
+const NEXT_ACTS  = ['Call','WhatsApp','MPA','Catch-Up','DTM','Send Info','Other']
+const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
+const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only']
+const AGE_RANGES = ['Under 25','25-35','35-45','45+']
+const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
+const DRIVERS    = ['Time freedom','Extra income','Full-time income','Business ownership','Products only']
+const HUNGER_ANCHORS = ['Content with life','Mild dissatisfaction','Wants change','Unhappy, exploring','Desperate to change']
+const LOOKING_ANCHORS= ['Completely closed','Politely listening','Curious, open','Actively searching','Ready to start now']
+const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Wrong timing','Other']
 
+// ── HELPERS ────────────────────────────────────────────────
 function hxl(h:number,l:number){return Math.round(h*l)}
 function hxlColor(s:number){return s>=70?'var(--green)':s>=40?'var(--gold)':'var(--red)'}
-function healthScore(l:Lead):number{
+
+// Dynamic health score: HxL (50%) + Recency (30%) + Stage depth (20%)
+function healthScore(l:Lead, lastContactDate:string):number{
   const hxlS=Math.min(100,hxl(l.hunger,l.looking))
-  const daysSinceUpdate=Math.floor((Date.now()-new Date(l.updated_at).getTime())/86400000)
-  const recency=Math.max(0,100-daysSinceUpdate*10)
-  const stageDepth=([...STAGES].indexOf(l.stage as Stage)+1)*20
+  const daysSinceContact=lastContactDate?Math.floor((Date.now()-new Date(lastContactDate).getTime())/86400000):daysSince(l.updated_at)
+  const recency=Math.max(0,100-daysSinceContact*10)
+  const stageDepth=(['New','Connected','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*20
   return Math.round(hxlS*0.5+recency*0.3+stageDepth*0.2)
 }
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
@@ -36,33 +46,81 @@ function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime
 function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<new Date().toISOString().slice(0,10))}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
+function waLink(l:Lead){const n=(l.phone||l.contact||'').replace(/\D/g,'');return n?`https://wa.me/${n.startsWith('0')?'61'+n.slice(1):n}`:null}
 function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'New',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
+
 function todayStr(){return new Date().toISOString().slice(0,10)}
 function daysFromNow(n:number){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 
+// ── STYLES ─────────────────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
+const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px'}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:6}
 const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box' as const}
+const SEL:React.CSSProperties={...INP as object,cursor:'pointer'} as React.CSSProperties
+const OVERLAY:React.CSSProperties={position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)',overflowY:'auto'}
 
-interface LeadCardProps{l:Lead;openEdit:(l:Lead)=>void;advanceStage:(l:Lead)=>void}
-function LeadCard({l,openEdit,advanceStage}:LeadCardProps){
+type View = 'focus'|'leads'|'funnel'|'archived'
+
+// ── LEAD CARD — defined OUTSIDE Pipeline so React doesn't recreate it ──
+interface LeadCardProps {
+  l: Lead
+  candidates: {name:string}[]
+  contactLogs: ContactLog[]
+  setContactModal: (l:Lead)=>void
+  setContactLog: (v:{outcome:string;notes:string;nextAction:string;nextDate:string;rationale:string;objection:string})=>void
+  setBookPFModal: (l:Lead)=>void
+  setBriefModal: (v:{lead:Lead;text:string;loading:boolean})=>void
+  setDrawerLead: (l:Lead)=>void
+  openEdit: (l:Lead)=>void
+  advanceStage: (l:Lead)=>void
+  touchCount?: number
+  nextDue?: string
+}
+function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,touchCount,nextDue}:LeadCardProps){
   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['New']
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
-  const health=healthScore(l)
+  const isDTM=l.stage==='DTM'
+  const isCandidate=candidates.some(c=>c.name===l.name)
+  const wa=waLink(l)
+  const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
+  const lastLog=logs[0]
+  // Days in current stage (from last stage-change log or created_at)
+  const stageChangeLogs=logs.filter(c=>['connected','mpa','catch_up','dtm','pf_booked','lead_created'].includes(c.event_type))
+  const stageChangeDate=stageChangeLogs[0]?.created_at??l.created_at
+  const daysInStage=Math.floor((Date.now()-new Date(stageChangeDate).getTime())/86400000)
+  const stageAlertColor=daysInStage>=21?RED:daysInStage>=14?GOLD:null
+  // Dynamic health score
+  const health=healthScore(l, lastLog?.created_at??l.updated_at)
+  const outcomeColor:{[k:string]:string}={Positive:GREEN,Neutral:GOLD,Negative:RED,'No Show':RED,'Not Yet':'var(--text4)'}
+  const dotColor=outcomeColor[lastLog?.outcome??'']??'var(--text4)'
+
+  // Next due badge color
+  const today=todayStr()
+  let nextDueColor='var(--text4)'
+  if(nextDue){
+    if(nextDue<today)nextDueColor=RED
+    else if(nextDue===today)nextDueColor=GOLD
+  }
+
   return(
-    <div style={{...CARD,marginBottom:10,borderLeft:`3px solid ${cfg.color}`,transition:'all 0.15s'}}>
+    <div style={{...CARD,marginBottom:10,borderLeft:`3px solid ${cfg.color}`,position:'relative',transition:'all 0.15s'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>{l.name}</div>
+          <div style={{fontSize:14,fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:8}}>
+            <span>{l.name}</span>
+            {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:dotColor,display:'inline-block',flexShrink:0}}/>}
+          </div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
             <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{l.stage}</span>
-            {l.source&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{l.source}</span>}
+            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{l.source}</span>
             {l.relationship&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{l.relationship}</span>}
             {overdue&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.15)',color:RED,fontWeight:600}}>⛔ {daysSince(l.next_action_date||'')}d overdue</span>}
             {stale&&!overdue&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(200,162,74,0.1)',color:GOLD}}>{days}d no update</span>}
             {!stale&&!overdue&&<span style={{fontSize:10,color:'var(--text4)'}}>{days===0?'Today':days+'d ago'}</span>}
+            {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'20',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in {l.stage}</span>}
           </div>
         </div>
         <div style={{textAlign:'right' as const,flexShrink:0}}>
@@ -83,67 +141,172 @@ function LeadCard({l,openEdit,advanceStage}:LeadCardProps){
           {l.next_action_date&&<span style={{color:overdue?RED:'var(--text4)',marginLeft:4}}>{fmtDate(l.next_action_date)}</span>}
         </div>
       )}
-      <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,marginTop:10}}>
+      {lastLog?.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>Last: "{lastLog.notes.slice(0,80)}"</div>}
+
+      {/* Touch count + next due badge */}
+      <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:8}}>
+        {(touchCount!==undefined&&touchCount>0)&&(
+          <span style={{fontSize:10,color:'var(--text4)'}}>{touchCount} touch{touchCount===1?'':'es'}</span>
+        )}
+        {nextDue&&(
+          <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:nextDueColor+'20',color:nextDueColor,fontWeight:600}}>
+            due {fmtDate(nextDue)}
+          </span>
+        )}
+      </div>
+
+      <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,alignItems:'center'}}>
+        <button onClick={()=>{setContactModal(l);setContactLog({outcome:'Positive',notes:'',nextAction:l.next_action||'Call',nextDate:'',rationale:'',objection:'None'})}}
+          style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
+          ✓ Log
+        </button>
+        {wa&&<a href={wa} target="_blank" rel="noopener noreferrer" style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid rgba(37,211,102,0.3)',background:'rgba(37,211,102,0.08)',color:'#25D366',textDecoration:'none',fontSize:11,fontWeight:600}}>WA</a>}
         {STAGE_CFG[l.stage as Stage]?.next&&(
           <button onClick={()=>advanceStage(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
             → {STAGE_CFG[l.stage as Stage]?.next}
           </button>
         )}
+        {isDTM&&!isCandidate&&(
+          <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
+            📋 Book PF
+          </button>
+        )}
+        <button onClick={()=>setBriefModal({lead:l,text:'',loading:false})} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Brief</button>
+        <button onClick={()=>setDrawerLead(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>View →</button>
         <button onClick={()=>openEdit(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Edit</button>
       </div>
+
     </div>
   )
 }
 
+// ── MAIN COMPONENT ─────────────────────────────────────────
 export default function Pipeline(){
-  const{trackerLeads,userId,upsertTrackerLead,deleteTrackerLead}=useStore()
+  const {leads,userId,upsertLead,deleteLead,loadLeads,
+         upsertCandidate,loadCandidates,candidates,
+         addContactLog,loadContactLogs,contactLogs} = useStore()
 
-  const[view,setView]=useState<View>('focus')
-  const[filter,setFilter]=useState<Stage|'all'|'archived'>('all')
-  const[sortBy,setSortBy]=useState<'overdue'|'score'|'stale'|'date'>('overdue')
-  const[search,setSearch]=useState('')
-  const[open,setOpen]=useState(false)
-  const[ed,setEd]=useState<Lead|null>(null)
-  const[form,setForm]=useState<Partial<Lead>>(blankLead())
-  const[err,setErr]=useState('')
-  const[archiveModal,setArchiveModal]=useState<Lead|null>(null)
-  const[banner,setBanner]=useState<{type:'error'|'success';msg:string}|null>(null)
-  const[archiveReasonFilter,setArchiveReasonFilter]=useState<string>('all')
+  const [view,setView]         = useState<View>('focus')
+  const [filter,setFilter]     = useState<Stage|'all'|'archived'>('all')
+  const [sortBy,setSortBy]     = useState<'overdue'|'score'|'stale'|'date'>('overdue')
+  const [search,setSearch]     = useState('')
+  const [open,setOpen]         = useState(false)
+  const [ed,setEd]             = useState<Lead|null>(null)
+  const [form,setForm]         = useState<Partial<Lead>>(blankLead())
+  const [err,setErr]           = useState('')
+  const [contactModal,setContactModal] = useState<Lead|null>(null)
+  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+  const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
+  const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
+  const [briefModal,setBriefModal]     = useState<{lead:Lead;text:string;loading:boolean}|null>(null)
+  const [archiveModal,setArchiveModal] = useState<Lead|null>(null)
+  const [banner,setBanner]             = useState<{type:'error'|'success';msg:string}|null>(null)
+  const [noShowFilter,setNoShowFilter] = useState(false)
+  const [archiveReasonFilter,setArchiveReasonFilter] = useState<string>('all')
 
-  useEffect(()=>{},[])
+  useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs() },[]) // eslint-disable-line
 
-  async function safeWrite(fn:()=>Promise<void>,errMsg='Save failed'){
-    try{await fn()}
-    catch(e:any){setBanner({type:'error',msg:errMsg+': '+(e?.message||'unknown error')})}
+  async function safeWrite(fn:()=>Promise<void>, errMsg='Save failed'){
+    try{ await fn() }
+    catch(e:any){ setBanner({type:'error',msg:errMsg+': '+(e?.message||'unknown error')}) }
   }
 
-  const active=useMemo(()=>trackerLeads.filter(l=>!l.archived),[trackerLeads])
-  const archived=useMemo(()=>trackerLeads.filter(l=>l.archived),[trackerLeads])
+  // ── SECURITY: Only show this user's leads ──
+  const myLeads  = useMemo(()=>leads.filter(l=>l.user_id===userId),[leads,userId])
+  const active   = useMemo(()=>myLeads.filter(l=>!l.archived),[myLeads])
+  const archived = useMemo(()=>myLeads.filter(l=>l.archived),[myLeads])
 
-  const stageCounts=useMemo(()=>{
+  const stageCounts = useMemo(()=>{
     const c:Record<string,number>={};STAGES.forEach(s=>{c[s]=active.filter(l=>l.stage===s).length});return c
   },[active])
 
+  // ── touch count and next-due maps ──
+  const touchCountMap = useMemo(()=>{
+    const m:Record<string,number>={}
+    contactLogs.forEach(log=>{
+      if(!m[log.entity_id])m[log.entity_id]=0
+      m[log.entity_id]++
+    })
+    return m
+  },[contactLogs])
+
+  const nextDueMap = useMemo(()=>{
+    const m:Record<string,string>={}
+    const byLead:Record<string,ContactLog[]>={}
+    contactLogs.forEach(log=>{
+      if(!byLead[log.entity_id])byLead[log.entity_id]=[]
+      byLead[log.entity_id].push(log)
+    })
+    Object.entries(byLead).forEach(([leadId,logs])=>{
+      const sorted=[...logs].sort((a,b)=>b.created_at.localeCompare(a.created_at))
+      const withDate=sorted.find(l=>l.next_date)
+      if(withDate)m[leadId]=withDate.next_date
+    })
+    return m
+  },[contactLogs])
+
+  // ── stats strip ──
   const today=todayStr()
   const weekAgo=daysFromNow(-7)
   const weekAhead=daysFromNow(7)
 
-  const statsOverdue=useMemo(()=>active.filter(l=>l.next_action_date&&l.next_action_date<today),[active,today])
-  const statsDTM=useMemo(()=>active.filter(l=>l.stage==='DTM'),[active])
-  const statsHot=useMemo(()=>active.filter(l=>hxl(l.hunger,l.looking)>=70),[active])
+  const statsOverdue  = useMemo(()=>active.filter(l=>l.next_action_date&&l.next_action_date<today),[active,today])
+  const statsDTM      = useMemo(()=>active.filter(l=>l.stage==='DTM'),[active])
+  const statsHot      = useMemo(()=>active.filter(l=>hxl(l.hunger,l.looking)>=70),[active])
 
-  const focusGrouped=useMemo(()=>{
-    const getHealth=(l:Lead)=>healthScore(l)
+  // ── weekly digest ──
+  const weeklyDigest = useMemo(()=>{
+    const newLeads=active.filter(l=>l.created_at>=weekAgo).length
+    const advances=contactLogs.filter(l=>['connected','mpa','catch_up','dtm'].includes(l.event_type)&&l.created_at>=weekAgo).length
+    const dtms=contactLogs.filter(l=>l.event_type==='dtm'&&l.created_at>=weekAgo).length
+    const archives=archived.filter(l=>l.updated_at>=weekAgo).length
+    return{newLeads,advances,dtms,archives}
+  },[active,archived,contactLogs,weekAgo])
+
+  const showDigest=weeklyDigest.newLeads>0||weeklyDigest.advances>0||weeklyDigest.dtms>0||weeklyDigest.archives>0
+
+  // ── no-show leads (last outcome = No Show, >= 3 days ago) ──
+  const noShowLeads = useMemo(()=>{
+    return active.filter(l=>{
+      const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
+      const last=logs[0]
+      if(!last||last.outcome!=='No Show')return false
+      return daysSince(last.created_at)>=3
+    })
+  },[active,contactLogs])
+
+  // ── focus queue grouped ──
+  const focusQueue = useMemo(()=>[...active].sort((a,b)=>{
+    const ao=isOverdue(a)?1:0;const bo=isOverdue(b)?1:0
+    if(ao!==bo)return bo-ao
+    const ad=isOverdue(a)?daysSince(a.next_action_date||a.updated_at):0
+    const bd=isOverdue(b)?daysSince(b.next_action_date||b.updated_at):0
+    if(ad!==bd)return bd-ad
+    const si=STAGES.indexOf(a.stage as Stage);const sj=STAGES.indexOf(b.stage as Stage)
+    if(si!==sj)return sj-si
+    const aLast=contactLogs.filter(c=>c.entity_id===a.id)[0]?.created_at??a.updated_at
+      const bLast=contactLogs.filter(c=>c.entity_id===b.id)[0]?.created_at??b.updated_at
+      return healthScore(b,bLast)-healthScore(a,aLast)
+  }),[active,contactLogs])
+
+  // Grouped focus sections
+  const focusGrouped = useMemo(()=>{
+    const getHealth=(l:Lead)=>{
+      const last=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
+      return healthScore(l,last?.created_at??l.updated_at)
+    }
     const byHealth=(a:Lead,b:Lead)=>getHealth(b)-getHealth(a)
-    const base=[...active]
+
+    let base=noShowFilter?noShowLeads:[...active]
+
     const overdue=base.filter(l=>l.next_action_date&&l.next_action_date<today).sort(byHealth)
     const dueToday=base.filter(l=>l.next_action_date===today).sort(byHealth)
     const dueWeek=base.filter(l=>l.next_action_date&&l.next_action_date>today&&l.next_action_date<=weekAhead).sort(byHealth)
     const warm=base.filter(l=>!l.next_action_date||l.next_action_date>weekAhead).sort(byHealth)
     return{overdue,dueToday,dueWeek,warm}
-  },[active,today,weekAhead])
+  },[active,contactLogs,noShowLeads,noShowFilter,today,weekAhead])
 
-  const displayed=useMemo(()=>{
+  const displayed = useMemo(()=>{
     let list=filter==='archived'?archived:active.filter(l=>filter==='all'||l.stage===filter)
     if(search)list=list.filter(l=>l.name.toLowerCase().includes(search.toLowerCase())||l.phone?.includes(search)||l.instagram?.includes(search))
     return [...list].sort((a,b)=>{
@@ -154,7 +317,8 @@ export default function Pipeline(){
     })
   },[active,archived,filter,sortBy,search])
 
-  const funnel=useMemo(()=>{
+  // ── funnel with avgDays ──
+  const funnel = useMemo(()=>{
     const total=active.length||1
     return STAGES.map((s,i)=>{
       const stageLeads=active.filter(l=>l.stage===s)
@@ -163,13 +327,26 @@ export default function Pipeline(){
     })
   },[active,stageCounts])
 
-  const sourceBreakdown=useMemo(()=>{
+  // ── bottleneck ──
+  const bottleneck = useMemo(()=>{
+    let worst:{stage:string;convRate:number;prevStage:string}|null=null
+    funnel.forEach((f,i)=>{
+      if(i===0||f.count===0)return
+      if(!worst||f.convRate<worst.convRate)worst={stage:f.stage,convRate:f.convRate,prevStage:STAGES[i-1]}
+    })
+    return worst
+  },[funnel])
+
+  const sourceBreakdown = useMemo(()=>{
     const map:Record<string,{total:number;dtm:number;score:number}>={};active.forEach(l=>{const s=l.source||'Other';if(!map[s])map[s]={total:0,dtm:0,score:0};map[s].total++;if(l.stage==='DTM'||l.stage==='Catch-Up')map[s].dtm++;map[s].score+=hxl(l.hunger,l.looking)});return Object.entries(map).map(([src,v])=>({src,total:v.total,dtm:v.dtm,avgScore:Math.round(v.score/v.total),convRate:Math.round(v.dtm/v.total*100)})).sort((a,b)=>b.dtm-a.dtm)
   },[active])
 
-  const archiveReasons=useMemo(()=>['all',...Array.from(new Set(archived.map(l=>l.archived_reason||'Archived').filter(Boolean)))],[archived])
-  const filteredArchive=useMemo(()=>archiveReasonFilter==='all'?archived:archived.filter(l=>(l.archived_reason||'Archived')===archiveReasonFilter),[archived,archiveReasonFilter])
+  // ── archive computed ──
+  const archiveReasons = useMemo(()=>['all',...Array.from(new Set(archived.map(l=>l.archived_reason||'Archived').filter(Boolean)))]  ,[archived])
+  const filteredArchive = useMemo(()=>archiveReasonFilter==='all'?archived:archived.filter(l=>(l.archived_reason||'Archived')===archiveReasonFilter),[archived,archiveReasonFilter])
+  const reEngageLeads  = useMemo(()=>archived.filter(l=>(l.archived_reason||'')===('Wrong timing')&&daysSince(l.updated_at)>=90),[archived])
 
+  function leadLogs(id:string){return contactLogs.filter(c=>c.entity_id===id).sort((a,b)=>b.created_at.localeCompare(a.created_at))}
   function openAdd(){setEd(null);setForm(blankLead());setErr('');setOpen(true)}
   function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setOpen(true)}
 
@@ -177,266 +354,646 @@ export default function Pipeline(){
     if(!form.name?.trim()||!userId)return setErr('Name required')
     const score=hxl(form.hunger??5,form.looking??5)
     const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'New',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:form.life_stage||'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'Call',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
-    await safeWrite(async()=>{ await upsertTrackerLead(l) },'Save lead failed')
+    await safeWrite(async()=>{
+      await upsertLead(l)
+      if(!ed)await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
+    },'Save lead failed')
     setOpen(false)
   }
 
   async function archiveLead(l:Lead,reason=''){
-    await safeWrite(async()=>{await upsertTrackerLead({...l,archived:true,archived_reason:reason,updated_at:now()})},'Archive lead failed')
+    await safeWrite(async()=>{
+      await upsertLead({...l,archived:true,archived_reason:reason,updated_at:now()})
+      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'disqualified',outcome:'Negative',notes:reason||'Archived',fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
+    },'Archive lead failed')
+    if(drawerLead?.id===l.id)setDrawerLead(null)
   }
 
-  async function restoreLead(l:Lead){await safeWrite(()=>upsertTrackerLead({...l,archived:false,archived_reason:'',updated_at:now()}),'Restore lead failed')}
+  async function restoreLead(l:Lead){await safeWrite(()=>upsertLead({...l,archived:false,archived_reason:'',updated_at:now()}),'Restore lead failed')}
 
   async function advanceStage(l:Lead){
     const cfg=STAGE_CFG[l.stage as Stage];if(!cfg?.next)return
-    await safeWrite(async()=>{await upsertTrackerLead({...l,stage:cfg.next as Stage,updated_at:now()})},'Advance stage failed')
+    await safeWrite(async()=>{
+      await upsertLead({...l,stage:cfg.next as Stage,updated_at:now()})
+      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:cfg.next!.toLowerCase().replace('-','_'),outcome:'Positive',notes:`Advanced to ${cfg.next}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
+    },'Advance stage failed')
   }
 
-  async function deleteLead(id:string){await safeWrite(()=>deleteTrackerLead(id),'Delete failed')}
+  async function logContact(){
+    if(!contactModal||!userId)return
+    const l=contactModal
+    await safeWrite(async()=>{
+      await upsertLead({...l,next_action:contactLog.nextAction,next_action_date:contactLog.nextDate,updated_at:now()})
+      const logObj:any={id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()}
+      if(contactLog.objection&&contactLog.objection!=='None')logObj.objection=contactLog.objection
+      await addContactLog(logObj)
+    },'Log contact failed')
+    setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+  }
+
+  async function bookPF(){
+    const l=bookPFModal;if(!l||!userId)return
+    await safeWrite(async()=>{
+      await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:'{}',status:'active',hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
+      await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'pf_booked',outcome:'Positive',notes:'Moved to Candidates — PF booked',fathom_link:'',next_action:'Run PF',next_date:'',created_at:new Date().toISOString()})
+      await deleteLead(l.id)
+    },'Book PF failed')
+    setBookPFModal(null)
+  }
+
+  async function getPreCallBrief(l:Lead){
+    setBriefModal({lead:l,text:'',loading:true})
+    const logs=leadLogs(l.id).slice(0,3)
+    try{
+      const text=buildPreCallBrief({
+        name:l.name,
+        stageLabel:l.stage,
+        daysSinceContact:daysSince(l.updated_at),
+        driver:l.primary_driver,
+        painPoint:l.pain_point,
+        metricLabel:'HxL',metricValue:hxl(l.hunger,l.looking),
+        notes:l.notes,
+        nextAction:l.next_action,
+        recentOutcomes:logs.map(c=>c.outcome),
+      })
+      setBriefModal(p=>p?{...p,text,loading:false}:null)
+    }catch{setBriefModal(p=>p?{...p,text:'Failed.',loading:false}:null)}
+  }
+
+  const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}
+
+  // ── helper to render a group section ──
+  function renderFocusGroup(label:string,labelColor:string,leads:Lead[]){
+    if(leads.length===0)return null
+    return(
+      <div key={label} style={{marginBottom:4}}>
+        <div style={{fontSize:10,fontWeight:700,color:labelColor,letterSpacing:'1.5px',textTransform:'uppercase' as const,marginBottom:8,marginTop:4,paddingLeft:2}}>{label} · {leads.length}</div>
+        {leads.map(l=><LeadCard key={l.id} l={l} {...cardProps} touchCount={touchCountMap[l.id]??0} nextDue={nextDueMap[l.id]}/>)}
+      </div>
+    )
+  }
 
   return(
-    <div>
-      {/* Banner */}
+    <div style={{animation:'fade-in 0.3s ease',paddingBottom:100}}>
+
+      {/* Status banner */}
       {banner&&(
-        <div style={{padding:'12px 16px',marginBottom:12,borderRadius:'var(--r)',background:banner.type==='error'?'rgba(224,85,85,0.1)':'rgba(76,175,125,0.1)',color:banner.type==='error'?RED:GREEN,fontSize:13}}>
-          {banner.msg}
+        <div style={{marginBottom:10,padding:'8px 14px',background:banner.type==='error'?'rgba(224,85,85,0.06)':'rgba(76,175,125,0.06)',border:`1px solid ${banner.type==='error'?RED:GREEN}30`,borderRadius:'var(--r)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10}}>
+          <span style={{fontSize:11,color:banner.type==='error'?RED:GREEN}}>{banner.type==='error'?'⚠️ ':'✓ '}{banner.msg}</span>
+          <button onClick={()=>setBanner(null)} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:14,flexShrink:0}}>×</button>
         </div>
       )}
 
-      {/* View tabs */}
-      <div style={{display:'flex',gap:8,marginBottom:16,borderBottom:'1px solid var(--br)',paddingBottom:10}}>
-        {(['focus','leads','funnel','archived'] as View[]).map(v=>(
-          <button key={v} onClick={()=>setView(v)} style={{padding:'6px 12px',borderRadius:'var(--r)',border:'none',background:view===v?'var(--gold)':'transparent',color:view===v?'#000':'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:view===v?700:400}}>
-            {v==='focus'?'🎯 Focus':v==='leads'?'📋 All':v==='funnel'?'📊 Funnel':'🗄 Archive'}
-          </button>
-        ))}
+      {/* ── TABS ──────────────────────────────────────────── */}
+      <div style={{marginBottom:10}}>
+        <div style={{display:'flex',gap:3,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto' as const}}>
+          {(['focus','leads','funnel','archived'] as View[]).map(v=>(
+            <button key={v} onClick={()=>setView(v)}
+              style={{flex:1,padding:'8px 10px',borderRadius:'var(--r)',border:'none',background:view===v?'var(--s3)':'transparent',color:view===v?GOLD:'var(--text3)',fontSize:11,fontWeight:view===v?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",textTransform:'capitalize' as const,transition:'all 0.15s',whiteSpace:'nowrap' as const}}>
+              {v==='focus'?`🎯 Focus (${focusQueue.length})`:v==='leads'?`📋 All (${active.length})`:v==='funnel'?'📊 Funnel':`🗄 Archive (${archived.length})`}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Stats strip */}
-      <div style={{display:'flex',gap:10,marginBottom:16,overflowX:'auto'}}>
-        {[{label:`Active`,val:active.length},{label:`Hot`,val:statsHot.length},{label:`DTM`,val:statsDTM.length},{label:`Overdue`,val:statsOverdue.length}].map(s=>(
-          <div key={s.label} style={{padding:'8px 12px',borderRadius:'var(--r)',background:'var(--s1)',border:'1px solid var(--br)',whiteSpace:'nowrap' as const}}>
-            <div style={{fontSize:11,fontWeight:700,color:'var(--text)'}}>{s.val}</div>
-            <div style={{fontSize:9,color:'var(--text4)'}}>{s.label}</div>
+      {/* ── STATS STRIP (all views) ───────────────────────── */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:10}}>
+        {[
+          {label:'Active',value:active.length,color:GOLD},
+          {label:'Overdue',value:statsOverdue.length,color:RED},
+          {label:'DTM Ready',value:statsDTM.length,color:GREEN},
+          {label:'Hot HxL≥70',value:statsHot.length,color:GREEN},
+        ].map(x=>(
+          <div key={x.label} style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r)',padding:'8px 10px',textAlign:'center' as const}}>
+            <div className="mono" style={{fontSize:20,fontWeight:800,color:x.color,lineHeight:1}}>{x.value}</div>
+            <div style={{fontSize:9,color:'var(--text4)',marginTop:2,letterSpacing:'0.5px'}}>{x.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Filter & sort (for leads view) */}
-      {view==='leads'&&(
-        <div style={{display:'flex',gap:8,marginBottom:14}}>
-          <select value={filter} onChange={e=>setFilter(e.target.value as any)} style={{...INP,flex:1} as React.CSSProperties}>
-            <option value="all">All stages</option>
-            {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
-            <option value="archived">Archived</option>
-          </select>
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value as any)} style={{...INP,flex:1} as React.CSSProperties}>
-            <option value="overdue">Sort: Overdue</option>
-            <option value="score">Sort: Score</option>
-            <option value="stale">Sort: Stale</option>
-            <option value="date">Sort: Date</option>
-          </select>
-          <input type="text" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…" style={{...INP,flex:1} as React.CSSProperties}/>
+      {/* ── WEEKLY DIGEST ─────────────────────────────────── */}
+      {showDigest&&(
+        <div style={{marginBottom:12,padding:'8px 14px',background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r)',fontSize:11,color:'var(--text3)',display:'flex',gap:12,flexWrap:'wrap' as const,alignItems:'center'}}>
+          <span style={{fontSize:9,color:'var(--text4)',letterSpacing:'1.5px',textTransform:'uppercase' as const,fontWeight:700,flexShrink:0}}>7-day</span>
+          {weeklyDigest.newLeads>0&&<span style={{color:BLUE}}>+{weeklyDigest.newLeads} new</span>}
+          {weeklyDigest.advances>0&&<span style={{color:GREEN}}>↑{weeklyDigest.advances} advanced</span>}
+          {weeklyDigest.dtms>0&&<span style={{color:GOLD}}>{weeklyDigest.dtms} DTMs</span>}
+          {weeklyDigest.archives>0&&<span style={{color:'var(--text4)'}}>✗{weeklyDigest.archives} archived</span>}
         </div>
       )}
 
-      {/* Focus view */}
+      {/* ── FOCUS VIEW ────────────────────────────────────── */}
       {view==='focus'&&(
-        <>
-          {focusGrouped.overdue.length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{...SL}}>⚠️ Overdue ({focusGrouped.overdue.length})</div>
-              {focusGrouped.overdue.map(l=><LeadCard key={l.id} l={l} openEdit={openEdit} advanceStage={advanceStage}/>)}
+        <div>
+          {/* No-show recovery banner */}
+          {noShowLeads.length>0&&(
+            <div style={{marginBottom:12,padding:'10px 14px',background:'rgba(232,145,58,0.08)',border:'1px solid rgba(232,145,58,0.25)',borderRadius:'var(--r)',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:'var(--orange)',marginBottom:6}}>
+                  ⚡ {noShowLeads.length} no-show{noShowLeads.length>1?'s':''} need re-booking
+                </div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap' as const}}>
+                  {noShowLeads.map(l=>(
+                    <button key={l.id} onClick={()=>setDrawerLead(l)}
+                      style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid rgba(232,145,58,0.3)',background:'transparent',color:'var(--orange)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>
+                      {l.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={()=>setNoShowFilter(f=>!f)}
+                style={{fontSize:10,padding:'4px 10px',borderRadius:6,border:'1px solid rgba(232,145,58,0.4)',background:noShowFilter?'rgba(232,145,58,0.2)':'transparent',color:'var(--orange)',cursor:'pointer',fontFamily:"'Sora',sans-serif",flexShrink:0,fontWeight:noShowFilter?700:400}}>
+                {noShowFilter?'Show all':'Filter'}
+              </button>
             </div>
           )}
-          {focusGrouped.dueToday.length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{...SL}}>📅 Due today ({focusGrouped.dueToday.length})</div>
-              {focusGrouped.dueToday.map(l=><LeadCard key={l.id} l={l} openEdit={openEdit} advanceStage={advanceStage}/>)}
-            </div>
-          )}
-          {focusGrouped.dueWeek.length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{...SL}}>📋 Due this week ({focusGrouped.dueWeek.length})</div>
-              {focusGrouped.dueWeek.map(l=><LeadCard key={l.id} l={l} openEdit={openEdit} advanceStage={advanceStage}/>)}
-            </div>
-          )}
-          {focusGrouped.warm.length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{...SL}}>🔥 Warm & monitoring ({focusGrouped.warm.length})</div>
-              {focusGrouped.warm.map(l=><LeadCard key={l.id} l={l} openEdit={openEdit} advanceStage={advanceStage}/>)}
-            </div>
-          )}
-        </>
+
+          {focusQueue.length===0
+            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No active leads yet.</div>
+            :(
+              <div>
+                {renderFocusGroup('Overdue',RED,focusGrouped.overdue)}
+                {renderFocusGroup('Due Today',GOLD,focusGrouped.dueToday)}
+                {renderFocusGroup('Due This Week','var(--text3)',focusGrouped.dueWeek)}
+                {renderFocusGroup('Warm','var(--text4)',focusGrouped.warm)}
+              </div>
+            )
+          }
+        </div>
       )}
 
-      {/* Leads view */}
+      {/* ── LEADS VIEW ────────────────────────────────────── */}
       {view==='leads'&&(
         <div>
-          {displayed.length===0?(
-            <div style={{textAlign:'center' as const,padding:'40px 20px',color:'var(--text4)',fontSize:13}}>
-              No leads found
-            </div>
-          ):(
-            displayed.map(l=><LeadCard key={l.id} l={l} openEdit={openEdit} advanceStage={advanceStage}/>)
-          )}
-        </div>
-      )}
-
-      {/* Funnel view */}
-      {view==='funnel'&&(
-        <>
-          <div style={{...CARD,marginBottom:16}}>
-            <div style={{...SL}}>Conversion funnel</div>
-            {funnel.map((f,i)=>(
-              <div key={f.stage} style={{marginBottom:16}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                  <div style={{fontSize:12,fontWeight:600}}>{f.stage}</div>
-                  <div style={{fontSize:11,color:'var(--text4)'}}>{f.count} leads · {f.convRate}% conv rate</div>
-                </div>
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <div style={{flex:1,height:8,background:'var(--s2)',borderRadius:4,overflow:'hidden'}}>
-                    <div style={{height:'100%',width:`${f.pct}%`,background:STAGE_CFG[f.stage].color}}/>
-                  </div>
-                  <div style={{fontSize:10,color:'var(--text4)',width:30,textAlign:'right' as const}}>{f.avgDays}d avg</div>
-                </div>
-              </div>
-            ))}
+          {/* Stage filter pills */}
+          <div style={{display:'flex',gap:6,marginBottom:10,overflowX:'auto' as const,paddingBottom:4}}>
+            {(['all',...STAGES] as (Stage|'all')[]).map(s=>{
+              const count=s==='all'?active.length:(stageCounts[s]||0)
+              const active_=filter===s
+              return(
+                <button key={s} onClick={()=>setFilter(s)}
+                  style={{padding:'5px 12px',borderRadius:999,border:`1px solid ${active_?GOLD:'var(--br)'}`,background:active_?'rgba(200,162,74,0.15)':'var(--s1)',color:active_?GOLD:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:active_?700:400,flexShrink:0,whiteSpace:'nowrap' as const}}>
+                  {s==='all'?'All':s} {count}
+                </button>
+              )
+            })}
           </div>
-          <div style={{...CARD,marginBottom:16}}>
-            <div style={{...SL}}>Source breakdown</div>
-            {sourceBreakdown.map(s=>(
-              <div key={s.src} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid var(--br2)',fontSize:12}}>
-                <div>{s.src}</div>
-                <div style={{display:'flex',gap:12,color:'var(--text4)',fontSize:10}}>
-                  <span>{s.total} leads</span>
-                  <span style={{color:s.convRate>=50?GREEN:GOLD}}>{s.convRate}% to DTM</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Archive view */}
-      {view==='archived'&&(
-        <>
-          <div style={{marginBottom:14}}>
-            <select value={archiveReasonFilter} onChange={e=>setArchiveReasonFilter(e.target.value)} style={{...INP} as React.CSSProperties}>
-              {archiveReasons.map(r=><option key={r} value={r}>{r}</option>)}
+          {/* Search + sort row */}
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone, Instagram…" style={{flex:1,minWidth:160,...INP}}/>
+            <button onClick={openAdd} style={{padding:'9px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>+ Add Lead</button>
+            <select value={sortBy} onChange={e=>setSortBy(e.target.value as any)} style={{...SEL,width:'auto'}}>
+              <option value="overdue">Sort: Overdue</option>
+              <option value="score">Sort: HxL Score</option>
+              <option value="stale">Sort: Stale</option>
+              <option value="date">Sort: Latest</option>
             </select>
           </div>
-          {filteredArchive.length===0?(
-            <div style={{textAlign:'center' as const,padding:'40px 20px',color:'var(--text4)'}}>No archived leads</div>
-          ):(
-            filteredArchive.map(l=>(
-              <div key={l.id} style={{...CARD,marginBottom:10,borderLeft:`3px solid ${RED}`,opacity:0.7}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>{l.name}</div>
-                    {l.archived_reason&&<div style={{fontSize:10,color:RED,marginBottom:4}}>{l.archived_reason}</div>}
-                  </div>
-                </div>
-                <button onClick={()=>restoreLead(l)} style={{padding:'6px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}`,background:'transparent',color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Restore</button>
-              </div>
-            ))
-          )}
-        </>
+          {displayed.length===0
+            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No leads in this view</div>
+            :displayed.map(l=><LeadCard key={l.id} l={l} {...cardProps} touchCount={touchCountMap[l.id]??0} nextDue={nextDueMap[l.id]}/>)
+          }
+        </div>
       )}
 
-      {/* FAB */}
-      <button onClick={openAdd} style={{position:'fixed',bottom:20,right:20,width:56,height:56,borderRadius:'50%',border:'none',background:GOLD,color:'#000',fontSize:24,fontWeight:900,cursor:'pointer',boxShadow:'0 8px 16px rgba(0,0,0,0.3)',zIndex:50}}>+</button>
-
-      {/* Edit modal */}
-      {open&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:100,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',overflowY:'auto',backdropFilter:'blur(8px)'}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',padding:'20px',maxWidth:500,width:'100%',marginTop:20}}>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:16}}>
-              {ed?'Edit Lead':'Add Lead'}
-              <button onClick={()=>setOpen(false)} style={{float:'right',border:'none',background:'none',color:'var(--text3)',cursor:'pointer',fontSize:20}}>×</button>
-            </div>
-            {err&&<div style={{padding:'8px 12px',borderRadius:'var(--r)',background:'rgba(224,85,85,0.1)',color:RED,fontSize:12,marginBottom:12}}>{err}</div>}
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Name *</div>
-              <input value={form.name||''} onChange={e=>setForm({...form,name:e.target.value})} style={{...INP} as React.CSSProperties} placeholder="Lead name"/>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              {[
-                {l:'Hunger',k:'hunger',v:form.hunger??5},
-                {l:'Looking',k:'looking',v:form.looking??5},
-              ].map(f=>(
-                <div key={f.k}>
-                  <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>{f.l} ({f.v})</div>
-                  <input type="range" min={1} max={10} value={f.v} onChange={e=>setForm({...form,[f.k]:Number(e.target.value)})} style={{width:'100%',accentColor:GOLD}}/>
+      {/* ── FUNNEL VIEW ───────────────────────────────────── */}
+      {view==='funnel'&&(
+        <div>
+          <div style={{...CARD,marginBottom:12}}>
+            <div style={SL}>Stage Funnel</div>
+            {funnel.map((f,i)=>{
+              const cfg=STAGE_CFG[f.stage as Stage]
+              return(
+                <div key={f.stage} style={{marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:12,fontWeight:600,color:cfg.color}}>{f.stage}</span>
+                      <span className="mono" style={{fontSize:11,color:'var(--text4)'}}>{f.count}</span>
+                      {i>0&&f.count>0&&<span style={{fontSize:10,color:'var(--text4)'}}>({f.convRate}% from prev)</span>}
+                      {f.count>0&&<span style={{fontSize:10,color:'var(--text4)',fontStyle:'italic'}}>~{f.avgDays}d avg</span>}
+                    </div>
+                    <span style={{fontSize:10,color:'var(--text4)'}}>{f.pct}% of pipeline</span>
+                  </div>
+                  <div style={{height:6,background:'var(--s3)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${f.pct}%`,background:cfg.color,borderRadius:3,transition:'width 0.8s'}}/>
+                  </div>
                 </div>
-              ))}
-            </div>
-            {[
-              {l:'Stage',k:'stage',opts:['New',...STAGES.slice(1)]},
-              {l:'Source',k:'source',opts:SOURCES},
-              {l:'Relationship',k:'relationship',opts:['',... RELATIONS]},
-              {l:'Age Range',k:'age_range',opts:['',... AGE_RANGES]},
-              {l:'Life Stage',k:'life_stage',opts:['',... LIFE_STAGES]},
-              {l:'Primary Driver',k:'primary_driver',opts:['',... DRIVERS]},
-            ].map(f=>(
-              <div key={f.k} style={{marginBottom:12}}>
-                <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>{f.l}</div>
-                <select value={(form as any)[f.k]||''} onChange={e=>setForm({...form,[f.k]:e.target.value})} style={{...INP} as React.CSSProperties}>
-                  {f.opts.map(o=><option key={o} value={o}>{o||`Select ${f.l.toLowerCase()}…`}</option>)}
-                </select>
+              )
+            })}
+          </div>
+
+          {/* Bottleneck card */}
+          {bottleneck&&(
+            <div style={{...CARD,marginBottom:12,borderLeft:`3px solid ${RED}`}}>
+              <div style={SL}>Bottleneck</div>
+              <div style={{fontSize:12,color:'var(--text2)'}}>
+                ⚡ <span style={{fontWeight:700,color:RED}}>{bottleneck.stage}</span> — only <span style={{fontWeight:700,color:RED}}>{bottleneck.convRate}%</span> convert from {bottleneck.prevStage}
               </div>
-            ))}
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Phone</div>
-              <input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})} style={{...INP} as React.CSSProperties} placeholder="+61…"/>
             </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Instagram</div>
-              <input value={form.instagram||''} onChange={e=>setForm({...form,instagram:e.target.value})} style={{...INP} as React.CSSProperties} placeholder="@handle"/>
+          )}
+
+          {/* Source performance with conv rate */}
+          <div style={{...CARD,marginBottom:12}}>
+            <div style={SL}>Source Performance</div>
+            {sourceBreakdown.length===0
+              ?<div style={{fontSize:12,color:'var(--text4)'}}>No data yet</div>
+              :sourceBreakdown.map(s=>(
+                <div key={s.src} style={{paddingBottom:10,borderBottom:'1px solid var(--br)',marginBottom:10}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                    <div style={{fontSize:12,fontWeight:600,flex:1}}>{s.src}</div>
+                    <div style={{fontSize:10,color:'var(--text4)'}}>{s.total} leads</div>
+                    <div style={{fontSize:10,color:GOLD,fontWeight:600}}>{s.dtm} warm</div>
+                    <div style={{fontSize:10,color:TEAL,fontWeight:600}}>avg HxL {s.avgScore}</div>
+                    <div style={{fontSize:10,color:GREEN,fontWeight:700}}>{s.convRate}% conv</div>
+                  </div>
+                  <div style={{height:4,background:'var(--s3)',borderRadius:2,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${Math.min(100,s.convRate)}%`,background:`linear-gradient(90deg,${GREEN},${TEAL})`,borderRadius:2,transition:'width 0.8s'}}/>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+
+        </div>
+      )}
+
+      {/* ── LEAD DRAWER ───────────────────────────────────── */}
+      {drawerLead&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDrawerLead(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,overflow:'hidden'}}>
+            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+              <div>
+                <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{drawerLead.name}</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
+                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['New']).bg,color:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['New']).color,fontWeight:600}}>{drawerLead.stage}</span>
+                  <span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.source}</span>
+                  {drawerLead.phone&&<span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.phone}</span>}
+                  {drawerLead.instagram&&<span style={{fontSize:10,color:PURPLE}}>@{drawerLead.instagram}</span>}
+                </div>
+              </div>
+              <button onClick={()=>setDrawerLead(null)} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
             </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Pain point</div>
-              <textarea value={form.pain_point||''} onChange={e=>setForm({...form,pain_point:e.target.value})} style={{...INP,minHeight:60} as React.CSSProperties} placeholder="Their words"/>
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Notes</div>
-              <textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})} style={{...INP,minHeight:60} as React.CSSProperties} placeholder="Internal notes"/>
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Next action</div>
-              <input value={form.next_action||''} onChange={e=>setForm({...form,next_action:e.target.value})} style={{...INP} as React.CSSProperties} placeholder="Call, MPA, etc"/>
-            </div>
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:4,fontWeight:600}}>Next action date</div>
-              <input type="date" value={form.next_action_date||''} onChange={e=>setForm({...form,next_action_date:e.target.value})} style={{...INP} as React.CSSProperties}/>
-            </div>
-            <div style={{display:'flex',gap:8}}>
-              {ed&&(
-                <button onClick={async()=>{if(ed)await deleteLead(ed.id);setOpen(false)}} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>Delete</button>
+            <div style={{padding:'18px 24px',maxHeight:'70vh',overflowY:'auto' as const}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                {[{l:'HxL Score',v:`${hxl(drawerLead.hunger,drawerLead.looking)} (H${drawerLead.hunger}×L${drawerLead.looking})`,c:hxlColor(hxl(drawerLead.hunger,drawerLead.looking))},{l:'Relationship',v:drawerLead.relationship||'—',c:'var(--text2)'},{l:'Age Range',v:drawerLead.age_range||'—',c:'var(--text2)'},{l:'Life Stage',v:drawerLead.life_stage||'—',c:'var(--text2)'},{l:'Primary Driver',v:drawerLead.primary_driver||'—',c:GOLD},{l:'Source',v:drawerLead.source,c:'var(--text2)'}].map(x=>(
+                  <div key={x.l}>
+                    <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div>
+                    <div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div>
+                  </div>
+                ))}
+              </div>
+              {drawerLead.pain_point&&(
+                <div style={{marginBottom:16,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}>
+                  <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div>
+                  <div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{drawerLead.pain_point}"</div>
+                </div>
               )}
-              <button onClick={()=>setOpen(false)} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
-              <button onClick={saveLead} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:700}}>Save</button>
+
+              {/* Contact History */}
+              <div style={SL}>Contact History</div>
+              {leadLogs(drawerLead.id).length===0
+                ?<div style={{fontSize:12,color:'var(--text4)',marginBottom:16}}>No contact logged yet</div>
+                :leadLogs(drawerLead.id).map(log=>(
+                  <div key={log.id} style={{padding:'8px 0',borderBottom:'1px solid var(--br)',marginBottom:4}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                      <span style={{fontSize:10,fontWeight:600,color:{Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}[log.outcome]??'var(--text4)'}}>{log.outcome||log.event_type}</span>
+                      <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
+                    </div>
+                    {log.notes&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.5}}>{log.notes}</div>}
+                    {log.next_action&&<div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>Next: {log.next_action}{log.next_date?` · ${fmtDate(log.next_date)}`:''}</div>}
+                  </div>
+                ))
+              }
+
+              {/* Timeline — stage-change events */}
+              {(()=>{
+                const timelineLogs=leadLogs(drawerLead.id).filter(l=>['connected','mpa','catch_up','dtm','pf_booked','lead_created'].includes(l.event_type))
+                if(timelineLogs.length===0)return null
+                return(
+                  <div style={{marginTop:16}}>
+                    <div style={SL}>Stage Timeline</div>
+                    <div style={{position:'relative' as const,paddingLeft:14}}>
+                      <div style={{position:'absolute' as const,left:4,top:4,bottom:4,width:1,background:'var(--br)'}}/>
+                      {timelineLogs.map((log,i)=>{
+                        const prev=timelineLogs[i+1]
+                        const daysSpent=prev?Math.floor((new Date(log.created_at).getTime()-new Date(prev.created_at).getTime())/86400000):null
+                        return(
+                          <div key={log.id} style={{marginBottom:10,position:'relative' as const}}>
+                            <div style={{position:'absolute' as const,left:-10,top:3,width:7,height:7,borderRadius:'50%',background:GOLD,border:'1px solid var(--s1)'}}/>
+                            <div style={{fontSize:11,fontWeight:700,color:'var(--text2)'}}>{log.event_type.replace(/_/g,' ')}</div>
+                            <div style={{fontSize:10,color:'var(--text4)'}}>{log.created_at.slice(0,10)}{daysSpent!==null?` · ${daysSpent}d in stage`:''}</div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const}}>
+                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:'',objection:'None'});setDrawerLead(null)}}
+                  style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
+                  ✓ Log Contact
+                </button>
+                {STAGE_CFG[drawerLead.stage as Stage]?.next&&(
+                  <button onClick={()=>{advanceStage(drawerLead);setDrawerLead(null)}}
+                    style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
+                    → Advance
+                  </button>
+                )}
+                <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
+                {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Archive modal */}
+      {/* ── EDIT MODAL ─────────────────────────────────────── */}
+      {open&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:520,overflow:'hidden',margin:'auto'}}>
+            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',fontSize:16,fontWeight:700}}>{ed?'Edit Lead':'Lead Profile'}</div>
+            <div style={{padding:'20px 24px',maxHeight:'75vh',overflowY:'auto' as const}}>
+              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,marginTop:4}}>Identity</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={SL}>Name *</div>
+                  <input value={form.name||''} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full name" style={INP}/>
+                </div>
+                <div>
+                  <div style={SL}>Phone</div>
+                  <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={INP}/>
+                </div>
+                <div>
+                  <div style={SL}>Instagram</div>
+                  <input value={form.instagram||''} onChange={e=>setForm(p=>({...p,instagram:e.target.value}))} placeholder="@handle" style={INP}/>
+                </div>
+                <div>
+                  <div style={SL}>Source</div>
+                  <select value={form.source||'Instagram'} onChange={e=>setForm(p=>({...p,source:e.target.value}))} style={SEL}>
+                    {SOURCES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={SL}>Stage</div>
+                  <select value={form.stage||'New'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
+                    {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Scoring</div>
+              {([{k:'hunger' as const,label:'Hunger (1-10)',anchors:HUNGER_ANCHORS},{k:'looking' as const,label:'Looking (1-10)',anchors:LOOKING_ANCHORS}]).map(f=>(
+                <div key={f.k} style={{marginBottom:14}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                    <div style={SL}>{f.label}</div>
+                    <span className="mono" style={{fontSize:12,fontWeight:700,color:hxlColor((form[f.k]??5)*10)}}>{form[f.k]??5}/10</span>
+                  </div>
+                  <input type="range" min={1} max={10} value={form[f.k]??5} onChange={e=>setForm(p=>({...p,[f.k]:parseInt(e.target.value)}))} style={{width:'100%',accentColor:hxlColor((form[f.k]??5)*10),marginBottom:4}}/>
+                  <div style={{fontSize:9,color:'var(--text4)',textAlign:'center' as const}}>{f.anchors[Math.round(((form[f.k]??5)-1)/9*4)]}</div>
+                </div>
+              ))}
+              <div style={{padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:14,textAlign:'center' as const}}>
+                <span style={{fontSize:10,color:'var(--text4)'}}>HxL Score: </span>
+                <span className="mono" style={{fontSize:18,fontWeight:800,color:hxlColor(hxl(form.hunger??5,form.looking??5))}}>{hxl(form.hunger??5,form.looking??5)}</span>
+              </div>
+              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Context</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                {([{l:'Relationship',k:'relationship' as const,opts:RELATIONS},{l:'Age Range',k:'age_range' as const,opts:AGE_RANGES},{l:'Life Stage',k:'life_stage' as const,opts:LIFE_STAGES},{l:'Primary Driver',k:'primary_driver' as const,opts:DRIVERS}]).map(f=>(
+                  <div key={f.k}>
+                    <div style={SL}>{f.l}</div>
+                    <select value={(form as any)[f.k]||''} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} style={SEL}>
+                      <option value="">Select…</option>
+                      {f.opts.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginBottom:10}}>
+                <div style={SL}>Pain Point (their words)</div>
+                <input value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} placeholder="What are they trying to solve?" style={INP}/>
+              </div>
+              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Tracking</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                <div>
+                  <div style={SL}>Next Action</div>
+                  <select value={form.next_action||'Call'} onChange={e=>setForm(p=>({...p,next_action:e.target.value}))} style={SEL}>
+                    {NEXT_ACTS.map(a=><option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={SL}>Next Action Date</div>
+                  <input type="date" value={form.next_action_date||''} onChange={e=>setForm(p=>({...p,next_action_date:e.target.value}))} style={INP}/>
+                </div>
+              </div>
+              <div style={{marginBottom:16}}>
+                <div style={SL}>Notes</div>
+                <textarea value={form.notes||''} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={3} placeholder="Anything relevant…" style={{...INP,resize:'vertical' as const}}/>
+              </div>
+              {err&&<div style={{color:RED,fontSize:12,marginBottom:10}}>{err}</div>}
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={saveLead} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                  {ed?'Save Changes':'Save'}
+                </button>
+                <button onClick={()=>setOpen(false)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+                {ed&&<button onClick={()=>{setArchiveModal(ed);setOpen(false)}} style={{padding:'11px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── LOG CONTACT MODAL ─────────────────────────────── */}
+      {contactModal&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setContactModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:28,margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact — {contactModal.name}</div>
+            <div style={{fontSize:10,color:'var(--text4)',marginBottom:18}}>{contactModal.stage} · HxL {hxl(contactModal.hunger,contactModal.looking)} · {contactModal.primary_driver||contactModal.source}</div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Outcome</div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
+                {OUTCOMES.map(o=>(
+                  <button key={o} onClick={()=>{
+                    const sugg=suggestFollowUpDays(o,7)
+                    const d=new Date();d.setDate(d.getDate()+sugg.days)
+                    setContactLog(p=>({...p,outcome:o,nextAction:ACTION_BY_OUTCOME[o]||p.nextAction,nextDate:d.toISOString().slice(0,10),rationale:sugg.rationale}))
+                  }}
+                    style={{padding:'6px 12px',borderRadius:'var(--r)',border:`1px solid ${contactLog.outcome===o?GOLD:'var(--br)'}`,background:contactLog.outcome===o?'rgba(200,162,74,0.15)':'var(--s2)',color:contactLog.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:contactLog.outcome===o?700:400}}>
+                    {o}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Objection</div>
+              <select value={contactLog.objection} onChange={e=>setContactLog(p=>({...p,objection:e.target.value}))} style={SEL}>
+                {OBJECTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Notes</div>
+              <textarea value={contactLog.notes} onChange={e=>setContactLog(p=>({...p,notes:e.target.value}))} rows={3} placeholder="What happened? Key moments, commitments…" style={{...INP,resize:'vertical' as const}}/>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
+              <div>
+                <div style={SL}>Next Action</div>
+                <select value={contactLog.nextAction} onChange={e=>setContactLog(p=>({...p,nextAction:e.target.value}))} style={SEL}>
+                  {NEXT_ACTS.map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={SL}>Next Date</div>
+                <input type="date" value={contactLog.nextDate} onChange={e=>setContactLog(p=>({...p,nextDate:e.target.value}))} style={INP}/>
+              </div>
+            </div>
+            {contactLog.rationale&&<div style={{fontSize:11,color:'var(--text4)',fontStyle:'italic',marginBottom:18,marginTop:-10}}>{contactLog.rationale}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={logContact} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save Log</button>
+              <button onClick={()=>setContactModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── BOOK PF MODAL ─────────────────────────────────── */}
+      {bookPFModal&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setBookPFModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Book PF → {bookPFModal.name}</div>
+            <div style={{fontSize:11,color:'var(--text3)',marginBottom:20,lineHeight:1.6}}>
+              This will create a Candidate record for {bookPFModal.name} and remove them from Pipeline. HxL score {hxl(bookPFModal.hunger,bookPFModal.looking)} carries over.
+            </div>
+            {bookPFModal.primary_driver&&<div style={{padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:20,fontSize:11,color:GOLD}}>Driver: {bookPFModal.primary_driver}{bookPFModal.pain_point?` · "${bookPFModal.pain_point}"`:''}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={bookPF} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>🚀 Confirm — Book PF</button>
+              <button onClick={()=>setBookPFModal(null)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PRE-CALL BRIEF MODAL ──────────────────────────── */}
+      {briefModal&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setBriefModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:460,padding:28,margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,color:GOLD,marginBottom:4}}>Pre-Call Brief</div>
+            <div style={{fontSize:12,color:'var(--text4)',marginBottom:16}}>{briefModal.lead.name} · {briefModal.lead.stage} · HxL {hxl(briefModal.lead.hunger,briefModal.lead.looking)}</div>
+            {briefModal.loading
+              ?<div style={{fontSize:13,color:'var(--text3)',fontStyle:'italic',padding:'20px 0'}}>Generating…</div>
+              :<div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8,whiteSpace:'pre-wrap' as const}}>{briefModal.text}</div>
+            }
+            <div style={{display:'flex',gap:8,marginTop:20}}>
+              {!briefModal.loading&&<button onClick={()=>getPreCallBrief(briefModal.lead)} style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:'rgba(200,162,74,0.08)',color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>↻ Refresh</button>}
+              <button onClick={()=>setBriefModal(null)} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ARCHIVED VIEW ─────────────────────────────────── */}
+      {view==='archived'&&(
+        <div>
+          {/* Reason filter pills */}
+          {archiveReasons.length>1&&(
+            <div style={{display:'flex',gap:6,marginBottom:12,overflowX:'auto' as const,paddingBottom:4}}>
+              {archiveReasons.map(r=>{
+                const isActive=archiveReasonFilter===r
+                return(
+                  <button key={r} onClick={()=>setArchiveReasonFilter(r)}
+                    style={{padding:'5px 12px',borderRadius:999,border:`1px solid ${isActive?RED:'var(--br)'}`,background:isActive?'rgba(224,85,85,0.1)':'var(--s1)',color:isActive?RED:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:isActive?700:400,flexShrink:0,whiteSpace:'nowrap' as const}}>
+                    {r==='all'?`All (${archived.length})`:r}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {archived.length===0
+            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No archived leads</div>
+            :(
+              <div>
+                <div style={{fontSize:11,color:'var(--text4)',marginBottom:12}}>{filteredArchive.length} lead{filteredArchive.length===1?'':'s'}</div>
+                {filteredArchive.map(l=>{
+                  const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['New']
+                  return(
+                    <div key={l.id} style={{...CARD,marginBottom:8,opacity:0.85}}>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:700,marginBottom:3}}>{l.name}</div>
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
+                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{l.stage}</span>
+                            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.1)',color:RED}}>{l.archived_reason||'Archived'}</span>
+                            <span style={{fontSize:10,color:'var(--text4)'}}>{l.source}</span>
+                          </div>
+                        </div>
+                        <div className="mono" style={{fontSize:18,fontWeight:800,color:'var(--text4)',flexShrink:0,marginLeft:8}}>{hxl(l.hunger,l.looking)}</div>
+                      </div>
+                      {l.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>"{l.notes.slice(0,80)}"</div>}
+                      <div style={{display:'flex',gap:6}}>
+                        <button onClick={()=>restoreLead(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>↩ Restore</button>
+                        <button onClick={()=>deleteLead(l.id)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Delete</button>
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Re-engagement queue */}
+                {reEngageLeads.length>0&&(
+                  <div style={{marginTop:20}}>
+                    <div style={{fontSize:12,fontWeight:700,color:GOLD,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+                      ↩ Ready to re-engage? <span style={{fontSize:10,fontWeight:400,color:'var(--text4)'}}>Wrong timing · 90+ days</span>
+                    </div>
+                    {reEngageLeads.map(l=>(
+                      <div key={l.id} style={{...CARD,marginBottom:8,borderLeft:`3px solid ${GOLD}`,opacity:0.9}}>
+                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:700,marginBottom:2}}>{l.name}</div>
+                            <div style={{fontSize:10,color:'var(--text4)'}}>{daysSince(l.updated_at)}d ago · {l.source}</div>
+                          </div>
+                          <button onClick={()=>restoreLead(l)} style={{padding:'7px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>↩ Restore</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+        </div>
+      )}
+
+      {/* ── ARCHIVE MODAL ─────────────────────────────────── */}
       {archiveModal&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',backdropFilter:'blur(8px)'}}>
-          <div style={{background:'var(--s1)',padding:20,borderRadius:'var(--r3)',maxWidth:400}}>
-            <div style={{fontSize:14,fontWeight:700,marginBottom:12}}>Archive {archiveModal.name}?</div>
-            <div style={{marginBottom:16}}>
-              {['Not interested','No time','Wrong fit','Joined another opportunity','Lost contact','Other'].map(r=>(
-                <button key={r} onClick={async()=>{await archiveLead(archiveModal,r);setArchiveModal(null)}} style={{display:'block',width:'100%',padding:'8px 12px',marginBottom:6,textAlign:'left' as const,borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
-                  {r}
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setArchiveModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4,color:RED}}>Archive — {archiveModal.name}</div>
+            <div style={{fontSize:11,color:'var(--text4)',marginBottom:20}}>Select a reason:</div>
+            <div style={{display:'flex',flexDirection:'column' as const,gap:8,marginBottom:20}}>
+              {[
+                {r:'Not interested',l:'Not interested'},
+                {r:'Wrong timing',l:'Wrong timing — follow up later'},
+                {r:'No show x3',l:'No show ×3'},
+                {r:'Lost contact',l:'Lost contact'},
+                {r:'Converted to candidate',l:'Converted to candidate'},
+                {r:'Other',l:'Other'},
+              ].map(x=>(
+                <button key={x.r} onClick={()=>{archiveLead(archiveModal,x.r);setArchiveModal(null)}}
+                  style={{padding:'10px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,textAlign:'left' as const,transition:'background 0.15s'}}>
+                  {x.l}
                 </button>
               ))}
             </div>
-            <button onClick={()=>setArchiveModal(null)} style={{width:'100%',padding:'8px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+            <button onClick={()=>setArchiveModal(null)} style={{width:'100%',padding:'10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
           </div>
         </div>
       )}
+
+      {/* ── FLOATING + ADD LEAD BUTTON ────────────────────── */}
+      <button onClick={openAdd}
+        style={{position:'fixed',bottom:24,right:24,zIndex:100,padding:'13px 20px',borderRadius:999,border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:800,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:14,boxShadow:'0 4px 20px rgba(200,162,74,0.4)'}}>
+        + Add Lead
+      </button>
+
     </div>
   )
 }
