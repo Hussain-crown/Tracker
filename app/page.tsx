@@ -450,7 +450,7 @@ export default function TrackPage(){
         })()}
 
         {tab==='habits'&&<Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>}
-        {tab==='pipeline'&&<Pipeline/>}
+        {tab==='pipeline'&&<Pipeline iboNumber={member?.ibo_number||''}/>}
       </div>
       {tab==='candidates'&&(
         <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px'}}>
