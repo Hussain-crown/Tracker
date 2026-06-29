@@ -49,6 +49,20 @@ function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en
 function waLink(l:Lead){const n=(l.phone||l.contact||'').replace(/\D/g,'');return n?`https://wa.me/${n.startsWith('0')?'61'+n.slice(1):n}`:null}
 function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'New',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
 
+function parseCSV(text:string){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim())
+  if(lines.length<2)return{headers:[] as string[],rows:[] as string[][]}
+  const parse=(row:string)=>row.split(',').map(c=>c.trim().replace(/^"|"$/g,''))
+  return{headers:parse(lines[0]),rows:lines.slice(1).map(parse)}
+}
+const CSV_FIELD_MAP:Record<string,keyof Lead>={
+  name:'name','full name':'name',fullname:'name',
+  phone:'phone',mobile:'phone',
+  instagram:'instagram',ig:'instagram',
+  source:'source',stage:'stage',notes:'notes',
+  contact:'contact','contact method':'contact',
+}
+
 function todayStr(){return new Date().toISOString().slice(0,10)}
 function daysFromNow(n:number){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
 
@@ -203,6 +217,9 @@ export default function Pipeline(){
   const [banner,setBanner]             = useState<{type:'error'|'success';msg:string}|null>(null)
   const [noShowFilter,setNoShowFilter] = useState(false)
   const [archiveReasonFilter,setArchiveReasonFilter] = useState<string>('all')
+  const [dragOver,setDragOver]         = useState(false)
+  const [csvModal,setCsvModal]         = useState<{headers:string[];rows:string[][];mapping:Record<number,keyof Lead|''>}|null>(null)
+  const [csvProgress,setCsvProgress]   = useState<{done:number;total:number;skipped:number}|null>(null)
 
   useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs() },[]) // eslint-disable-line
 
@@ -420,6 +437,48 @@ export default function Pipeline(){
     }catch{setBriefModal(p=>p?{...p,text:'Failed.',loading:false}:null)}
   }
 
+  function handleDragOver(e:React.DragEvent){e.preventDefault();setDragOver(true)}
+  function handleDragLeave(e:React.DragEvent){if(!e.currentTarget.contains(e.relatedTarget as Node))setDragOver(false)}
+  function handleDrop(e:React.DragEvent){
+    e.preventDefault();setDragOver(false)
+    const file=e.dataTransfer.files[0]
+    if(file)openCSVFile(file)
+  }
+  function openCSVFile(file:File){
+    const reader=new FileReader()
+    reader.onload=(ev)=>{
+      const text=ev.target?.result as string
+      const{headers,rows}=parseCSV(text)
+      if(!headers.length)return
+      const mapping:Record<number,keyof Lead|''>= {}
+      headers.forEach((h,i)=>{mapping[i]=CSV_FIELD_MAP[h.toLowerCase().trim()]||''})
+      setCsvModal({headers,rows,mapping})
+    }
+    reader.readAsText(file)
+  }
+  async function importCSV(){
+    if(!csvModal||!userId)return
+    const{rows,mapping}=csvModal
+    let done=0,skipped=0
+    setCsvProgress({done:0,total:rows.length,skipped:0})
+    for(const row of rows){
+      const base=blankLead() as Lead
+      let hasName=false
+      Object.entries(mapping).forEach(([colStr,field])=>{
+        if(!field)return
+        const val=(row[parseInt(colStr)]||'').trim()
+        if(val)(base as any)[field]=val
+        if(field==='name'&&val)hasName=true
+      })
+      if(!hasName){skipped++;done++;setCsvProgress({done,total:rows.length,skipped});continue}
+      if(base.phone&&myLeads.some(l=>l.phone&&l.phone.replace(/\D/g,'')===base.phone.replace(/\D/g,''))){skipped++;done++;setCsvProgress({done,total:rows.length,skipped});continue}
+      const l:Lead={...base,id:uid(),user_id:userId,score:hxl(base.hunger??5,base.looking??5),created_at:now(),updated_at:now()}
+      await upsertLead(l)
+      done++;setCsvProgress({done,total:rows.length,skipped})
+    }
+    setTimeout(()=>{setCsvModal(null);setCsvProgress(null)},1500)
+  }
+
   const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}
 
   // ── helper to render a group section ──
@@ -434,7 +493,8 @@ export default function Pipeline(){
   }
 
   return(
-    <div style={{animation:'fade-in 0.3s ease',paddingBottom:100}}>
+    <div style={{animation:'fade-in 0.3s ease',paddingBottom:100}}
+      onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
 
       {/* Status banner */}
       {banner&&(
@@ -988,11 +1048,68 @@ export default function Pipeline(){
         </div>
       )}
 
-      {/* ── FLOATING + ADD LEAD BUTTON ────────────────────── */}
+      {/* ── FLOATING BUTTONS ──────────────────────────────── */}
       <button onClick={openAdd}
         style={{position:'fixed',bottom:24,right:24,zIndex:100,padding:'13px 20px',borderRadius:999,border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:800,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:14,boxShadow:'0 4px 20px rgba(200,162,74,0.4)'}}>
         + Add Lead
       </button>
+      <button onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='.csv';i.onchange=(e)=>{const f=(e.target as HTMLInputElement).files?.[0];if(f)openCSVFile(f)};i.click()}}
+        style={{position:'fixed',bottom:24,right:148,zIndex:100,padding:'13px 16px',borderRadius:999,border:`1px solid ${BLUE}50`,background:'var(--s1)',color:BLUE,fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13,boxShadow:'0 2px 10px rgba(91,155,213,0.2)'}}>
+        ↑ CSV
+      </button>
+
+      {/* ── DRAG OVERLAY ──────────────────────────────────── */}
+      {dragOver&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(91,155,213,0.06)',border:`2px dashed ${BLUE}`,zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+          <div style={{fontSize:20,fontWeight:700,color:BLUE,background:'var(--s1)',padding:'18px 32px',borderRadius:'var(--r3)',border:`1px solid ${BLUE}40`}}>Drop CSV to import leads</div>
+        </div>
+      )}
+
+      {/* ── CSV UPLOAD MODAL ──────────────────────────────── */}
+      {csvModal&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget&&!csvProgress)setCsvModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:540,padding:28,margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Import Leads from CSV</div>
+            <div style={{fontSize:11,color:'var(--text4)',marginBottom:18}}>{csvModal.rows.length} rows · Map columns then confirm</div>
+            <div style={{marginBottom:16}}>
+              <div style={SL}>Column Mapping</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {csvModal.headers.map((h,i)=>(
+                  <div key={i} style={{display:'flex',gap:6,alignItems:'center'}}>
+                    <span style={{fontSize:10,color:'var(--text3)',flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}} title={h}>{h}</span>
+                    <select value={csvModal.mapping[i]||''} onChange={e=>{const m={...csvModal.mapping,[i]:e.target.value as keyof Lead|''};setCsvModal(p=>p?{...p,mapping:m}:null)}}
+                      style={{...SEL,fontSize:10,padding:'4px 8px',flex:1}}>
+                      <option value="">Ignore</option>
+                      {(['name','phone','instagram','source','stage','notes','contact'] as (keyof Lead)[]).map(f=><option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{marginBottom:18,overflowX:'auto' as const}}>
+              <div style={SL}>Preview (first 5 rows)</div>
+              <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:10,color:'var(--text3)'}}>
+                <thead><tr>{csvModal.headers.map((h,i)=><th key={i} style={{padding:'4px 8px',textAlign:'left' as const,borderBottom:'1px solid var(--br)',color:'var(--text4)',fontWeight:600}}>{h}</th>)}</tr></thead>
+                <tbody>{csvModal.rows.slice(0,5).map((row,ri)=><tr key={ri}>{csvModal.headers.map((_,i)=><td key={i} style={{padding:'4px 8px',borderBottom:'1px solid var(--br)',maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{row[i]||''}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+            {csvProgress&&(
+              <div style={{marginBottom:14,padding:'10px 14px',background:'rgba(76,175,125,0.06)',border:`1px solid ${GREEN}30`,borderRadius:'var(--r)'}}>
+                <div style={{fontSize:12,color:GREEN,fontWeight:700,marginBottom:6}}>{csvProgress.done}/{csvProgress.total} processed{csvProgress.skipped>0?` · ${csvProgress.skipped} skipped`:''}</div>
+                <div style={{height:4,background:'var(--s3)',borderRadius:2,overflow:'hidden'}}><div style={{height:'100%',width:`${Math.round(csvProgress.done/csvProgress.total*100)}%`,background:GREEN,borderRadius:2,transition:'width 0.2s'}}/></div>
+              </div>
+            )}
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={importCSV} disabled={!!csvProgress}
+                style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${BLUE},#4a8ab0)`,color:'#fff',fontWeight:700,cursor:csvProgress?'wait':'pointer',fontFamily:"'Sora',sans-serif",fontSize:13,opacity:csvProgress?0.7:1}}>
+                {csvProgress?`Importing… ${csvProgress.done}/${csvProgress.total}`:`Import ${csvModal.rows.length} Lead${csvModal.rows.length===1?'':'s'}`}
+              </button>
+              <button onClick={()=>setCsvModal(null)} disabled={!!csvProgress}
+                style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:csvProgress?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",opacity:csvProgress?0.5:1}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )
