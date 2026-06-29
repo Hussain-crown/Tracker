@@ -16,7 +16,13 @@ export async function GET(req: Request) {
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (!member?.ibo_number) return NextResponse.json({ candidates: [], logs: [], iboNumber: '' })
+    // Admin fallback: if no team_members row, use ADMIN_IBO env var.
+    // Mirrors admin OS "My Candidates" filter: candidates with no _sponsor_ibo OR _sponsor_ibo === adminIbo.
+    const iboNumber = member?.ibo_number || ''
+    const adminIbo = process.env.ADMIN_IBO || ''
+    const isAdmin = !iboNumber && !!adminIbo && user.email?.toLowerCase() === (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase()
+
+    if (!iboNumber && !isAdmin) return NextResponse.json({ candidates: [], logs: [], iboNumber: '' })
 
     const { data: allCandidates } = await sbAdmin
       .from('candidates')
@@ -26,7 +32,12 @@ export async function GET(req: Request) {
     const candidates = (allCandidates || []).filter((c: any) => {
       try {
         const notes = JSON.parse(c.interview_notes || '{}')
-        return notes._sponsor_ibo === member.ibo_number
+        const sponsor = notes._sponsor_ibo || ''
+        if (isAdmin) {
+          // Mirror admin OS "My Candidates": unassigned OR assigned to admin IBO
+          return !sponsor || sponsor === adminIbo
+        }
+        return sponsor === iboNumber
       } catch {
         return false
       }
@@ -44,7 +55,7 @@ export async function GET(req: Request) {
       logs = data || []
     }
 
-    return NextResponse.json({ candidates, logs, iboNumber: member.ibo_number })
+    return NextResponse.json({ candidates, logs, iboNumber: isAdmin ? adminIbo : iboNumber })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
