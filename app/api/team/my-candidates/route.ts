@@ -34,8 +34,8 @@ export async function GET(req: Request) {
         const notes = JSON.parse(c.interview_notes || '{}')
         const sponsor = notes._sponsor_ibo || ''
         if (isAdmin) {
-          // Mirror admin OS "My Candidates": unassigned OR assigned to admin IBO
-          return !sponsor || sponsor === adminIbo
+          // Mirror admin OS "My Candidates": strictly assigned to admin IBO
+          return sponsor === adminIbo
         }
         return sponsor === iboNumber
       } catch {
