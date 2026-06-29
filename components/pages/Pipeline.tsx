@@ -6,7 +6,7 @@ import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 
 // ── CONSTANTS ─────────────────────────────────────────────
-const STAGES = ['New','Connected','MPA','Catch-Up','DTM','PF'] as const
+const STAGES = ['New','Connected','MPA','Catch-Up','DTM'] as const
 type Stage = typeof STAGES[number]
 
 const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
@@ -14,8 +14,7 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
   'Connected': {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'MPA'},
   'MPA':       {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:'Catch-Up'},
   'Catch-Up':  {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'DTM'},
-  'DTM':       {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:'PF'},
-  'PF':        {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
+  'DTM':       {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
 }
 
 const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
@@ -39,7 +38,7 @@ function healthScore(l:Lead, lastContactDate:string):number{
   const hxlS=Math.min(100,hxl(l.hunger,l.looking))
   const daysSinceContact=lastContactDate?Math.floor((Date.now()-new Date(lastContactDate).getTime())/86400000):daysSince(l.updated_at)
   const recency=Math.max(0,100-daysSinceContact*10)
-  const stageDepth=(['New','Connected','MPA','Catch-Up','DTM','PF'].indexOf(l.stage as Stage)+1)*16
+  const stageDepth=(['New','Connected','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*16
   return Math.round(hxlS*0.5+recency*0.3+stageDepth*0.2)
 }
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
@@ -98,13 +97,12 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
   const isDTM=l.stage==='DTM'
-  const isPF=l.stage==='PF'
   const isCandidate=candidates.some(c=>c.name===l.name)
   const wa=waLink(l)
   const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
   // Days in current stage (from last stage-change log or created_at)
-  const stageChangeLogs=logs.filter(c=>['connected','mpa','catch_up','dtm','pf','pf_booked','lead_created'].includes(c.event_type))
+  const stageChangeLogs=logs.filter(c=>['connected','mpa','catch_up','dtm','lead_created'].includes(c.event_type))
   const stageChangeDate=stageChangeLogs[0]?.created_at??l.created_at
   const daysInStage=Math.floor((Date.now()-new Date(stageChangeDate).getTime())/86400000)
   const stageAlertColor=daysInStage>=21?RED:daysInStage>=14?GOLD:null
@@ -182,7 +180,7 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
             → {STAGE_CFG[l.stage as Stage]?.next}
           </button>
         )}
-        {isPF&&!isCandidate&&(
+        {isDTM&&!isCandidate&&(
           <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
             🚀 Convert to Candidate
           </button>
@@ -730,7 +728,7 @@ export default function Pipeline(){
 
               {/* Timeline — stage-change events */}
               {(()=>{
-                const timelineLogs=leadLogs(drawerLead.id).filter(l=>['connected','mpa','catch_up','dtm','pf_booked','lead_created'].includes(l.event_type))
+                const timelineLogs=leadLogs(drawerLead.id).filter(l=>['connected','mpa','catch_up','dtm','lead_created'].includes(l.event_type))
                 if(timelineLogs.length===0)return null
                 return(
                   <div style={{marginTop:16}}>
@@ -922,13 +920,13 @@ export default function Pipeline(){
       {bookPFModal&&(
         <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setBookPFModal(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Book PF → {bookPFModal.name}</div>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Convert to Candidate → {bookPFModal.name}</div>
             <div style={{fontSize:11,color:'var(--text3)',marginBottom:20,lineHeight:1.6}}>
-              This will create a Candidate record for {bookPFModal.name} and remove them from Pipeline. HxL score {hxl(bookPFModal.hunger,bookPFModal.looking)} carries over.
+              This will create a Candidate record from this DTM lead. HxL score {hxl(bookPFModal.hunger,bookPFModal.looking)}, driver, and pain point carry over.
             </div>
             {bookPFModal.primary_driver&&<div style={{padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:20,fontSize:11,color:GOLD}}>Driver: {bookPFModal.primary_driver}{bookPFModal.pain_point?` · "${bookPFModal.pain_point}"`:''}</div>}
             <div style={{display:'flex',gap:8}}>
-              <button onClick={bookPF} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>🚀 Confirm — Book PF</button>
+              <button onClick={bookPF} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>🚀 Confirm — Convert to Candidate</button>
               <button onClick={()=>setBookPFModal(null)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
             </div>
           </div>
