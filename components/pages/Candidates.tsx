@@ -1,449 +1,692 @@
 'use client'
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { buildPreCallBrief } from '@/lib/aiText'
 import type { Candidate, ContactLog } from '@/lib/stores/types'
 
-const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
-const BLUE='#5B9BD5'
+// ── STAGES ────────────────────────────────────────────────
+const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer Questions','Offer Call'] as const
+type Stage = typeof STAGES[number]
+const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null;nextAction:string}> = {
+  'Pre-Filter':     {color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'MG1',             nextAction:'Run Pre-Filter call'},
+  'MG1':            {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'MG2',             nextAction:'Run MG1'},
+  'MG2':            {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:'FU1',             nextAction:'Run MG2'},
+  'FU1':            {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'FU2',             nextAction:'First follow-up call'},
+  'FU2':            {color:'var(--gold)',   bg:'rgba(200,162,74,0.10)', next:'FU3',             nextAction:'Second follow-up call'},
+  'FU3':            {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:'Offer Questions', nextAction:'Final decision call'},
+  'Offer Questions':{color:'var(--orange)', bg:'rgba(232,145,58,0.10)', next:'Offer Call',      nextAction:'Complete offer questions'},
+  'Offer Call':     {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:null,              nextAction:'Run offer call'},
+}
+const FU_STAGES: Stage[] = ['FU1','FU2','FU3']
+const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Ghosted','Chose another opportunity','Other']
 
-const STAGE_COLORS: Record<string,string> = {
-  'Pre-Filter': BLUE,
-  'MG1': '#9B5BD5',
-  'MG2': '#4ECDC4',
-  'FU1': GOLD,
-  'FU2': GOLD,
-  'FU3': '#E8913A',
-  'Offer Questions': '#E8913A',
-  'Offer Call': GREEN,
+// ── STYLE CONSTANTS ───────────────────────────────────────
+const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
+const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'  // eslint-disable-line @typescript-eslint/no-unused-vars
+const ORANGE='var(--orange)'
+const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
+const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase',fontWeight:700,marginBottom:6}
+const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box'}
+const OVERLAY:React.CSSProperties={position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)',overflowY:'auto'}
+
+// ── HELPERS ───────────────────────────────────────────────
+function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime())/86400000):999}
+function fmtDate(d:string){return new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'Australia/Brisbane'})}
+function normaliseStage(s:string):Stage{
+  const map:Record<string,Stage>={'Pre-Filter':'Pre-Filter','PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1','MG1':'MG1','MG2 Booked':'MG2','MG2 Completed':'MG2','MG2':'MG2','FU1':'FU1','FU2':'FU2','FU3':'FU3','Follow-Up':'FU1','Offer Questions':'Offer Questions','Offer':'Offer Call','Offer Call':'Offer Call','Review':'Offer Call'}
+  return map[s]??'Pre-Filter'
+}
+function getNotes(c:Candidate):string{try{const p=JSON.parse(c.interview_notes||'{}');return p.__notes??''}catch{return c.interview_notes||''}}
+function getLaunchedAt(c:Candidate):string{try{return JSON.parse(c.interview_notes||'{}')._launched_at??''}catch{return''}}
+function getStageHistory(c:Candidate):{stage:string;date:string}[]{try{return JSON.parse(c.interview_notes||'{}')._stage_history??[]}catch{return[]}}
+function getNoShows(c:Candidate):number{try{return JSON.parse(c.interview_notes||'{}')._noshows??0}catch{return 0}}
+function getNextMeeting(c:Candidate):{type:string;start_iso:string}|null{try{return JSON.parse(c.interview_notes||'{}')._next_meeting??null}catch{return null}}
+
+function healthScore(c:Candidate, lastContact:string):number{
+  const hxl=Math.min(100,(c.hxl_score??((c.hunger??5)*(c.looking??5))))
+  const daysSinceContact=lastContact?daysSince(lastContact):daysSince(c.updated_at)
+  const recency=Math.max(0,100-daysSinceContact*14)
+  const stageDepth=(STAGES.indexOf(normaliseStage(c.stage))+1)*12.5
+  return Math.round(hxl*0.5+recency*0.3+stageDepth*0.2)
+}
+function healthColor(s:number){return s>=70?GREEN:s>=45?GOLD:RED}
+
+const TZ='Australia/Brisbane'
+function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
+function fmtTime(iso:string){return new Date(iso).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:TZ})}
+
+type Tab = 'focus'|'active'|'funnel'|'launched'|'archive'
+type DetailTab = 'profile'|'history'|'timeline'|'brief'
+
+// ── CANDIDATE CARD ────────────────────────────────────────
+interface CardProps{
+  c:Candidate
+  contactLogs:ContactLog[]
+  scores:Record<string,number>
+  onView:(c:Candidate)=>void
+  nextDue?:string
+  touchCount?:number
+}
+function CandCard({c,contactLogs,scores,onView,nextDue,touchCount}:CardProps){
+  const todayStr=new Date().toISOString().slice(0,10)
+  const stage=normaliseStage(c.stage)
+  const cfg=STAGE_CFG[stage]
+  const score=scores[c.id]??0
+  const logs=contactLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
+  const lastLog=logs[0]
+  const daysInStage=daysSince(lastLog?.created_at??c.created_at)
+  const stageAlertColor=daysInStage>=14?RED:daysInStage>=7?GOLD:null
+  const isStalling=FU_STAGES.includes(stage)&&daysSince(lastLog?.created_at??c.updated_at)>=21
+  const outColor:{[k:string]:string}={Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}
+  const objection=(lastLog as any)?.objection
+  const nextMeeting=getNextMeeting(c)
+  const waHref=c.phone?`https://wa.me/${c.phone.replace(/\D/g,'')}`:''
+
+  return(
+    <div style={{...CARD,borderLeft:`3px solid ${cfg.color}`}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:700,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
+            <span>{c.name}</span>
+            {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:outColor[lastLog.outcome]??'var(--text4)',display:'inline-block',flexShrink:0}}/>}
+          </div>
+          <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{stage}</span>
+            {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'15',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in stage</span>}
+            {isStalling&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.12)',color:RED,fontWeight:700}}>⚠ Stalling</span>}
+            {getNoShows(c)>0&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(232,145,58,0.15)',color:ORANGE,fontWeight:700}}>✗ {getNoShows(c)} no-show{getNoShows(c)>1?'s':''}</span>}
+            {nextDue&&(()=>{
+              const overdue=nextDue<todayStr;const dueToday=nextDue===todayStr
+              const col=overdue?RED:dueToday?GOLD:'var(--text4)'
+              const label=overdue?`${daysSince(nextDue)}d overdue`:dueToday?'Due today':`Due ${fmtDate(nextDue)}`
+              return<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${col}15`,color:col,fontWeight:overdue||dueToday?700:400}}>{label}</span>
+            })()}
+            {touchCount!==undefined&&touchCount>0&&<span style={{fontSize:10,color:'var(--text4)'}}>{touchCount}c</span>}
+          </div>
+        </div>
+        <div style={{textAlign:'right',flexShrink:0,marginLeft:8}}>
+          <div className="mono" style={{fontSize:20,fontWeight:800,color:healthColor(score),lineHeight:1}}>{score}</div>
+          <div style={{fontSize:8,color:'var(--text4)'}}>health</div>
+        </div>
+      </div>
+      <div style={{fontSize:11,color:'var(--text3)',marginBottom:8,fontWeight:600}}>→ {cfg.nextAction}</div>
+      {nextMeeting&&<div style={{fontSize:10,color:GOLD,marginBottom:6,padding:'2px 8px',background:'rgba(200,162,74,0.1)',borderRadius:'var(--r)',display:'inline-block'}}>📅 {nextMeeting.type} booked · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</div>}
+      {objection&&objection!=='None'&&<div style={{fontSize:10,color:RED,marginBottom:6,padding:'2px 8px',background:'rgba(224,85,85,0.08)',borderRadius:'var(--r)',display:'inline-block'}}>Objection: {objection}</div>}
+      {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,70)}{c.pain_point.length>70?'…':''}"</div>}
+      {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+        <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+        {waHref&&<a href={waHref} target="_blank" rel="noopener noreferrer" style={{padding:'7px 10px',borderRadius:'var(--r)',border:'1px solid rgba(37,211,102,0.3)',background:'transparent',color:'#25D366',textDecoration:'none',fontSize:11}}>WA</a>}
+      </div>
+    </div>
+  )
 }
 
-const STAGE_MAP: Record<string,string> = {
-  'Pre-Filter': 'Pre-Filter', 'PF Completed': 'Pre-Filter',
-  'MG1 Booked': 'MG1', 'MG1 Completed': 'MG1', 'MG1': 'MG1',
-  'MG2 Booked': 'MG2', 'MG2 Completed': 'MG2', 'MG2': 'MG2',
-  'FU1': 'FU1', 'FU2': 'FU2', 'FU3': 'FU3', 'Follow-Up': 'FU1',
-  'Offer Questions': 'Offer Questions', 'Offer': 'Offer Call', 'Offer Call': 'Offer Call',
-}
+// ── MAIN COMPONENT ────────────────────────────────────────
+export default function Candidates(){
+  const [candidates,setCandidates] = useState<Candidate[]>([])
+  const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
+  const [loading,setLoading]       = useState(true)
+  const [tab,setTab]               = useState<Tab>('focus')
+  const [search,setSearch]         = useState('')
+  const [stageFilter,setStageFilter] = useState('all')
+  const [archiveFilter,setArchiveFilter] = useState('all')
+  const [detail,setDetail]         = useState<Candidate|null>(null)
+  const [detailTab,setDetailTab]   = useState<DetailTab>('profile')
+  const [briefText,setBriefText]   = useState('')
+  const [briefLoading,setBriefLoading] = useState(false)
 
-const STAGE_ORDER = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer Questions','Offer Call']
-
-function normStage(s: string) { return STAGE_MAP[s] ?? 'Pre-Filter' }
-function daysSince(d: string) { return d ? Math.floor((Date.now() - new Date(d).getTime()) / 86400000) : 999 }
-function fmtDate(d: string) {
-  if (!d) return ''
-  return new Date(d).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'Australia/Brisbane' })
-}
-
-function healthScore(c: Candidate): number {
-  if (typeof c.hxl_score === 'number') return c.hxl_score
-  const h = c.hunger ?? 5; const l = c.looking ?? 5
-  return Math.min(100, Math.round(h * l))
-}
-
-function scoreColor(s: number) {
-  if (s >= 70) return GREEN
-  if (s >= 40) return GOLD
-  return RED
-}
-
-function parseNotes(raw: string): Record<string,any> {
-  try { return JSON.parse(raw || '{}') } catch { return {} }
-}
-
-interface Props { iboNumber: string }
-
-type SubTab = 'focus'|'active'|'funnel'|'launched'|'archive'
-type DrawerTab = 'profile'|'history'
-
-export default function Candidates({ iboNumber }: Props) {
-  const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [logsMap, setLogsMap]       = useState<Record<string, ContactLog[]>>({})
-  const [loading, setLoading]       = useState(true)
-  const [tab, setTab]               = useState<SubTab>('focus')
-  const [selected, setSelected]     = useState<Candidate|null>(null)
-  const [drawerTab, setDrawerTab]   = useState<DrawerTab>('profile')
-
-  useEffect(() => {
-    async function load() {
+  useEffect(()=>{
+    async function load(){
       setLoading(true)
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        const token = session?.access_token || ''
-        const resp = await fetch('/api/team/my-candidates', {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        if (!resp.ok) return
-        const { candidates: data, logs } = await resp.json()
-        setCandidates((data || []) as Candidate[])
-        const map: Record<string, ContactLog[]> = {}
-        for (const l of (logs || [])) {
-          if (!map[l.entity_id]) map[l.entity_id] = []
-          map[l.entity_id].push(l as ContactLog)
-        }
-        setLogsMap(map)
-      } catch {}
-      setLoading(false)
+      try{
+        const {data:{session}}=await supabase.auth.getSession()
+        const token=session?.access_token||''
+        const resp=await fetch('/api/team/my-candidates',{headers:{Authorization:`Bearer ${token}`}})
+        if(!resp.ok)return
+        const {candidates:data,logs}=await resp.json()
+        setCandidates((data||[]) as Candidate[])
+        setAllLogs((logs||[]) as ContactLog[])
+      }finally{setLoading(false)}
     }
     load()
-  }, [iboNumber]) // eslint-disable-line
+  },[])
 
-  const active   = useMemo(() => candidates.filter(c => c.status === 'active'), [candidates])
-  const launched = useMemo(() => candidates.filter(c => c.status === 'launched'), [candidates])
-  const archived = useMemo(() => candidates.filter(c => c.status === 'disqualified' || c.status === 'archived'), [candidates])
+  const todayStr=new Date().toISOString().slice(0,10)
+  const in3Days=new Date(Date.now()+3*86400000).toISOString().slice(0,10)
+  const weekAgo=new Date(Date.now()-7*86400000).toISOString()
 
-  const focus = useMemo(() => active.filter(c => {
-    const logs = (logsMap[c.id] || []).sort((a,b) => b.created_at.localeCompare(a.created_at))
-    const daysSinceContact = daysSince(logs[0]?.created_at ?? c.updated_at)
-    const nextDue = logs.find(l => l.next_date)?.next_date
-    return (nextDue && nextDue < new Date().toISOString().slice(0,10)) || daysSinceContact >= 7
-  }), [active, logsMap])
+  const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
+  const archived = useMemo(()=>candidates.filter(c=>c.status==='disqualified'),[candidates])
+  const launched = useMemo(()=>candidates.filter(c=>c.status==='launched'),[candidates])
 
-  // Intelligence strip counts
-  const hotCount    = active.filter(c => healthScore(c) >= 70).length
-  const stallingCnt = active.filter(c => {
-    const logs = logsMap[c.id] || []
-    const last = [...logs].sort((a,b) => b.created_at.localeCompare(a.created_at))[0]
-    return daysSince(last?.created_at ?? c.updated_at) >= 14
-  }).length
-  const atOfferCnt  = active.filter(c => {
-    const s = normStage(c.stage)
-    return s === 'Offer Call' || s === 'Offer Questions'
-  }).length
+  const scores=useMemo(()=>{
+    const m:Record<string,number>={}
+    candidates.forEach(c=>{
+      const last=allLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
+      m[c.id]=healthScore(c,last?.created_at??c.updated_at)
+    })
+    return m
+  },[candidates,allLogs])
 
-  const TABS: { id: SubTab; label: string }[] = [
-    { id: 'focus',    label: `Focus · ${focus.length}` },
-    { id: 'active',   label: `Active · ${active.length}` },
-    { id: 'funnel',   label: 'Funnel' },
-    { id: 'launched', label: `Launched · ${launched.length}` },
-    { id: 'archive',  label: `Archive · ${archived.length}` },
-  ]
+  const stageCounts=useMemo(()=>{const m:Record<string,number>={};STAGES.forEach(s=>{m[s]=active.filter(c=>normaliseStage(c.stage)===s).length});return m},[active])
 
-  function openDrawer(c: Candidate) { setSelected(c); setDrawerTab('profile') }
+  const nextDueMap=useMemo(()=>{
+    const m:Record<string,string>={}
+    candidates.forEach(c=>{
+      const nd=allLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at)).find(l=>l.next_date)?.next_date??''
+      if(nd)m[c.id]=nd
+    })
+    return m
+  },[candidates,allLogs])
 
-  if (loading) {
-    return (
-      <div style={{padding:'48px',textAlign:'center',color:'#555',fontSize:13}}>
-        Loading candidates…
-      </div>
-    )
+  const touchCountMap=useMemo(()=>{
+    const m:Record<string,number>={}
+    allLogs.forEach(l=>{m[l.entity_id]=(m[l.entity_id]||0)+1})
+    return m
+  },[allLogs])
+
+  const focusList=useMemo(()=>{
+    return active.filter(c=>{
+      const nd=nextDueMap[c.id]
+      return nd&&nd<=in3Days
+    }).sort((a,b)=>(nextDueMap[a.id]??'9999').localeCompare(nextDueMap[b.id]??'9999'))
+  },[active,nextDueMap,in3Days])
+
+  const weeklyDigest=useMemo(()=>{
+    const ids=new Set(candidates.map(c=>c.id))
+    return{
+      newCands:candidates.filter(c=>c.created_at>=weekAgo).length,
+      advances:allLogs.filter(l=>ids.has(l.entity_id)&&l.created_at>=weekAgo&&!['contacted','disqualified'].includes(l.event_type)).length,
+      dqs:allLogs.filter(l=>ids.has(l.entity_id)&&l.created_at>=weekAgo&&l.event_type==='disqualified').length,
+      launches:candidates.filter(c=>c.status==='launched'&&c.updated_at>=weekAgo).length,
+    }
+  },[candidates,allLogs,weekAgo])
+
+  const displayList=useMemo(()=>{
+    let l=active
+    if(search)l=l.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()))
+    if(stageFilter!=='all')l=l.filter(c=>normaliseStage(c.stage)===stageFilter)
+    return [...l].sort((a,b)=>{
+      const as=FU_STAGES.includes(normaliseStage(a.stage))&&daysSince(allLogs.filter(l=>l.entity_id===a.id)[0]?.created_at??a.updated_at)>=21
+      const bs=FU_STAGES.includes(normaliseStage(b.stage))&&daysSince(allLogs.filter(l=>l.entity_id===b.id)[0]?.created_at??b.updated_at)>=21
+      if(as!==bs)return as?-1:1
+      return (scores[b.id]??0)-(scores[a.id]??0)
+    })
+  },[active,search,stageFilter,scores,allLogs])
+
+  const funnel=useMemo(()=>{
+    const total=active.length||1
+    return STAGES.map((s,i)=>({
+      stage:s,count:stageCounts[s]||0,
+      pct:Math.round((stageCounts[s]||0)/total*100),
+      convRate:i>0?Math.round((stageCounts[s]||0)/((stageCounts[STAGES[i-1]]||0)||1)*100):100,
+      avgDays:(()=>{const inS=active.filter(c=>normaliseStage(c.stage)===s);return inS.length?Math.round(inS.reduce((a,c)=>a+daysSince(c.updated_at),0)/inS.length):0})()
+    }))
+  },[active,stageCounts])
+
+  const objectionBreakdown=useMemo(()=>{
+    const m:Record<string,number>={}
+    allLogs.filter(l=>(l as any).objection&&(l as any).objection!=='None').forEach(l=>{
+      const o=(l as any).objection as string;m[o]=(m[o]||0)+1
+    })
+    return Object.entries(m).sort((a,b)=>b[1]-a[1])
+  },[allLogs])
+
+  function openView(c:Candidate){setDetail(c);setDetailTab('profile');setBriefText('')}
+
+  async function getBrief(c:Candidate){
+    setBriefLoading(true);setBriefText('')
+    const logs=allLogs.filter(l=>l.entity_id===c.id).slice(0,5)
+    const stage=normaliseStage(c.stage)
+    try{
+      setBriefText(buildPreCallBrief({
+        name:c.name,stageLabel:stage,daysSinceContact:daysSince(c.updated_at),
+        driver:c.primary_driver,painPoint:c.pain_point,
+        metricLabel:'HxL',metricValue:c.hxl_score,
+        notes:getNotes(c).slice(0,200),
+        nextAction:STAGE_CFG[stage].nextAction,
+        recentOutcomes:logs.map(l=>l.outcome),
+      }))
+    }catch{setBriefText('Failed.')}
+    setBriefLoading(false)
   }
 
-  return (
-    <div style={{paddingBottom:80}}>
+  const cardProps={contactLogs:allLogs,scores,onView:openView}
+
+  if(loading)return<div style={{padding:'48px',textAlign:'center',color:'var(--text4)',fontSize:12}}>Loading candidates…</div>
+
+  return(
+    <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
+
       {/* Intelligence strip */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:14}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
         {[
-          { l:'Active',   v: active.length,  c: GREEN },
-          { l:'Hot 70+',  v: hotCount,        c: GOLD },
-          { l:'Stalling', v: stallingCnt,     c: RED },
-          { l:'At Offer', v: atOfferCnt,      c: '#9B5BD5' },
-        ].map(k => (
-          <div key={k.l} style={{background:'#0f0f17',border:`1px solid ${k.c}22`,borderRadius:10,padding:'10px 6px',textAlign:'center'}}>
-            <div style={{fontSize:20,fontWeight:800,color:k.c,lineHeight:1,fontFamily:'monospace'}}>{k.v}</div>
-            <div style={{fontSize:9,color:'#555',marginTop:3}}>{k.l}</div>
+          {l:'Active',v:active.length,c:GOLD},
+          {l:'Hot (70+)',v:active.filter(c=>(scores[c.id]??0)>=70).length,c:GREEN},
+          {l:'Stalling',v:active.filter(c=>FU_STAGES.includes(normaliseStage(c.stage))&&daysSince(allLogs.filter(l=>l.entity_id===c.id)[0]?.created_at??c.updated_at)>=21).length,c:RED},
+          {l:'At Offer',v:active.filter(c=>normaliseStage(c.stage)==='Offer Call').length,c:GREEN},
+        ].map(k=>(
+          <div key={k.l} style={{background:'var(--s1)',border:`1px solid ${k.c}20`,borderRadius:'var(--r2)',padding:'10px',textAlign:'center'}}>
+            <div className="mono" style={{fontSize:20,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div>
+            <div style={{fontSize:9,color:'var(--text4)',marginTop:3}}>{k.l}</div>
           </div>
         ))}
       </div>
 
-      {/* Sub-tabs */}
-      <div style={{display:'flex',overflowX:'auto',borderBottom:'1px solid #1f1f28',marginBottom:14}}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{padding:'8px 12px',border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',
-              fontSize:11,fontWeight:tab===t.id?700:400,
-              color:tab===t.id?GOLD:'#555',
-              borderBottom:`2px solid ${tab===t.id?GOLD:'transparent'}`,
-              whiteSpace:'nowrap',flexShrink:0,transition:'color 0.15s'}}>
-            {t.label}
+      {/* Weekly digest */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:14}}>
+        {[{l:'New',v:weeklyDigest.newCands,c:BLUE},{l:'Advances',v:weeklyDigest.advances,c:GREEN},{l:"DQ'd",v:weeklyDigest.dqs,c:RED},{l:'Launched',v:weeklyDigest.launches,c:GOLD}].map(k=>(
+          <div key={k.l} style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r)',padding:'8px',textAlign:'center'}}>
+            <div className="mono" style={{fontSize:16,fontWeight:700,color:k.c,lineHeight:1}}>{k.v}</div>
+            <div style={{fontSize:8,color:'var(--text4)',marginTop:2}}>{k.l} this week</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto'}}>
+        {([['focus','🎯 Focus'],['active',`Active (${active.length})`],['funnel','📊 Funnel'],['launched',`✅ Launched (${launched.length})`],['archive',`🗄 Archive (${archived.length})`]] as const).map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)}
+            style={{flex:1,padding:'8px 6px',borderRadius:'var(--r)',border:'none',background:tab===id?'var(--s3)':'transparent',color:tab===id?GOLD:'var(--text3)',fontSize:10,fontWeight:tab===id?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",transition:'all 0.15s',whiteSpace:'nowrap',flexShrink:0}}>
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Focus */}
-      {tab === 'focus' && (
-        focus.length === 0
-          ? <EmptyState msg={active.length === 0 ? 'No active candidates yet.' : 'All caught up — no overdue follow-ups!'} />
-          : focus.map(c => <CandCard key={c.id} c={c} logs={logsMap[c.id]||[]} onView={() => openDrawer(c)}/>)
-      )}
-
-      {/* Active */}
-      {tab === 'active' && (
-        active.length === 0
-          ? <EmptyState msg="No active candidates yet."/>
-          : active.map(c => <CandCard key={c.id} c={c} logs={logsMap[c.id]||[]} onView={() => openDrawer(c)}/>)
-      )}
-
-      {/* Funnel */}
-      {tab === 'funnel' && <FunnelView candidates={active} logsMap={logsMap}/>}
-
-      {/* Launched */}
-      {tab === 'launched' && (
-        launched.length === 0
-          ? <EmptyState msg="No launched partners yet."/>
-          : launched.map(c => (
-            <div key={c.id} style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'14px 16px',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,marginBottom:2}}>{c.name}</div>
-                <div style={{fontSize:10,color:'#555'}}>{c.source||'Direct'} · {fmtDate(c.updated_at)}</div>
-              </div>
-              <span style={{fontSize:11,padding:'3px 10px',borderRadius:8,background:'rgba(76,175,125,0.15)',color:GREEN,fontWeight:600}}>Launched</span>
+      {/* ── FOCUS TAB ── */}
+      {tab==='focus'&&(
+        <div>
+          {focusList.length===0?(
+            <div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>
+              <div style={{fontSize:24,marginBottom:8}}>✓</div>
+              <div style={{fontSize:13,fontWeight:600}}>All caught up</div>
+              <div style={{fontSize:11,marginTop:4}}>No follow-ups due in the next 3 days</div>
             </div>
-          ))
+          ):(
+            <div>
+              <div style={SL}>Who to call ({focusList.length})</div>
+              {focusList.map(c=>{
+                const nd=nextDueMap[c.id]
+                const overdue=nd<todayStr;const dueToday=nd===todayStr
+                const col=overdue?RED:dueToday?GOLD:'var(--text4)'
+                const label=overdue?`${daysSince(nd)}d overdue`:dueToday?'Due today':`Due ${fmtDate(nd)}`
+                const stage=normaliseStage(c.stage);const cfg=STAGE_CFG[stage]
+                const lastLog=allLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
+                const waHref=c.phone?`https://wa.me/${c.phone.replace(/\D/g,'')}`:''
+                return(
+                  <div key={c.id} style={{...CARD,borderLeft:`3px solid ${col}`}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700}}>{c.name}</div>
+                        <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{stage}</span>
+                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${col}15`,color:col,fontWeight:overdue||dueToday?700:400}}>{label}</span>
+                          {lastLog&&<span style={{fontSize:10,color:'var(--text4)'}}>Last: {lastLog.outcome}</span>}
+                        </div>
+                      </div>
+                      <div className="mono" style={{fontSize:18,fontWeight:800,color:healthColor(scores[c.id]??0)}}>{scores[c.id]??0}</div>
+                    </div>
+                    {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,60)}{c.pain_point.length>60?'…':''}"</div>}
+                    <div style={{display:'flex',gap:6}}>
+                      <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+                      {waHref&&<a href={waHref} target="_blank" rel="noopener noreferrer" style={{padding:'7px 10px',borderRadius:'var(--r)',border:'1px solid rgba(37,211,102,0.3)',background:'transparent',color:'#25D366',textDecoration:'none',fontSize:11}}>WA</a>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Archive */}
-      {tab === 'archive' && (
-        archived.length === 0
-          ? <EmptyState msg="No archived candidates."/>
-          : archived.map(c => {
-            const notes = parseNotes(c.interview_notes)
-            const dqReason = notes._dq_reason || '—'
-            return (
-              <div key={c.id} style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'14px 16px',marginBottom:8,borderLeft:`3px solid ${RED}`}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
-                  <div style={{fontSize:14,fontWeight:700}}>{c.name}</div>
-                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.12)',color:RED,fontWeight:600}}>DQ</span>
+      {/* ── ACTIVE TAB ── */}
+      {tab==='active'&&(
+        <div>
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:140,...INP}}/>
+          </div>
+          <div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:12,paddingBottom:4}}>
+            {(['all',...STAGES] as const).map(s=>{
+              const col=s==='all'?GOLD:(STAGE_CFG[s as Stage]?.color??GOLD)
+              const count=s==='all'?active.length:active.filter(c=>normaliseStage(c.stage)===s).length
+              const isActive=stageFilter===s
+              return(
+                <div key={s} onClick={()=>setStageFilter(s===stageFilter?'all':s)}
+                  style={{padding:'4px 10px',borderRadius:20,border:`1px solid ${isActive?col:'rgba(255,255,255,0.08)'}`,background:isActive?`${col}15`:'transparent',cursor:'pointer',flexShrink:0,display:'flex',gap:5,alignItems:'center'}}>
+                  <span className="mono" style={{fontSize:10,fontWeight:700,color:col}}>{count}</span>
+                  <span style={{fontSize:9,color:isActive?col:'var(--text4)'}}>{s}</span>
                 </div>
-                <div style={{fontSize:10,color:'#555'}}>{dqReason} · {fmtDate(c.updated_at)}</div>
-                {c.pain_point && <div style={{fontSize:11,color:'#444',marginTop:4,fontStyle:'italic'}}>"{c.pain_point.slice(0,80)}"</div>}
+              )
+            })}
+          </div>
+          {displayList.length===0
+            ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No candidates assigned yet.</div>
+            :displayList.map(c=><CandCard key={c.id} c={c} {...cardProps} nextDue={nextDueMap[c.id]} touchCount={touchCountMap[c.id]}/>)
+          }
+        </div>
+      )}
+
+      {/* ── FUNNEL TAB ── */}
+      {tab==='funnel'&&(
+        <div>
+          <div style={{...CARD,marginBottom:12}}>
+            <div style={SL}>Conversion Funnel</div>
+            {funnel.map((f,i)=>{
+              const cfg=STAGE_CFG[f.stage as Stage]
+              return(
+                <div key={f.stage} style={{marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:12,fontWeight:600,color:cfg.color}}>{f.stage}</span>
+                      <span className="mono" style={{fontSize:11,color:'var(--text4)'}}>{f.count}</span>
+                      {i>0&&<span style={{fontSize:10,color:'var(--text4)'}}>{f.convRate}% from prev</span>}
+                      {f.avgDays>0&&<span style={{fontSize:10,color:f.avgDays>=14?RED:f.avgDays>=7?GOLD:'var(--text4)',fontWeight:f.avgDays>=14?600:400}}>avg {f.avgDays}d</span>}
+                    </div>
+                    <span style={{fontSize:10,color:'var(--text4)'}}>{f.pct}%</span>
+                  </div>
+                  <div style={{height:6,background:'var(--s3)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${f.pct}%`,background:cfg.color,borderRadius:3,transition:'width 0.8s'}}/>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {(()=>{
+            const worst=funnel.slice(1).reduce<typeof funnel[number]>((w,f)=>f.convRate<w.convRate?f:w,funnel[1]??funnel[0])
+            return worst&&worst.convRate<100?(
+              <div style={{...CARD,borderLeft:`3px solid ${RED}`,marginBottom:12}}>
+                <div style={{fontSize:11,fontWeight:700,color:RED}}>⚡ Bottleneck: {worst.stage}</div>
+                <div style={{fontSize:11,color:'var(--text4)',marginTop:4}}>Only {worst.convRate}% convert from {funnel[funnel.indexOf(worst)-1]?.stage} → this is your biggest drop-off</div>
+              </div>
+            ):null
+          })()}
+
+          {(()=>{
+            const lh=launched.filter(c=>getStageHistory(c).length>0)
+            if(lh.length===0)return null
+            const avgDays=Math.round(lh.reduce((sum,c)=>{
+              const hist=getStageHistory(c)
+              return sum+daysSince(hist[0]?.date??c.created_at.slice(0,10))-daysSince(getLaunchedAt(c)||c.updated_at.slice(0,10))
+            },0)/lh.length)
+            return(
+              <div style={{...CARD,marginBottom:12}}>
+                <div style={SL}>Pipeline Velocity</div>
+                <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                  <div><div style={{fontSize:22,fontWeight:800,color:GOLD,fontFamily:"'JetBrains Mono',monospace"}}>{avgDays}d</div><div style={{fontSize:9,color:'var(--text4)'}}>avg days Pre-Filter → Launch</div></div>
+                  <div><div style={{fontSize:22,fontWeight:800,color:GREEN,fontFamily:"'JetBrains Mono',monospace"}}>{launched.length}</div><div style={{fontSize:9,color:'var(--text4)'}}>total launched</div></div>
+                </div>
               </div>
             )
-          })
+          })()}
+
+          {(()=>{
+            const src:Record<string,number>={}
+            candidates.forEach(c=>{const s=c.source||'Unknown';src[s]=(src[s]||0)+1})
+            const sorted=Object.entries(src).sort((a,b)=>b[1]-a[1]).slice(0,6)
+            if(!sorted.length)return null
+            return(
+              <div style={{...CARD,marginBottom:12}}>
+                <div style={SL}>Candidate Sources</div>
+                {sorted.map(([s,cnt])=>(
+                  <div key={s} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--br)',fontSize:12}}>
+                    <span style={{color:'var(--text2)'}}>{s}</span>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <span className="mono" style={{color:GOLD,fontWeight:700}}>{cnt}</span>
+                      <span style={{fontSize:10,color:'var(--text4)'}}>{Math.round(cnt/Math.max(candidates.length,1)*100)}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          <div style={{...CARD,marginBottom:12}}>
+            <div style={SL}>Overall Stats</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:10}}>
+              {[{l:'Total',v:candidates.length,c:'var(--text2)'},{l:'Active',v:active.length,c:GOLD},{l:'Launched',v:launched.length,c:GREEN},{l:'Archived',v:archived.length,c:RED},{l:'Conv rate',v:candidates.length>0?Math.round(launched.length/candidates.length*100)+'%':'0%',c:PURPLE}].map(k=>(
+                <div key={k.l} style={{background:'var(--s2)',borderRadius:'var(--r)',padding:'10px',textAlign:'center'}}>
+                  <div className="mono" style={{fontSize:18,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div>
+                  <div style={{fontSize:9,color:'var(--text4)',marginTop:3}}>{k.l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {objectionBreakdown.length>0&&(
+            <div style={CARD}>
+              <div style={SL}>Common Objections</div>
+              {objectionBreakdown.map(([obj,count])=>(
+                <div key={obj} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--br)',fontSize:12}}>
+                  <span style={{color:'var(--text2)'}}>{obj}</span>
+                  <span className="mono" style={{color:RED,fontWeight:700}}>{count}x</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Detail drawer */}
-      {selected && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:200,display:'flex',alignItems:'flex-end'}}
-          onClick={() => setSelected(null)}>
-          <div style={{width:'100%',maxWidth:600,margin:'0 auto',background:'#0f0f17',borderRadius:'16px 16px 0 0',maxHeight:'85vh',overflow:'hidden',display:'flex',flexDirection:'column'}}
-            onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div style={{padding:'16px 18px',borderBottom:'1px solid #1f1f28',display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexShrink:0}}>
+      {/* ── LAUNCHED TAB ── */}
+      {tab==='launched'&&(
+        <div>
+          {launched.length===0
+            ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No launched candidates yet</div>
+            :launched.map(c=>{
+              const launchedAt=getLaunchedAt(c)
+              return(
+                <div key={c.id} style={CARD}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{c.name}</div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(76,175,125,0.12)',color:GREEN,fontWeight:600}}>🚀 Launched</span>
+                        {launchedAt&&<span style={{fontSize:10,color:'var(--text4)'}}>on {fmtDate(launchedAt)}</span>}
+                        {c.primary_driver&&<span style={{fontSize:10,color:GOLD}}>{c.primary_driver}</span>}
+                      </div>
+                    </div>
+                    <div className="mono" style={{fontSize:18,fontWeight:800,color:GREEN}}>{c.hxl_score??((c.hunger??5)*(c.looking??5))}</div>
+                  </div>
+                  {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>"{c.pain_point}"</div>}
+                  <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+                </div>
+              )
+            })
+          }
+        </div>
+      )}
+
+      {/* ── ARCHIVE TAB ── */}
+      {tab==='archive'&&(
+        <div>
+          {archived.length>0&&(
+            <div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:12}}>
+              {(['all',...DQ_REASONS] as const).map(r=>{
+                const count=r==='all'?archived.length:archived.filter(c=>{
+                  const log=allLogs.filter(l=>l.entity_id===c.id&&l.event_type==='disqualified')[0]
+                  return log?.notes===r
+                }).length
+                return count>0&&(
+                  <div key={r} onClick={()=>setArchiveFilter(r===archiveFilter?'all':r)}
+                    style={{padding:'4px 10px',borderRadius:20,border:`1px solid ${archiveFilter===r?RED:'rgba(255,255,255,0.08)'}`,background:archiveFilter===r?'rgba(224,85,85,0.1)':'transparent',cursor:'pointer',flexShrink:0,fontSize:10,color:archiveFilter===r?RED:'var(--text4)'}}>
+                    {r==='all'?`All (${count})`:r} {r!=='all'&&`(${count})`}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {(()=>{
+            const re=archived.filter(c=>daysSince(c.updated_at)>=90)
+            if(!re.length)return null
+            return(
+              <div style={{...CARD,marginBottom:12,borderLeft:`3px solid ${GOLD}`}}>
+                <div style={SL}>Re-engagement queue ({re.length})</div>
+                <div style={{fontSize:11,color:'var(--text4)',marginBottom:10}}>Archived 90+ days ago — worth a reconnect?</div>
+                {re.slice(0,5).map(c=>{
+                  const log=allLogs.filter(l=>l.entity_id===c.id&&l.event_type==='disqualified')[0]
+                  return(
+                    <div key={c.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderTop:'1px solid var(--br)'}}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600}}>{c.name}</div>
+                        <div style={{fontSize:10,color:'var(--text4)'}}>{normaliseStage(c.stage)} · DQ'd {daysSince(c.updated_at)}d ago{log?.notes?` · ${log.notes}`:''}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
+          {(()=>{
+            const filtered=archived.filter(c=>{
+              if(archiveFilter==='all')return true
+              const log=allLogs.filter(l=>l.entity_id===c.id&&l.event_type==='disqualified')[0]
+              return log?.notes===archiveFilter
+            })
+            if(!filtered.length)return<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No archived candidates</div>
+            return filtered.map(c=>{
+              const log=allLogs.filter(l=>l.entity_id===c.id&&l.event_type==='disqualified')[0]
+              return(
+                <div key={c.id} style={{...CARD,opacity:0.85}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{c.name}</div>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.1)',color:RED}}>DQ at {normaliseStage(c.stage)}</span>
+                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{log?.notes||'Archived'}</span>
+                        {daysSince(c.updated_at)>=90&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${GOLD}10`,color:GOLD}}>{daysSince(c.updated_at)}d ago</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+                </div>
+              )
+            })
+          })()}
+        </div>
+      )}
+
+      {/* ── DETAIL DRAWER ── */}
+      {detail&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDetail(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:580,overflow:'hidden',margin:'auto'}}>
+            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
               <div>
-                <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>{selected.name}</div>
+                <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{detail.name}</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:`${STAGE_COLORS[normStage(selected.stage)]??GOLD}18`,color:STAGE_COLORS[normStage(selected.stage)]??GOLD,fontWeight:600}}>
-                    {normStage(selected.stage)}
-                  </span>
-                  {selected.hxl_score !== undefined && (
-                    <span style={{fontSize:11,padding:'2px 8px',borderRadius:8,background:`${scoreColor(healthScore(selected))}18`,color:scoreColor(healthScore(selected)),fontWeight:600}}>
-                      ★ {healthScore(selected)}
-                    </span>
-                  )}
+                  {(()=>{const cfg=STAGE_CFG[normaliseStage(detail.stage)];return<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:700}}>{normaliseStage(detail.stage)}</span>})()}
+                  {detail.primary_driver&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${GOLD}10`,color:GOLD}}>{detail.primary_driver}</span>}
+                  <span style={{fontSize:10,color:healthColor(scores[detail.id]??0),fontWeight:700}}>Health {scores[detail.id]??0}</span>
                 </div>
               </div>
-              <button onClick={() => setSelected(null)}
-                style={{background:'none',border:'none',color:'#555',cursor:'pointer',fontSize:24,lineHeight:1,padding:'0 4px',flexShrink:0}}>×</button>
+              <button onClick={()=>setDetail(null)} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
             </div>
-            {/* Sub-tabs */}
-            <div style={{display:'flex',borderBottom:'1px solid #1f1f28',flexShrink:0}}>
-              {(['profile','history'] as DrawerTab[]).map(t => (
-                <button key={t} onClick={() => setDrawerTab(t)}
-                  style={{flex:1,padding:'10px',border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',
-                    fontSize:11,fontWeight:drawerTab===t?700:400,
-                    color:drawerTab===t?GOLD:'#555',
-                    borderBottom:`2px solid ${drawerTab===t?GOLD:'transparent'}`,transition:'color 0.15s'}}>
-                  {t === 'profile' ? 'Profile' : 'History'}
+            <div style={{display:'flex',borderBottom:'1px solid var(--br)',overflowX:'auto'}}>
+              {(['profile','history','timeline','brief'] as DetailTab[]).map(t=>(
+                <button key={t} onClick={()=>{setDetailTab(t);if(t==='brief')getBrief(detail)}}
+                  style={{flex:1,padding:'10px 8px',border:'none',background:'transparent',color:detailTab===t?GOLD:'var(--text4)',fontSize:10,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontWeight:detailTab===t?700:400,borderBottom:`2px solid ${detailTab===t?GOLD:'transparent'}`,transition:'all 0.15s',whiteSpace:'nowrap'}}>
+                  {t.charAt(0).toUpperCase()+t.slice(1)}
                 </button>
               ))}
             </div>
-            {/* Content */}
-            <div style={{flex:1,overflowY:'auto',padding:'16px 18px'}}>
-              {drawerTab === 'profile' && <ProfileTab c={selected}/>}
-              {drawerTab === 'history' && <HistoryTab logs={logsMap[selected.id]||[]}/>}
+            <div style={{padding:'18px 24px',maxHeight:'55vh',overflowY:'auto'}}>
+
+              {/* PROFILE */}
+              {detailTab==='profile'&&(
+                <div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                    {[
+                      {l:'HxL Score',v:`H${detail.hunger??5}×L${detail.looking??5} = ${detail.hxl_score??((detail.hunger??5)*(detail.looking??5))}`,c:healthColor(scores[detail.id]??0)},
+                      {l:'Relationship',v:detail.relationship||'—',c:'var(--text2)'},
+                      {l:'Age Range',v:detail.age_range||'—',c:'var(--text2)'},
+                      {l:'Life Stage',v:detail.life_stage||'—',c:'var(--text2)'},
+                      {l:'Source',v:detail.source||'—',c:'var(--text2)'},
+                      {l:'Phone',v:detail.phone||'—',c:'var(--text2)'},
+                    ].map(x=>(
+                      <div key={x.l}><div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div><div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div></div>
+                    ))}
+                  </div>
+                  {detail.pain_point&&<div style={{marginBottom:12,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}><div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div><div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{detail.pain_point}"</div></div>}
+                  <div style={SL}>Notes</div>
+                  <textarea value={getNotes(detail)} readOnly rows={5} placeholder="No notes yet" style={{...INP,resize:'vertical',fontSize:12,cursor:'default'}}/>
+                </div>
+              )}
+
+              {/* HISTORY */}
+              {detailTab==='history'&&(
+                <div>
+                  {allLogs.filter(l=>l.entity_id===detail.id).sort((a,b)=>b.created_at.localeCompare(a.created_at)).length===0
+                    ?<div style={{fontSize:12,color:'var(--text4)',padding:'24px 0',textAlign:'center'}}>No contact logged yet</div>
+                    :allLogs.filter(l=>l.entity_id===detail.id).sort((a,b)=>b.created_at.localeCompare(a.created_at)).map(log=>(
+                      <div key={log.id} style={{padding:'10px 0',borderBottom:'1px solid var(--br)'}}>
+                        <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                            <span style={{fontSize:11,fontWeight:600,color:({Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}[log.outcome]??'var(--text4)')}}>{log.outcome||log.event_type.replace(/_/g,' ')}</span>
+                            {(log as any).objection&&(log as any).objection!=='None'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:6,background:'rgba(224,85,85,0.1)',color:RED}}>{(log as any).objection}</span>}
+                          </div>
+                          <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
+                        </div>
+                        {log.notes&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.5}}>{log.notes}</div>}
+                        {log.fathom_link&&<a href={log.fathom_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'#8B5CF6',textDecoration:'none',marginTop:2,display:'block'}}>▶ Fathom recording</a>}
+                        {log.next_action&&<div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>Next: {log.next_action}{log.next_date?` · ${fmtDate(log.next_date)}`:''}</div>}
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+
+              {/* TIMELINE */}
+              {detailTab==='timeline'&&(()=>{
+                const history=getStageHistory(detail)
+                const allStages=[...history,{stage:normaliseStage(detail.stage),date:detail.updated_at?.slice(0,10)??''}]
+                return(
+                  <div>
+                    {allStages.length===0
+                      ?<div style={{fontSize:12,color:'var(--text4)',padding:'24px 0',textAlign:'center'}}>No stage history yet</div>
+                      :allStages.map((h,i)=>{
+                          const cfg=STAGE_CFG[normaliseStage(h.stage)]
+                          const nextDate=allStages[i+1]?.date
+                          const daysAtStage=nextDate?Math.floor((new Date(nextDate).getTime()-new Date(h.date).getTime())/86400000):daysSince(h.date)
+                          const isCurrent=i===allStages.length-1
+                          return(
+                            <div key={i} style={{display:'flex',gap:12,marginBottom:0}}>
+                              <div style={{display:'flex',flexDirection:'column',alignItems:'center',width:24,flexShrink:0}}>
+                                <div style={{width:12,height:12,borderRadius:'50%',background:isCurrent?cfg.color:'var(--s3)',border:`2px solid ${cfg.color}`,flexShrink:0,marginTop:4}}/>
+                                {i<allStages.length-1&&<div style={{width:2,flex:1,background:'var(--br)',margin:'2px 0'}}/>}
+                              </div>
+                              <div style={{flex:1,paddingBottom:16}}>
+                                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                                  <span style={{fontSize:12,fontWeight:600,color:isCurrent?cfg.color:'var(--text2)'}}>{h.stage}</span>
+                                  <span style={{fontSize:9,color:'var(--text4)'}}>{fmtDate(h.date)}</span>
+                                </div>
+                                <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>{isCurrent?`${daysAtStage}d so far`:`${daysAtStage}d`}</div>
+                              </div>
+                            </div>
+                          )
+                        })
+                    }
+                  </div>
+                )
+              })()}
+
+              {/* BRIEF */}
+              {detailTab==='brief'&&(
+                <div>
+                  <div style={{...SL,marginBottom:10}}>Pre-Call Brief</div>
+                  {briefLoading
+                    ?<div style={{fontSize:13,color:'var(--text3)',fontStyle:'italic',padding:'20px 0'}}>Generating…</div>
+                    :briefText
+                      ?<div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{briefText}</div>
+                      :<div style={{fontSize:12,color:'var(--text4)',padding:'12px 0'}}>Generate a stage-specific pre-call brief.</div>
+                  }
+                  {!briefLoading&&<button onClick={()=>getBrief(detail)} style={{marginTop:12,padding:'7px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:'rgba(200,162,74,0.08)',color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>{briefText?'↻ Refresh':'Generate Brief'}</button>}
+                </div>
+              )}
+
             </div>
           </div>
         </div>
       )}
     </div>
   )
-}
-
-// ── CandCard ────────────────────────────────────────────────
-function CandCard({ c, logs, onView }: { c: Candidate; logs: ContactLog[]; onView: ()=>void }) {
-  const stage = normStage(c.stage)
-  const col   = STAGE_COLORS[stage] ?? GOLD
-  const score = healthScore(c)
-  const sorted = [...logs].sort((a,b) => b.created_at.localeCompare(a.created_at))
-  const lastLog = sorted[0]
-  const daysSinceContact = daysSince(lastLog?.created_at ?? c.updated_at)
-  const alertColor = daysSinceContact >= 14 ? RED : daysSinceContact >= 7 ? GOLD : null
-  const nextDue = sorted.find(l => l.next_date)?.next_date
-  const isOverdue = nextDue && nextDue < new Date().toISOString().slice(0,10)
-  const wa = c.phone ? `https://wa.me/${c.phone.replace(/\D/g,'').replace(/^0/,'61')}` : null
-  const outColor: Record<string,string> = { Positive:GREEN, Negative:RED, Neutral:GOLD, 'No Show':RED, 'Not Yet':'#555' }
-
-  return (
-    <div style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'14px 16px',marginBottom:8,borderLeft:`3px solid ${col}`}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{c.name}</div>
-          <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${col}15`,color:col,fontWeight:600}}>{stage}</span>
-            {c.hxl_score !== undefined && (
-              <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${scoreColor(score)}15`,color:scoreColor(score),fontWeight:600}}>★ {score}</span>
-            )}
-            {alertColor && (
-              <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${alertColor}15`,color:alertColor,fontWeight:600}}>
-                {daysSinceContact}d idle
-              </span>
-            )}
-            {nextDue && (
-              <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:isOverdue?'rgba(224,85,85,0.12)':'rgba(200,162,74,0.1)',color:isOverdue?RED:GOLD,fontWeight:600}}>
-                {isOverdue ? '⚠ ' : ''}{fmtDate(nextDue)}
-              </span>
-            )}
-          </div>
-        </div>
-        <div style={{fontSize:10,color:'#555',marginLeft:8,flexShrink:0}}>{logs.length} touch{logs.length!==1?'es':''}</div>
-      </div>
-      {c.pain_point && (
-        <div style={{fontSize:11,color:'#555',fontStyle:'italic',marginBottom:6}}>
-          "{c.pain_point.slice(0,80)}{c.pain_point.length>80?'…':''}"
-        </div>
-      )}
-      {lastLog && (
-        <div style={{fontSize:10,color:'#444',marginBottom:8}}>
-          Last: <span style={{color:outColor[lastLog.outcome]??'#888',fontWeight:600}}>{lastLog.outcome||lastLog.event_type}</span>
-          {lastLog.notes ? ` · "${lastLog.notes.slice(0,50)}"` : ''} · {fmtDate(lastLog.created_at)}
-        </div>
-      )}
-      <div style={{display:'flex',gap:8}}>
-        <button onClick={onView}
-          style={{padding:'5px 14px',borderRadius:8,border:'1px solid #2a2a35',background:'transparent',color:'#888',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>
-          View →
-        </button>
-        {wa && (
-          <a href={wa} target="_blank" rel="noreferrer"
-            style={{padding:'5px 14px',borderRadius:8,border:`1px solid ${GREEN}33`,background:'transparent',color:GREEN,cursor:'pointer',fontSize:11,fontFamily:'inherit',textDecoration:'none'}}>
-            WA
-          </a>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── Funnel view ─────────────────────────────────────────────
-function FunnelView({ candidates, logsMap }: { candidates: Candidate[]; logsMap: Record<string,ContactLog[]> }) {
-  const stageCounts = STAGE_ORDER.map(s => ({
-    stage: s,
-    count: candidates.filter(c => normStage(c.stage) === s).length,
-    col: STAGE_COLORS[s] ?? GOLD,
-  }))
-  const max = Math.max(1, ...stageCounts.map(s => s.count))
-  const total = candidates.length
-  const totalTouches = Object.values(logsMap).reduce((sum, logs) => sum + logs.length, 0)
-
-  const sourceBreakdown = useMemo(() => {
-    const counts: Record<string,number> = {}
-    candidates.forEach(c => { const src = c.source||'Unknown'; counts[src] = (counts[src]||0)+1 })
-    return Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5)
-  }, [candidates])
-
-  return (
-    <div>
-      {/* Stats strip */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:8,marginBottom:12}}>
-        <div style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'14px',textAlign:'center'}}>
-          <div style={{fontSize:24,fontWeight:800,color:GREEN,fontFamily:'monospace'}}>{total}</div>
-          <div style={{fontSize:9,color:'#555',marginTop:3}}>Active</div>
-        </div>
-        <div style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'14px',textAlign:'center'}}>
-          <div style={{fontSize:24,fontWeight:800,color:GOLD,fontFamily:'monospace'}}>{totalTouches}</div>
-          <div style={{fontSize:9,color:'#555',marginTop:3}}>Total Touches</div>
-        </div>
-      </div>
-
-      {/* Conversion funnel */}
-      <div style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'16px',marginBottom:12}}>
-        <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase',marginBottom:14}}>Stage Funnel</div>
-        {stageCounts.map(s => (
-          <div key={s.stage} style={{marginBottom:10}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-              <span style={{fontSize:11,color:'#aaa'}}>{s.stage}</span>
-              <span style={{fontSize:12,fontWeight:700,color:s.col,fontFamily:'monospace'}}>{s.count}</span>
-            </div>
-            <div style={{height:6,borderRadius:4,background:'#1f1f28',overflow:'hidden'}}>
-              <div style={{height:'100%',borderRadius:4,background:s.col,width:`${(s.count/max)*100}%`,transition:'width 0.3s'}}/>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Source breakdown */}
-      {sourceBreakdown.length > 0 && (
-        <div style={{background:'#0f0f17',border:'1px solid #1f1f28',borderRadius:12,padding:'16px'}}>
-          <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase',marginBottom:12}}>Source Breakdown</div>
-          {sourceBreakdown.map(([src, cnt]) => (
-            <div key={src} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:'1px solid #1a1a24'}}>
-              <span style={{fontSize:11,color:'#aaa'}}>{src}</span>
-              <span style={{fontSize:12,fontWeight:700,color:GOLD,fontFamily:'monospace'}}>{cnt}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Profile sub-tab ─────────────────────────────────────────
-function ProfileTab({ c }: { c: Candidate }) {
-  const notes = parseNotes(c.interview_notes)
-  const profileNotes = notes.notes || ''
-  const rows = [
-    { l:'Email',          v: c.email },
-    { l:'Phone',          v: c.phone },
-    { l:'Source',         v: c.source },
-    { l:'Stage',          v: normStage(c.stage) },
-    { l:'Pain Point',     v: c.pain_point },
-    { l:'Relationship',   v: c.relationship },
-    { l:'Life Stage',     v: c.life_stage },
-    { l:'Primary Driver', v: c.primary_driver },
-  ].filter(f => f.v)
-
-  return (
-    <div>
-      {rows.map(f => (
-        <div key={f.l} style={{padding:'8px 0',borderBottom:'1px solid #1a1a24'}}>
-          <div style={{fontSize:9,color:'#555',fontWeight:600,textTransform:'uppercase',letterSpacing:'1px',marginBottom:3}}>{f.l}</div>
-          <div style={{fontSize:13,color:'#ddd'}}>{f.v}</div>
-        </div>
-      ))}
-      {profileNotes && (
-        <div style={{marginTop:12}}>
-          <div style={{fontSize:9,color:'#555',fontWeight:600,textTransform:'uppercase',letterSpacing:'1px',marginBottom:6}}>Notes</div>
-          <textarea readOnly value={profileNotes}
-            style={{width:'100%',background:'#16161c',border:'1px solid #2a2a35',borderRadius:8,padding:'10px 12px',color:'#ddd',fontSize:12,lineHeight:1.7,boxSizing:'border-box',minHeight:80,resize:'vertical',fontFamily:'inherit'}}/>
-        </div>
-      )}
-      {rows.length === 0 && !profileNotes && <EmptyState msg="No profile details available."/>}
-    </div>
-  )
-}
-
-// ── History sub-tab ─────────────────────────────────────────
-function HistoryTab({ logs }: { logs: ContactLog[] }) {
-  const sorted = [...logs].sort((a,b) => b.created_at.localeCompare(a.created_at))
-  if (!sorted.length) return <EmptyState msg="No contact history yet."/>
-  const outColor: Record<string,string> = { Positive:GREEN, Negative:RED, Neutral:GOLD, 'No Show':RED, 'Not Yet':'#555' }
-  return (
-    <div>
-      {sorted.map(l => (
-        <div key={l.id} style={{borderBottom:'1px solid #1a1a24',padding:'10px 0'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:3}}>
-            <span style={{fontSize:12,fontWeight:700,color:outColor[l.outcome]??'#888'}}>{l.outcome||l.event_type}</span>
-            <span style={{fontSize:10,color:'#555'}}>{fmtDate(l.created_at)}</span>
-          </div>
-          {l.notes && <div style={{fontSize:11,color:'#888',marginBottom:2}}>"{l.notes.slice(0,120)}"</div>}
-          {l.next_date && <div style={{fontSize:10,color:GOLD}}>Next: {fmtDate(l.next_date)}</div>}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Helper ──────────────────────────────────────────────────
-function EmptyState({ msg }: { msg: string }) {
-  return <div style={{textAlign:'center',padding:'48px 20px',color:'#444',fontSize:13}}>{msg}</div>
 }
