@@ -766,7 +766,6 @@ export default function Pipeline(){
                 )}
                 <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
                 {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
-                <button onClick={()=>{setDeleteLeadConfirm(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${RED}50`,background:`${RED}12`,color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:700}}>🗑 Delete</button>
               </div>
             </div>
           </div>
