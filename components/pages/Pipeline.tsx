@@ -220,6 +220,7 @@ export default function Pipeline(){
   const [noShowFilter,setNoShowFilter] = useState(false)
   const [archiveReasonFilter,setArchiveReasonFilter] = useState<string>('all')
   const [dragOver,setDragOver]         = useState(false)
+  const [deleteLeadConfirm,setDeleteLeadConfirm] = useState<Lead|null>(null)
   const [csvModal,setCsvModal]         = useState<{headers:string[];rows:string[][];mapping:Record<number,keyof Lead|''>}|null>(null)
   const [csvProgress,setCsvProgress]   = useState<{done:number;total:number;skipped:number}|null>(null)
 
@@ -765,6 +766,7 @@ export default function Pipeline(){
                 )}
                 <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
                 {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
+                <button onClick={()=>{setDeleteLeadConfirm(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${RED}50`,background:`${RED}12`,color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:700}}>🗑 Delete</button>
               </div>
             </div>
           </div>
@@ -952,6 +954,25 @@ export default function Pipeline(){
         </div>
       )}
 
+      {/* ── DELETE CONFIRMATION ───────────────────────────── */}
+      {deleteLeadConfirm&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDeleteLeadConfirm(null)}}>
+          <div style={{background:'var(--s1)',border:`1px solid ${RED}40`,borderRadius:'var(--r3)',width:'100%',maxWidth:400,padding:28,margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,color:RED,marginBottom:8}}>Permanently Delete?</div>
+            <div style={{fontSize:13,color:'var(--text3)',marginBottom:20,lineHeight:1.6}}>
+              This will permanently delete <strong style={{color:'var(--text)'}}>{deleteLeadConfirm.name}</strong> and all their contact history from Supabase. This cannot be undone.
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setDeleteLeadConfirm(null)} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+              <button onClick={async()=>{await safeWrite(()=>deleteLead(deleteLeadConfirm.id),'Delete failed');setDeleteLeadConfirm(null)}}
+                style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:RED,color:'#fff',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontWeight:700}}>
+                🗑 Delete Everything
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── ARCHIVED VIEW ─────────────────────────────────── */}
       {view==='archived'&&(
         <div>
@@ -993,7 +1014,7 @@ export default function Pipeline(){
                       {l.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>"{l.notes.slice(0,80)}"</div>}
                       <div style={{display:'flex',gap:6}}>
                         <button onClick={()=>restoreLead(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>↩ Restore</button>
-                        <button onClick={()=>deleteLead(l.id)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Delete</button>
+                        <button onClick={()=>setDeleteLeadConfirm(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>🗑 Delete</button>
                       </div>
                     </div>
                   )

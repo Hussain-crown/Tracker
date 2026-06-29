@@ -36,7 +36,11 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   },
 
   deleteLead: async (id) => {
-    set(s => ({ leads: s.leads.filter(l => l.id !== id) }))
+    set(s => ({
+      leads: s.leads.filter(l => l.id !== id),
+      contactLogs: s.contactLogs.filter(l => l.entity_id !== id),
+    }))
+    try { await sb.from('contact_logs').delete().eq('entity_id', id) } catch {}
     try { await sb.from('leads').delete().eq('id', id) } catch {}
   },
 
