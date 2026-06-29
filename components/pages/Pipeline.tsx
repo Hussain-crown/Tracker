@@ -6,7 +6,7 @@ import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 
 // ── CONSTANTS ─────────────────────────────────────────────
-const STAGES = ['New','Connected','MPA','Catch-Up','DTM'] as const
+const STAGES = ['New','Connected','MPA','Catch-Up','DTM','PF'] as const
 type Stage = typeof STAGES[number]
 
 const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
@@ -14,7 +14,8 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
   'Connected': {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'MPA'},
   'MPA':       {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:'Catch-Up'},
   'Catch-Up':  {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'DTM'},
-  'DTM':       {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:null},
+  'DTM':       {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:'PF'},
+  'PF':        {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
 }
 
 const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
@@ -38,7 +39,7 @@ function healthScore(l:Lead, lastContactDate:string):number{
   const hxlS=Math.min(100,hxl(l.hunger,l.looking))
   const daysSinceContact=lastContactDate?Math.floor((Date.now()-new Date(lastContactDate).getTime())/86400000):daysSince(l.updated_at)
   const recency=Math.max(0,100-daysSinceContact*10)
-  const stageDepth=(['New','Connected','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*20
+  const stageDepth=(['New','Connected','MPA','Catch-Up','DTM','PF'].indexOf(l.stage as Stage)+1)*16
   return Math.round(hxlS*0.5+recency*0.3+stageDepth*0.2)
 }
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
@@ -97,12 +98,13 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
   const isDTM=l.stage==='DTM'
+  const isPF=l.stage==='PF'
   const isCandidate=candidates.some(c=>c.name===l.name)
   const wa=waLink(l)
   const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
   // Days in current stage (from last stage-change log or created_at)
-  const stageChangeLogs=logs.filter(c=>['connected','mpa','catch_up','dtm','pf_booked','lead_created'].includes(c.event_type))
+  const stageChangeLogs=logs.filter(c=>['connected','mpa','catch_up','dtm','pf','pf_booked','lead_created'].includes(c.event_type))
   const stageChangeDate=stageChangeLogs[0]?.created_at??l.created_at
   const daysInStage=Math.floor((Date.now()-new Date(stageChangeDate).getTime())/86400000)
   const stageAlertColor=daysInStage>=21?RED:daysInStage>=14?GOLD:null
@@ -180,9 +182,9 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
             → {STAGE_CFG[l.stage as Stage]?.next}
           </button>
         )}
-        {isDTM&&!isCandidate&&(
-          <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
-            📋 Book PF
+        {isPF&&!isCandidate&&(
+          <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
+            🚀 Convert to Candidate
           </button>
         )}
         <button onClick={()=>setBriefModal({lead:l,text:'',loading:false})} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Brief</button>
