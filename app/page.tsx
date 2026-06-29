@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
+import Candidates from '@/components/pages/Candidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
@@ -48,7 +49,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'habits'|'pipeline'>('habits')
+  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
 
   // ── THE FIX: handle every possible auth state on mount ──────
   useEffect(()=>{
@@ -231,7 +232,7 @@ export default function TrackPage(){
     <Shell>
       <div style={{color:'#555',textAlign:'center',padding:40,fontSize:14}}>
         <div style={{fontSize:28,marginBottom:12,animation:'pulse 1.5s infinite'}}>⏳</div>
-        Loading Growth Tracker…
+        Loading Business Tracker…
       </div>
     </Shell>
   )
@@ -240,7 +241,7 @@ export default function TrackPage(){
   if(!userId)return(
     <Shell>
       <div style={{textAlign:'center',marginBottom:28}}>
-        <div style={{fontSize:26,fontWeight:800,color:'#fff',letterSpacing:'-0.5px'}}>Growth Tracker</div>
+        <div style={{fontSize:26,fontWeight:800,color:'#fff',letterSpacing:'-0.5px'}}>Business Tracker</div>
         <div style={{fontSize:12,color:'#666',marginTop:6}}>Track daily. Win the week.</div>
       </div>
       {err&&<ErrBox msg={err}/>}
@@ -328,7 +329,7 @@ export default function TrackPage(){
       {/* Install to home screen prompt */}
       {showInstall&&!isOffline&&(
         <div style={{background:'rgba(200,162,74,0.1)',borderBottom:'1px solid rgba(200,162,74,0.2)',padding:'10px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{fontSize:12,color:'#C8A24A',fontWeight:600}}>📲 Add Growth Tracker to your home screen</div>
+          <div style={{fontSize:12,color:'#C8A24A',fontWeight:600}}>📲 Add Business Tracker to your home screen</div>
           <div style={{display:'flex',gap:8}}>
             <button onClick={async()=>{if(deferredPrompt){await deferredPrompt.prompt();setShowInstall(false);setDeferredPrompt(null)}}}
               style={{padding:'5px 12px',borderRadius:8,border:'none',background:'#C8A24A',color:'#000',fontWeight:700,cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>Install</button>
@@ -339,23 +340,27 @@ export default function TrackPage(){
       )}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 18px',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
         <div>
-          <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Growth Tracker</div>
+          <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Business Tracker</div>
           <div style={{fontSize:10,color:'#555'}}>{member?.name||'Member'} · IBO {member?.ibo_number}</div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:10}}>
-          {streak>0&&tab==='habits'&&<div style={{fontSize:11,fontWeight:700,color:GOLD}}>🔥 {streak}d</div>}
+          {streak>0&&<div style={{fontSize:11,fontWeight:700,color:GOLD}}>🔥 {streak}d</div>}
           <button onClick={signOut} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #2a2a35',background:'transparent',color:'#888',cursor:'pointer',fontSize:11}}>Sign out</button>
         </div>
       </div>
       {/* Tab nav */}
       <div style={{display:'flex',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
-        {(['habits','pipeline'] as const).map(t=>(
-          <button key={t} onClick={()=>setTab(t)}
+        {([
+          ['pipeline','Pipeline'] as const,
+          ['candidates','Candidates'] as const,
+          ['habits','Habits'] as const,
+        ]).map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)}
             style={{flex:1,padding:'10px',border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',
-              fontSize:12,fontWeight:tab===t?700:400,
-              color:tab===t?GOLD:'#555',
-              borderBottom:`2px solid ${tab===t?GOLD:'transparent'}`,transition:'color 0.15s'}}>
-            {t==='habits'?'Habits':'Pipeline'}
+              fontSize:12,fontWeight:tab===id?700:400,
+              color:tab===id?GOLD:'#555',
+              borderBottom:`2px solid ${tab===id?GOLD:'transparent'}`,transition:'color 0.15s'}}>
+            {label}
           </button>
         ))}
       </div>
@@ -394,9 +399,9 @@ export default function TrackPage(){
         {/* Onboarding */}
         {showOnboard&&(
           <div style={{background:'#13131a',border:'1px solid #2a2a35',borderRadius:14,padding:'20px 22px',marginBottom:16}}>
-            <div style={{fontSize:16,fontWeight:800,color:'#fff',marginBottom:12}}>Welcome to the tracker 👋</div>
+            <div style={{fontSize:16,fontWeight:800,color:'#fff',marginBottom:12}}>Welcome to Business Tracker 👋</div>
             <div style={{fontSize:12,color:'#888',lineHeight:1.8,marginBottom:16}}>
-              {[{k:'Conversations',d:'New people you spoke to about the business'},{k:'MPA',d:'Product demonstrations you ran'},{k:'Contacts',d:'People you added to your pipeline'},{k:'DTM',d:'Decision to move conversations'},{k:'Pre-Filter',d:'Pre-filter calls completed'},{k:'MG1',d:'Group presentations attended or ran'},{k:'Launches',d:'New partners you helped launch'}].map(f=>(
+              {[{k:'Pipeline',d:'Track every prospect you\'re speaking to about the business'},{k:'Candidates',d:'See where your prospects are in the interview process'},{k:'Conversations',d:'New people you spoke to about the business'},{k:'Contacts',d:'People you added to your pipeline'},{k:'DTM',d:'Decision to move conversations'},{k:'MG1',d:'Group presentations attended or ran'},{k:'Launches',d:'New partners you helped launch'}].map(f=>(
                 <div key={f.k} style={{padding:'4px 0',borderBottom:'1px solid #1f1f28'}}><strong style={{color:'#ddd'}}>{f.k}</strong> — {f.d}</div>
               ))}
             </div>
@@ -447,6 +452,11 @@ export default function TrackPage(){
         {tab==='habits'&&<Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>}
         {tab==='pipeline'&&<Pipeline/>}
       </div>
+      {tab==='candidates'&&(
+        <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px'}}>
+          <Candidates iboNumber={member?.ibo_number||''}/>
+        </div>
+      )}
     </div>
   )
 }

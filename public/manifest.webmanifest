@@ -1,6 +1,6 @@
 {
-  "name": "Growth Tracker",
-  "short_name": "Growth",
+  "name": "Business Tracker",
+  "short_name": "Business",
   "description": "Track your daily business habits and build momentum",
   "id": "/",
   "start_url": "/",
@@ -21,6 +21,13 @@
       "short_name": "Log",
       "description": "Open today's habit log",
       "url": "/",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Pipeline",
+      "short_name": "Pipeline",
+      "description": "View your lead pipeline",
+      "url": "/?tab=pipeline",
       "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
   ]

@@ -3,13 +3,13 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Growth Tracker',
+  title: 'Business Tracker',
   description: 'Track your daily business habits and build momentum',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Growth Tracker',
+    title: 'Business Tracker',
     startupImage: [
       {
         url: '/icons/icon-512.png',
@@ -21,8 +21,8 @@ export const metadata: Metadata = {
     'mobile-web-app-capable': 'yes',
     'apple-mobile-web-app-capable': 'yes',
     'apple-mobile-web-app-status-bar-style': 'black-translucent',
-    'apple-mobile-web-app-title': 'Growth Tracker',
-    'application-name': 'Growth Tracker',
+    'apple-mobile-web-app-title': 'Business Tracker',
+    'application-name': 'Business Tracker',
     'msapplication-TileColor': '#C8A24A',
     'msapplication-tap-highlight': 'no',
   },
