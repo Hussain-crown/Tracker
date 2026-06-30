@@ -80,8 +80,6 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount}:CardProps){
   const outColor:{[k:string]:string}={Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}
   const objection=(lastLog as any)?.objection
   const nextMeeting=getNextMeeting(c)
-  const waHref=c.phone?`https://wa.me/${c.phone.replace(/\D/g,'')}`:''
-
   return(
     <div style={{...CARD,borderLeft:`3px solid ${cfg.color}`}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
@@ -116,7 +114,6 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount}:CardProps){
       {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
-        {waHref&&<a href={waHref} target="_blank" rel="noopener noreferrer" style={{padding:'7px 10px',borderRadius:'var(--r)',border:'1px solid rgba(37,211,102,0.3)',background:'transparent',color:'#25D366',textDecoration:'none',fontSize:11}}>WA</a>}
       </div>
     </div>
   )
@@ -313,7 +310,6 @@ export default function Candidates(){
                 const label=overdue?`${daysSince(nd)}d overdue`:dueToday?'Due today':`Due ${fmtDate(nd)}`
                 const stage=normaliseStage(c.stage);const cfg=STAGE_CFG[stage]
                 const lastLog=allLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
-                const waHref=c.phone?`https://wa.me/${c.phone.replace(/\D/g,'')}`:''
                 return(
                   <div key={c.id} style={{...CARD,borderLeft:`3px solid ${col}`}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
@@ -330,7 +326,6 @@ export default function Candidates(){
                     {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,60)}{c.pain_point.length>60?'…':''}"</div>}
                     <div style={{display:'flex',gap:6}}>
                       <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
-                      {waHref&&<a href={waHref} target="_blank" rel="noopener noreferrer" style={{padding:'7px 10px',borderRadius:'var(--r)',border:'1px solid rgba(37,211,102,0.3)',background:'transparent',color:'#25D366',textDecoration:'none',fontSize:11}}>WA</a>}
                     </div>
                   </div>
                 )
