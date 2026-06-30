@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
+import type { HabitEntry } from '@/lib/stores/types'
 import { uid, now } from '@/lib/utils'
 import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
@@ -198,7 +199,8 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
 export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const {leads,userId,upsertLead,deleteLead,loadLeads,
          upsertCandidate,loadCandidates,candidates,
-         addContactLog,loadContactLogs,contactLogs} = useStore()
+         addContactLog,loadContactLogs,contactLogs,
+         habits,saveHabit,loadHabits} = useStore()
 
   const [view,setView]         = useState<View>('focus')
   const [filter,setFilter]     = useState<Stage|'all'|'archived'>('all')
@@ -222,11 +224,35 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [csvModal,setCsvModal]         = useState<{headers:string[];rows:string[][];mapping:Record<number,keyof Lead|''>}|null>(null)
   const [csvProgress,setCsvProgress]   = useState<{done:number;total:number;skipped:number}|null>(null)
 
-  useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs() },[]) // eslint-disable-line
+  useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs(); loadHabits() },[]) // eslint-disable-line
 
   async function safeWrite(fn:()=>Promise<void>, errMsg='Save failed'){
     try{ await fn() }
     catch(e:any){ setBanner({type:'error',msg:errMsg+': '+(e?.message||'unknown error')}) }
+  }
+
+  // Stage → habit field mapping for auto-log
+  const STAGE_HABIT: Record<string,keyof HabitEntry> = {
+    'connected': 'convo',
+    'mpa':       'mpa',
+    'catch_up':  'catch_up',
+    'dtm':       'dtm',
+  }
+
+  async function autoLogHabit(field: keyof HabitEntry){
+    if(!userId)return
+    const date=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
+    const ex=habits[date] as HabitEntry|undefined
+    const base:HabitEntry={
+      id:ex?.id??uid(),user_id:userId,date,
+      interruptions:0,convo:0,mpa:0,contact:0,
+      catch_up:0,dtm:0,pre_filter:0,mg1:0,launch:0,
+      created_at:ex?.created_at??now(),updated_at:now(),
+      ...(ex||{}),
+    }
+    ;(base as any)[field]=(base[field] as number)+1
+    base.updated_at=now()
+    try{ await saveHabit(base) }catch{}
   }
 
   // ── SECURITY: Only show this user's leads ──
@@ -391,10 +417,13 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   async function advanceStage(l:Lead){
     const cfg=STAGE_CFG[l.stage as Stage];if(!cfg?.next)return
+    const eventType=cfg.next!.toLowerCase().replace('-','_')
     await safeWrite(async()=>{
       await upsertLead({...l,stage:cfg.next as Stage,updated_at:now()})
-      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:cfg.next!.toLowerCase().replace('-','_'),outcome:'Positive',notes:`Advanced to ${cfg.next}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
+      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:eventType,outcome:'Positive',notes:`Advanced to ${cfg.next}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
     },'Advance stage failed')
+    const habitField=STAGE_HABIT[eventType]
+    if(habitField)await autoLogHabit(habitField)
   }
 
   async function logContact(){
@@ -406,6 +435,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       if(contactLog.objection&&contactLog.objection!=='None')logObj.objection=contactLog.objection
       await addContactLog(logObj)
     },'Log contact failed')
+    // Every contact = a conversation logged for today
+    await autoLogHabit('convo')
     setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
   }
 

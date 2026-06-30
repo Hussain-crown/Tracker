@@ -2,14 +2,12 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useStore } from '@/lib/stores'
-import { useTrackerLeadsStore } from '@/lib/stores/trackerLeadsStore'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
-const BLUE='#5B9BD5'
 
 const MILESTONES=[
   {days:3,emoji:'🔥',msg:"3-day streak! The habit is forming."},
@@ -19,15 +17,6 @@ const MILESTONES=[
   {days:30,emoji:'🏆',msg:"30-day streak. Elite level consistency."},
   {days:60,emoji:'👑',msg:"60 days. You're in the top 1% of IBOs."},
   {days:90,emoji:'💎',msg:"90 days. This is who you are now."},
-]
-
-const WEEK_HABITS = [
-  {key:'mpa',label:'MPA'},
-  {key:'catch_up',label:'Catch Ups'},
-  {key:'dtm',label:'DTM'},
-  {key:'pre_filter',label:'Pre-Filter'},
-  {key:'mg1',label:'MG1'},
-  {key:'launch',label:'Launches'},
 ]
 
 function daysAgo(n:number){
@@ -40,53 +29,23 @@ function brisbaneToday(){
   return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 
-// Derive weekly targets from admin CoreGoals (same ratios as Habits.tsx)
-const CONV={mg1PerConvo:0.034,mpaPerConvo:0.83,dtmPerConvo:0.22,pfPerConvo:0.067,cuPerConvo:0.33}
-function weekTargets(goals:any):Record<string,number>{
-  if(!goals)return{}
-  const g=goals.goalMonthly||0
-  let convos=0
-  switch(goals.goalField){
-    case 'mg1':      convos=Math.ceil(g/CONV.mg1PerConvo); break
-    case 'mpa':      convos=Math.ceil(g/CONV.mpaPerConvo); break
-    case 'dtm':      convos=Math.ceil(g/CONV.dtmPerConvo); break
-    case 'pre_filter':convos=Math.ceil(g/CONV.pfPerConvo); break
-    case 'catch_up': convos=Math.ceil(g/CONV.cuPerConvo); break
-    case 'launch':   convos=Math.ceil(g*3/CONV.mg1PerConvo); break
-    default:         convos=g
-  }
-  const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate()
-  const weeksInMonth=daysInMonth/7
-  return{
-    mpa:      Math.ceil(Math.ceil(convos*CONV.mpaPerConvo)/weeksInMonth),
-    catch_up: Math.ceil(Math.ceil(convos*CONV.cuPerConvo)/weeksInMonth),
-    dtm:      Math.ceil(Math.ceil(convos*CONV.dtmPerConvo)/weeksInMonth),
-    pre_filter:Math.ceil(Math.ceil(convos*CONV.pfPerConvo)/weeksInMonth),
-    mg1:      Math.max(1,Math.ceil(Math.ceil(convos*CONV.mg1PerConvo)/weeksInMonth)),
-    launch:   Math.max(0,Math.ceil(Math.ceil(convos*CONV.mg1PerConvo/3)/weeksInMonth)),
-    ...(goals.overrides||{}),
-  }
-}
-
 export default function TrackPage(){
   const {userId,userEmail,setUser,loadAll,habits}=useStore()
-  const {trackerLeads,loadTrackerLeads}=useTrackerLeadsStore()
-  const [ready,setReady]         = useState(false)
-  const [member,setMember]       = useState<any>(null)
+  const [ready,setReady]           = useState(false)
+  const [member,setMember]         = useState<any>(null)
   const [needsProfile,setNeedsProfile] = useState(false)
-  const [ibo,setIbo]             = useState('')
-  const [name,setName]           = useState('')
-  const [err,setErr]             = useState('')
-  const [busy,setBusy]           = useState(false)
-  const [isOffline,setIsOffline] = useState(false)
+  const [ibo,setIbo]               = useState('')
+  const [name,setName]             = useState('')
+  const [err,setErr]               = useState('')
+  const [busy,setBusy]             = useState(false)
+  const [isOffline,setIsOffline]   = useState(false)
   const [showInstall,setShowInstall] = useState(false)
   const [deferredPrompt,setDeferredPrompt] = useState<any>(null)
-  const [iboVerifying,setIboVerifying] = useState(false)
-  const [milestone,setMilestone] = useState<{emoji:string;msg:string}|null>(null)
+  const [milestone,setMilestone]   = useState<{emoji:string;msg:string}|null>(null)
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
-  const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'today'|'pipeline'|'candidates'|'habits'>('today')
+  const [adminGoals,setAdminGoals] = useState<any>(null)
+  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -107,7 +66,6 @@ export default function TrackPage(){
   useEffect(()=>{
     if(!userId)return
     loadAll()
-    loadTrackerLeads()
     supabase.from('team_members').select('*').eq('user_id',userId).single()
       .then(({data}:any)=>{
         if(data){
@@ -135,35 +93,6 @@ export default function TrackPage(){
     return s
   },[habits])
 
-  // ── This week's habit totals ──
-  const weekTotals=useMemo(()=>{
-    const today=new Date()
-    const dow=today.getDay()
-    const days=Array.from({length:7},(_,i)=>{
-      const d=new Date(today);d.setDate(today.getDate()-dow+i)
-      return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
-    })
-    const t:Record<string,number>={mpa:0,catch_up:0,dtm:0,pre_filter:0,mg1:0,launch:0,convo:0}
-    days.forEach(d=>{const h=(habits as any)[d];if(h)Object.keys(t).forEach(k=>{t[k]+=(h[k]||0)})})
-    return t
-  },[habits])
-
-  // ── Overdue tracker leads ──
-  const overdueLeads=useMemo(()=>{
-    const today=brisbaneToday()
-    return trackerLeads.filter(l=>{
-      if(!l.next_action_date)return false
-      return l.next_action_date<today
-    }).sort((a,b)=>a.next_action_date.localeCompare(b.next_action_date))
-  },[trackerLeads])
-
-  // ── Logged today? ──
-  const loggedToday=useMemo(()=>{
-    const today=brisbaneToday()
-    const h=(habits as any)[today]
-    return h&&Object.values(h).some((v:any)=>v>0)
-  },[habits])
-
   // ── Milestone check ──
   useEffect(()=>{
     if(!member||!userId)return
@@ -179,25 +108,25 @@ export default function TrackPage(){
   // ── Save profile (first time after Google sign-in) ──
   async function saveProfile(){
     if(!ibo.trim()||!userId){setErr('IBO number required');return}
-    setBusy(true);setIboVerifying(true);setErr('')
+    setBusy(true);setErr('')
     try{
       const res=await fetch(`/api/book/verify-ibo?ibo=${encodeURIComponent(ibo.trim())}`)
       const d=await res.json()
       if(!d.valid){
         setErr("That IBO isn't in our system — contact Hussain.")
-        setBusy(false);setIboVerifying(false);return
+        setBusy(false);return
       }
       const partnerName=name.trim()||d.partner?.name||(userEmail?.split('@')[0]||'Member')
       const {data:existing}=await supabase.from('team_members').select('user_id').eq('ibo_number',ibo.trim()).maybeSingle()
-      if(existing&&existing.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);setIboVerifying(false);return}
+      if(existing&&existing.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);return}
       await supabase.from('team_members').upsert({
         user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
         email:userEmail||'',role:'member',referred_by:'',first_login:true,
         baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
       })
       const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
-      setMember(data);setNeedsProfile(false);setShowOnboard(true);setIboVerifying(false)
-    }catch{setErr('Could not verify IBO. Please try again.');setIboVerifying(false)}
+      setMember(data);setNeedsProfile(false);setShowOnboard(true)
+    }catch{setErr('Could not verify IBO. Please try again.')}
     setBusy(false)
   }
 
@@ -261,9 +190,6 @@ export default function TrackPage(){
       <button style={btn} onClick={saveProfile} disabled={busy}>{busy?'Saving…':'Start tracking'}</button>
     </Shell>
   )
-
-  // ── Tracker ──
-  const wkTargets=weekTargets(adminGoals)
 
   return(
     <div style={{minHeight:'100vh',background:'var(--bg,#0d0d12)'}}>
@@ -334,77 +260,6 @@ export default function TrackPage(){
 
       <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px',paddingBottom:80}}>
 
-        {/* ── TODAY TAB ── */}
-        {tab==='today'&&(
-          <div>
-            {/* Log status */}
-            <div onClick={()=>setTab('habits')} style={{cursor:'pointer',background:loggedToday?'rgba(76,175,125,0.06)':'rgba(200,162,74,0.06)',border:`1px solid ${loggedToday?'rgba(76,175,125,0.3)':'rgba(200,162,74,0.25)'}`,borderRadius:12,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <div style={{display:'flex',alignItems:'center',gap:12}}>
-                <div style={{fontSize:22}}>{loggedToday?'✅':'📝'}</div>
-                <div>
-                  <div style={{fontSize:14,fontWeight:700,color:loggedToday?GREEN:'#fff'}}>{loggedToday?'Habits logged today':'Log today\'s habits'}</div>
-                  <div style={{fontSize:11,color:'#666',marginTop:2}}>{loggedToday?'Great work — keep the streak alive':'Tap to open the habit tracker'}</div>
-                </div>
-              </div>
-              {streak>0&&<div style={{fontSize:16,fontWeight:800,color:GOLD}}>🔥{streak}</div>}
-            </div>
-
-            {/* Weekly goal bars */}
-            {adminGoals&&(
-              <div style={{background:'#13131a',border:'1px solid #1f1f28',borderRadius:12,padding:'14px 16px',marginBottom:16}}>
-                <div style={{fontSize:9,color:'#555',fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:12}}>This week's goals</div>
-                {WEEK_HABITS.map(h=>{
-                  const actual=weekTotals[h.key]||0
-                  const target=wkTargets[h.key]||0
-                  if(!target)return null
-                  const pct=Math.min(100,target>0?Math.round(actual/target*100):0)
-                  const c=pct>=100?GREEN:pct>=60?GOLD:RED
-                  return(
-                    <div key={h.key} style={{marginBottom:10}}>
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:3}}>
-                        <span style={{color:'#aaa',fontWeight:600}}>{h.label}</span>
-                        <span style={{color:c,fontWeight:700}}>{actual}<span style={{color:'#444',fontWeight:400}}> / {target}</span></span>
-                      </div>
-                      <div style={{background:'#0d0d12',borderRadius:6,height:5,overflow:'hidden'}}>
-                        <div style={{width:`${pct}%`,height:'100%',background:c,borderRadius:6,transition:'width 0.5s'}}/>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Overdue follow-ups */}
-            {overdueLeads.length>0&&(
-              <div style={{background:'rgba(224,85,85,0.05)',border:'1px solid rgba(224,85,85,0.2)',borderRadius:12,padding:'14px 16px',marginBottom:16}}>
-                <div style={{fontSize:9,color:RED,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10}}>⚠ Overdue follow-ups ({overdueLeads.length})</div>
-                {overdueLeads.slice(0,8).map(l=>{
-                  const daysOver=Math.round((new Date().getTime()-new Date(l.next_action_date).getTime())/86400000)
-                  return(
-                    <div key={l.id} onClick={()=>setTab('pipeline')} style={{cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(224,85,85,0.1)'}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:600,color:'#ddd'}}>{l.name}</div>
-                        <div style={{fontSize:10,color:'#666',marginTop:1}}>{l.next_action||'Follow up'}</div>
-                      </div>
-                      <div style={{fontSize:10,fontWeight:700,color:RED,flexShrink:0,marginLeft:12}}>{daysOver}d overdue</div>
-                    </div>
-                  )
-                })}
-                {overdueLeads.length>8&&<div style={{fontSize:10,color:'#555',marginTop:8,textAlign:'center' as const}}>+{overdueLeads.length-8} more · open Pipeline to see all</div>}
-              </div>
-            )}
-
-            {/* Empty state */}
-            {!adminGoals&&overdueLeads.length===0&&(
-              <div style={{textAlign:'center' as const,color:'#444',fontSize:13,paddingTop:40}}>
-                <div style={{fontSize:32,marginBottom:12}}>📊</div>
-                <div style={{fontWeight:600,color:'#666',marginBottom:6}}>Goals loading…</div>
-                <div style={{fontSize:11}}>Your weekly targets will appear once admin sets them.</div>
-              </div>
-            )}
-          </div>
-        )}
-
         {tab==='habits'&&(
           <div>
             {/* Streak protection warning */}
@@ -440,17 +295,11 @@ export default function TrackPage(){
 
       {/* ── BOTTOM TAB BAR ── */}
       <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:200,background:'#0d0d12',borderTop:'1px solid #1f1f28',display:'flex',paddingBottom:'env(safe-area-inset-bottom)'}}>
-        {([
-          ['today','◉','Today',overdueLeads.length>0&&!loggedToday],
-          ['pipeline','◆','Pipeline',false],
-          ['candidates','◇','Candidates',false],
-          ['habits','◎','Habits',false],
-        ] as [string,string,string,boolean][]).map(([id,icon,label,alert])=>(
-          <button key={id} onClick={()=>setTab(id as any)}
-            style={{flex:1,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',padding:'8px 0 6px',border:'none',background:'transparent',cursor:'pointer',color:tab===id?GOLD:'#444',transition:'color 0.15s',gap:2,position:'relative' as const}}>
-            <span style={{fontSize:16}}>{icon}</span>
-            <span style={{fontSize:9,fontFamily:'inherit',fontWeight:tab===id?700:400}}>{label}</span>
-            {alert&&<div style={{position:'absolute' as const,top:6,right:'calc(50% - 14px)',width:6,height:6,borderRadius:'50%',background:RED}}/>}
+        {(['pipeline','candidates','habits'] as const).map(id=>(
+          <button key={id} onClick={()=>setTab(id)}
+            style={{flex:1,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',padding:'8px 0 6px',border:'none',background:'transparent',cursor:'pointer',color:tab===id?GOLD:'#444',transition:'color 0.15s',gap:2}}>
+            <span style={{fontSize:16}}>{id==='pipeline'?'◆':id==='candidates'?'◇':'◎'}</span>
+            <span style={{fontSize:9,fontFamily:'inherit',fontWeight:tab===id?700:400,textTransform:'capitalize' as const}}>{id}</span>
           </button>
         ))}
       </div>
