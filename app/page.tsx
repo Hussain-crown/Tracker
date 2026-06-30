@@ -2,13 +2,14 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useStore } from '@/lib/stores'
+import { useTrackerLeadsStore } from '@/lib/stores/trackerLeadsStore'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
-const BLUE='#5B9BD5'; const TEAL='#4ECDC4'
+const BLUE='#5B9BD5'
 
 const MILESTONES=[
   {days:3,emoji:'🔥',msg:"3-day streak! The habit is forming."},
@@ -20,14 +21,56 @@ const MILESTONES=[
   {days:90,emoji:'💎',msg:"90 days. This is who you are now."},
 ]
 
+const WEEK_HABITS = [
+  {key:'mpa',label:'MPA'},
+  {key:'catch_up',label:'Catch Ups'},
+  {key:'dtm',label:'DTM'},
+  {key:'pre_filter',label:'Pre-Filter'},
+  {key:'mg1',label:'MG1'},
+  {key:'launch',label:'Launches'},
+]
+
 function daysAgo(n:number){
   const d=new Date()
   d.setDate(d.getDate()-n)
   return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 
+function brisbaneToday(){
+  return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
+}
+
+// Derive weekly targets from admin CoreGoals (same ratios as Habits.tsx)
+const CONV={mg1PerConvo:0.034,mpaPerConvo:0.83,dtmPerConvo:0.22,pfPerConvo:0.067,cuPerConvo:0.33}
+function weekTargets(goals:any):Record<string,number>{
+  if(!goals)return{}
+  const g=goals.goalMonthly||0
+  let convos=0
+  switch(goals.goalField){
+    case 'mg1':      convos=Math.ceil(g/CONV.mg1PerConvo); break
+    case 'mpa':      convos=Math.ceil(g/CONV.mpaPerConvo); break
+    case 'dtm':      convos=Math.ceil(g/CONV.dtmPerConvo); break
+    case 'pre_filter':convos=Math.ceil(g/CONV.pfPerConvo); break
+    case 'catch_up': convos=Math.ceil(g/CONV.cuPerConvo); break
+    case 'launch':   convos=Math.ceil(g*3/CONV.mg1PerConvo); break
+    default:         convos=g
+  }
+  const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate()
+  const weeksInMonth=daysInMonth/7
+  return{
+    mpa:      Math.ceil(Math.ceil(convos*CONV.mpaPerConvo)/weeksInMonth),
+    catch_up: Math.ceil(Math.ceil(convos*CONV.cuPerConvo)/weeksInMonth),
+    dtm:      Math.ceil(Math.ceil(convos*CONV.dtmPerConvo)/weeksInMonth),
+    pre_filter:Math.ceil(Math.ceil(convos*CONV.pfPerConvo)/weeksInMonth),
+    mg1:      Math.max(1,Math.ceil(Math.ceil(convos*CONV.mg1PerConvo)/weeksInMonth)),
+    launch:   Math.max(0,Math.ceil(Math.ceil(convos*CONV.mg1PerConvo/3)/weeksInMonth)),
+    ...(goals.overrides||{}),
+  }
+}
+
 export default function TrackPage(){
   const {userId,userEmail,setUser,loadAll,habits}=useStore()
+  const {trackerLeads,loadTrackerLeads}=useTrackerLeadsStore()
   const [ready,setReady]         = useState(false)
   const [member,setMember]       = useState<any>(null)
   const [needsProfile,setNeedsProfile] = useState(false)
@@ -39,30 +82,17 @@ export default function TrackPage(){
   const [showInstall,setShowInstall] = useState(false)
   const [deferredPrompt,setDeferredPrompt] = useState<any>(null)
   const [iboVerifying,setIboVerifying] = useState(false)
-  const [iboValid,setIboValid]     = useState(false)
-  const [needsBaseline,setNeedsBaseline] = useState(false)
-  const [baseline,setBaseline]     = useState({
-    interruptions:0,conversations:0,mpa:0,contacts:0,
-    catchups:0,dtm:0,prefilter:0,mg1:0,launches:0
-  })
   const [milestone,setMilestone] = useState<{emoji:string;msg:string}|null>(null)
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
+  const [tab,setTab] = useState<'today'|'pipeline'|'candidates'|'habits'>('today')
 
-  // ── THE FIX: handle every possible auth state on mount ──────
   useEffect(()=>{
-    // onAuthStateChange fires for ALL auth events including the initial
-    // session load from URL hash after OAuth redirect.
-    // We set up the listener FIRST before anything else.
-    // Immediately try to get session — don't wait for onAuthStateChange
     supabase.auth.getSession().then(({data:{session}})=>{
       if(session?.user) setUser(session.user.id, session.user.email??'')
       setReady(true)
     }).catch(()=>setReady(true))
-
-    // Also listen for changes (sign in/out while on the page)
     const {data:{subscription}}=supabase.auth.onAuthStateChange(async(event, session)=>{
       if(session?.user){
         setUser(session.user.id, session.user.email??'')
@@ -74,10 +104,10 @@ export default function TrackPage(){
     return()=>{subscription.unsubscribe()}
   },[]) // eslint-disable-line
 
-  // ── Load member row once userId is known ──
   useEffect(()=>{
     if(!userId)return
     loadAll()
+    loadTrackerLeads()
     supabase.from('team_members').select('*').eq('user_id',userId).single()
       .then(({data}:any)=>{
         if(data){
@@ -85,8 +115,6 @@ export default function TrackPage(){
           setNeedsProfile(false)
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
           if(data.first_login)setShowOnboard(true)
-          if(!data.baseline_set){setNeedsBaseline(true)}
-          // Fetch admin's Core Run goals so the goal row shows correctly
           fetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
             if(d.goals)setAdminGoals(d.goals)
           }).catch(()=>{})
@@ -101,50 +129,39 @@ export default function TrackPage(){
     let s=0
     for(let i=0;i<90;i++){
       const h=(habits as any)[daysAgo(i)]
-      if(h&&(h.convo>0||h.mg1>0||h.mpa>0||h.contact>0))s++
-      else if(i>0)break
+      if(h&&(h.convo>0||h.mg1>0||h.mpa>0||h.contact>0||h.catch_up>0||h.dtm>0||h.pre_filter>0||h.launch>0))s++
       else break
     }
     return s
   },[habits])
 
-  // ── Streak protection: check if yesterday was missed ──
-  const missedYesterday = useMemo(()=>{
-    const yest = daysAgo(1)
-    const h = (habits as any)[yest]
-    const todayStr = new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
-    const todayH = (habits as any)[todayStr]
-    // Only show warning if yesterday was missed AND today hasn't been logged yet
-    const hasTodayActivity = todayH && Object.values(todayH).some((v:any)=>v>0)
-    const hadYestActivity = h && Object.values(h).some((v:any)=>v>0)
-    return streak > 0 && !hadYestActivity && !hasTodayActivity
-  },[habits, streak])
+  // ── This week's habit totals ──
+  const weekTotals=useMemo(()=>{
+    const today=new Date()
+    const dow=today.getDay()
+    const days=Array.from({length:7},(_,i)=>{
+      const d=new Date(today);d.setDate(today.getDate()-dow+i)
+      return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
+    })
+    const t:Record<string,number>={mpa:0,catch_up:0,dtm:0,pre_filter:0,mg1:0,launch:0,convo:0}
+    days.forEach(d=>{const h=(habits as any)[d];if(h)Object.keys(t).forEach(k=>{t[k]+=(h[k]||0)})})
+    return t
+  },[habits])
 
-  // ── Personal best: best week for conversations ──
-  const personalBest = useMemo(()=>{
-    let best = 0
-    let bestWeekStr = ''
-    // Check last 12 weeks
-    for(let w = 0; w < 12; w++){
-      let wTotal = 0
-      const wStart = new Date()
-      wStart.setDate(wStart.getDate() - wStart.getDay() - w*7)
-      for(let d = 0; d < 7; d++){
-        const day = new Date(wStart)
-        day.setDate(day.getDate()+d)
-        const ds = day.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
-        const h = (habits as any)[ds]
-        if(h) wTotal += (h.convo||0)
-      }
-      if(wTotal > best){
-        best = wTotal
-        const wEnd = new Date(wStart)
-        wEnd.setDate(wEnd.getDate()+6)
-        const weeksAgo = w===0?'this week':w===1?'last week':`${w} weeks ago`
-        bestWeekStr = `${best} convos · ${weeksAgo}`
-      }
-    }
-    return best > 0 ? bestWeekStr : null
+  // ── Overdue tracker leads ──
+  const overdueLeads=useMemo(()=>{
+    const today=brisbaneToday()
+    return trackerLeads.filter(l=>{
+      if(!l.next_action_date)return false
+      return l.next_action_date<today
+    }).sort((a,b)=>a.next_action_date.localeCompare(b.next_action_date))
+  },[trackerLeads])
+
+  // ── Logged today? ──
+  const loggedToday=useMemo(()=>{
+    const today=brisbaneToday()
+    const h=(habits as any)[today]
+    return h&&Object.values(h).some((v:any)=>v>0)
   },[habits])
 
   // ── Milestone check ──
@@ -159,13 +176,10 @@ export default function TrackPage(){
     supabase.from('team_members').update({seen_milestones:JSON.stringify(next),updated_at:now()}).eq('user_id',userId)
   },[streak,member]) // eslint-disable-line
 
-  // feedback removed — members think for themselves
-
   // ── Save profile (first time after Google sign-in) ──
   async function saveProfile(){
     if(!ibo.trim()||!userId){setErr('IBO number required');return}
     setBusy(true);setIboVerifying(true);setErr('')
-    // Verify IBO against partners table
     try{
       const res=await fetch(`/api/book/verify-ibo?ibo=${encodeURIComponent(ibo.trim())}`)
       const d=await res.json()
@@ -173,42 +187,20 @@ export default function TrackPage(){
         setErr("That IBO isn't in our system — contact Hussain.")
         setBusy(false);setIboVerifying(false);return
       }
-      // IBO is valid — use partner name if no name entered
       const partnerName=name.trim()||d.partner?.name||(userEmail?.split('@')[0]||'Member')
       const {data:existing}=await supabase.from('team_members').select('user_id').eq('ibo_number',ibo.trim()).maybeSingle()
       if(existing&&existing.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);setIboVerifying(false);return}
       await supabase.from('team_members').upsert({
         user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
         email:userEmail||'',role:'member',referred_by:'',first_login:true,
-        baseline_set:false,seen_milestones:'[]',created_at:now(),updated_at:now(),
+        baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
       })
       const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
-      setMember(data);setNeedsProfile(false);setNeedsBaseline(true);setIboVerifying(false)
+      setMember(data);setNeedsProfile(false);setShowOnboard(true);setIboVerifying(false)
     }catch{setErr('Could not verify IBO. Please try again.');setIboVerifying(false)}
     setBusy(false)
   }
 
-  async function saveBaseline(){
-    if(!userId||!member)return
-    setBusy(true)
-    await supabase.from('team_members').update({
-      baseline_interruptions: baseline.interruptions,
-      baseline_conversations: baseline.conversations,
-      baseline_mpa:           baseline.mpa,
-      baseline_contacts:      baseline.contacts,
-      baseline_catchups:      baseline.catchups,
-      baseline_dtm:           baseline.dtm,
-      baseline_prefilter:     baseline.prefilter,
-      baseline_mg1:           baseline.mg1,
-      baseline_launches:      baseline.launches,
-      baseline_set:           true,
-      updated_at:             now(),
-    }).eq('user_id',userId)
-    const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
-    setMember(data);setNeedsBaseline(false);setShowOnboard(true);setBusy(false)
-  }
-
-  // ── Google sign-in ──
   async function signInWithGoogle(){
     setBusy(true);setErr('')
     await supabase.auth.signInWithOAuth({
@@ -218,7 +210,6 @@ export default function TrackPage(){
         queryParams:{prompt:'select_account'},
       }
     })
-    // page will redirect — no need to setBusy(false)
   }
 
   async function signOut(){await supabase.auth.signOut();window.location.reload()}
@@ -227,17 +218,15 @@ export default function TrackPage(){
     if(userId)await supabase.from('team_members').update({first_login:false,updated_at:now()}).eq('user_id',userId)
   }
 
-  // ── Loading ──
   if(!ready)return(
     <Shell>
       <div style={{color:'#555',textAlign:'center',padding:40,fontSize:14}}>
-        <div style={{fontSize:28,marginBottom:12,animation:'pulse 1.5s infinite'}}>⏳</div>
+        <div style={{fontSize:28,marginBottom:12}}>⏳</div>
         Loading Business Tracker…
       </div>
     </Shell>
   )
 
-  // ── Not logged in ──
   if(!userId)return(
     <Shell>
       <div style={{textAlign:'center',marginBottom:28}}>
@@ -258,7 +247,6 @@ export default function TrackPage(){
     </Shell>
   )
 
-  // ── Needs IBO (first login) ──
   if(needsProfile)return(
     <Shell>
       <div style={{fontSize:20,fontWeight:800,color:'#fff',marginBottom:4}}>One more step</div>
@@ -274,50 +262,9 @@ export default function TrackPage(){
     </Shell>
   )
 
-
-  // ── Baseline setup ──
-  if(needsBaseline)return(
-    <Shell>
-      <div style={{fontSize:20,fontWeight:800,color:'#fff',marginBottom:4}}>Set your baseline</div>
-      <div style={{fontSize:12,color:'#888',marginBottom:6,lineHeight:1.7}}>
-        Enter your all-time totals before today.<br/>
-        <span style={{color:'#555'}}>This keeps your trends accurate. Enter 0 if you're just starting.</span>
-      </div>
-      <div style={{marginBottom:20}}>
-        {[
-          {key:'interruptions',label:'Interruptions',desc:'New people you stopped to speak to'},
-          {key:'conversations',label:'Conversations',desc:'Business conversations you had'},
-          {key:'mpa',label:'MPA',desc:'Product demonstrations you ran'},
-          {key:'contacts',label:'Contacts',desc:'People added to your pipeline'},
-          {key:'catchups',label:'Catch Ups',desc:'Follow-up conversations'},
-          {key:'dtm',label:'DTM',desc:'Decision to move conversations'},
-          {key:'prefilter',label:'Pre-Filter',desc:'Pre-filter calls completed'},
-          {key:'mg1',label:'MG1',desc:'Group presentations attended or ran'},
-          {key:'launches',label:'Launches',desc:'Partners you launched'},
-        ].map(h=>(
-          <div key={h.key} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 0',borderBottom:'1px solid #1a1a24'}}>
-            <div>
-              <div style={{fontSize:13,fontWeight:600,color:'#ddd'}}>{h.label}</div>
-              <div style={{fontSize:10,color:'#555',marginTop:1}}>{h.desc}</div>
-            </div>
-            <input type="number" min={0} value={(baseline as any)[h.key]}
-              onChange={e=>setBaseline(b=>({...b,[h.key]:parseInt(e.target.value)||0}))}
-              style={{width:80,background:'#16161c',border:'1px solid #2a2a35',borderRadius:8,padding:'7px 10px',color:'#fff',fontSize:14,textAlign:'right' as const,fontFamily:'inherit',outline:'none'}}/>
-          </div>
-        ))}
-      </div>
-      {err&&<ErrBox msg={err}/>}
-      <button style={{...btn,marginBottom:8}} onClick={saveBaseline} disabled={busy}>{busy?'Saving…':'Start tracking →'}</button>
-      <button onClick={async()=>{
-        await supabase.from('team_members').update({baseline_set:true,updated_at:now()}).eq('user_id',userId||'')
-        setNeedsBaseline(false);setShowOnboard(true)
-      }} style={{background:'none',border:'none',color:'#444',fontSize:11,cursor:'pointer',fontFamily:'inherit',width:'100%',textAlign:'center' as const,padding:'6px'}}>
-        Skip — I'll set this later
-      </button>
-    </Shell>
-  )
-
   // ── Tracker ──
+  const wkTargets=weekTargets(adminGoals)
+
   return(
     <div style={{minHeight:'100vh',background:'var(--bg,#0d0d12)'}}>
       {/* Offline banner */}
@@ -326,7 +273,7 @@ export default function TrackPage(){
           📵 You're offline — your logs are saved locally and will sync when reconnected
         </div>
       )}
-      {/* Install to home screen prompt */}
+      {/* Install to home screen */}
       {showInstall&&!isOffline&&(
         <div style={{background:'rgba(200,162,74,0.1)',borderBottom:'1px solid rgba(200,162,74,0.2)',padding:'10px 16px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div style={{fontSize:12,color:'#C8A24A',fontWeight:600}}>📲 Add Business Tracker to your home screen</div>
@@ -338,6 +285,8 @@ export default function TrackPage(){
           </div>
         </div>
       )}
+
+      {/* Header */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 18px',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
         <div>
           <div style={{fontSize:14,fontWeight:800,color:'#fff'}}>Business Tracker</div>
@@ -348,127 +297,160 @@ export default function TrackPage(){
           <button onClick={signOut} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #2a2a35',background:'transparent',color:'#888',cursor:'pointer',fontSize:11}}>Sign out</button>
         </div>
       </div>
-      {/* Top tab nav */}
-      <div style={{display:'flex',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
-        {([
-          ['pipeline','Pipeline'] as const,
-          ['candidates','Candidates'] as const,
-          ['habits','Habits'] as const,
-        ]).map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)}
-            style={{flex:1,padding:'10px',border:'none',background:'transparent',cursor:'pointer',fontFamily:'inherit',
-              fontSize:12,fontWeight:tab===id?700:400,
-              color:tab===id?GOLD:'#555',
-              borderBottom:`2px solid ${tab===id?GOLD:'transparent'}`,transition:'color 0.15s'}}>
-            {label}
-          </button>
-        ))}
-      </div>
 
-      <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px'}}>
-        {/* Streak protection warning */}
-        {tab==='habits'&&missedYesterday&&(
-          <div style={{background:'rgba(232,145,58,0.08)',border:'1px solid rgba(232,145,58,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
-            <span style={{fontSize:18}}>⚠️</span>
+      {/* Milestone */}
+      {milestone&&(
+        <div style={{maxWidth:900,margin:'8px auto',padding:'0 18px'}}>
+          <div style={{background:'linear-gradient(135deg,rgba(200,162,74,0.12),rgba(200,162,74,0.04))',border:'1px solid rgba(200,162,74,0.4)',borderRadius:14,padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div>
-              <div style={{fontSize:13,fontWeight:700,color:'#E8913A'}}>Log today to protect your streak</div>
-              <div style={{fontSize:11,color:'#888',marginTop:2}}>Yesterday had no activity recorded.</div>
-            </div>
-          </div>
-        )}
-
-        {/* Personal best */}
-        {tab==='habits'&&personalBest&&(
-          <div style={{fontSize:11,color:'#555',padding:'6px 12px',background:'#13131a',borderRadius:8,marginBottom:10,textAlign:'center' as const}}>
-            🏆 Personal best: {personalBest}
-          </div>
-        )}
-
-        {/* Milestone */}
-        {milestone&&(
-          <div style={{background:'linear-gradient(135deg,rgba(200,162,74,0.12),rgba(200,162,74,0.04))',border:'1px solid rgba(200,162,74,0.4)',borderRadius:14,padding:'18px 20px',marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontSize:22,marginBottom:4}}>{milestone.emoji}</div>
-              <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:2}}>Milestone hit!</div>
-              <div style={{fontSize:13,color:'#aaa'}}>{milestone.msg}</div>
+              <div style={{fontSize:20,marginBottom:4}}>{milestone.emoji}</div>
+              <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:2}}>Milestone hit!</div>
+              <div style={{fontSize:12,color:'#aaa'}}>{milestone.msg}</div>
             </div>
             <button onClick={()=>setMilestone(null)} style={{background:'none',border:'none',color:'#555',cursor:'pointer',fontSize:22,flexShrink:0}}>×</button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Onboarding */}
-        {showOnboard&&(
-          <div style={{background:'#13131a',border:'1px solid #2a2a35',borderRadius:14,padding:'20px 22px',marginBottom:16}}>
+      {/* Onboarding welcome */}
+      {showOnboard&&(
+        <div style={{maxWidth:900,margin:'8px auto',padding:'0 18px'}}>
+          <div style={{background:'#13131a',border:'1px solid #2a2a35',borderRadius:14,padding:'20px 22px'}}>
             <div style={{fontSize:16,fontWeight:800,color:'#fff',marginBottom:12}}>Welcome to Business Tracker 👋</div>
             <div style={{fontSize:12,color:'#888',lineHeight:1.8,marginBottom:16}}>
-              {[{k:'Pipeline',d:'Track every prospect you\'re speaking to about the business'},{k:'Candidates',d:'See where your prospects are in the interview process'},{k:'Conversations',d:'New people you spoke to about the business'},{k:'Contacts',d:'People you added to your pipeline'},{k:'DTM',d:'Decision to move conversations'},{k:'MG1',d:'Group presentations attended or ran'},{k:'Launches',d:'New partners you helped launch'}].map(f=>(
+              {[
+                {k:'Today',d:'See your streak, weekly goals, and overdue follow-ups at a glance'},
+                {k:'Pipeline',d:'Track every prospect you\'re speaking to about the business'},
+                {k:'Candidates',d:'See where your prospects are in the interview process'},
+                {k:'Habits',d:'Log your daily activity — convos, MG1s, MPAs, launches'},
+              ].map(f=>(
                 <div key={f.k} style={{padding:'4px 0',borderBottom:'1px solid #1f1f28'}}><strong style={{color:'#ddd'}}>{f.k}</strong> — {f.d}</div>
               ))}
             </div>
             <button onClick={dismissOnboard} style={{...btn,padding:'10px 24px',width:'auto'}}>Got it — let's go</button>
           </div>
+        </div>
+      )}
+
+      <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px',paddingBottom:80}}>
+
+        {/* ── TODAY TAB ── */}
+        {tab==='today'&&(
+          <div>
+            {/* Log status */}
+            <div onClick={()=>setTab('habits')} style={{cursor:'pointer',background:loggedToday?'rgba(76,175,125,0.06)':'rgba(200,162,74,0.06)',border:`1px solid ${loggedToday?'rgba(76,175,125,0.3)':'rgba(200,162,74,0.25)'}`,borderRadius:12,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{fontSize:22}}>{loggedToday?'✅':'📝'}</div>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:loggedToday?GREEN:'#fff'}}>{loggedToday?'Habits logged today':'Log today\'s habits'}</div>
+                  <div style={{fontSize:11,color:'#666',marginTop:2}}>{loggedToday?'Great work — keep the streak alive':'Tap to open the habit tracker'}</div>
+                </div>
+              </div>
+              {streak>0&&<div style={{fontSize:16,fontWeight:800,color:GOLD}}>🔥{streak}</div>}
+            </div>
+
+            {/* Weekly goal bars */}
+            {adminGoals&&(
+              <div style={{background:'#13131a',border:'1px solid #1f1f28',borderRadius:12,padding:'14px 16px',marginBottom:16}}>
+                <div style={{fontSize:9,color:'#555',fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:12}}>This week's goals</div>
+                {WEEK_HABITS.map(h=>{
+                  const actual=weekTotals[h.key]||0
+                  const target=wkTargets[h.key]||0
+                  if(!target)return null
+                  const pct=Math.min(100,target>0?Math.round(actual/target*100):0)
+                  const c=pct>=100?GREEN:pct>=60?GOLD:RED
+                  return(
+                    <div key={h.key} style={{marginBottom:10}}>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:3}}>
+                        <span style={{color:'#aaa',fontWeight:600}}>{h.label}</span>
+                        <span style={{color:c,fontWeight:700}}>{actual}<span style={{color:'#444',fontWeight:400}}> / {target}</span></span>
+                      </div>
+                      <div style={{background:'#0d0d12',borderRadius:6,height:5,overflow:'hidden'}}>
+                        <div style={{width:`${pct}%`,height:'100%',background:c,borderRadius:6,transition:'width 0.5s'}}/>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Overdue follow-ups */}
+            {overdueLeads.length>0&&(
+              <div style={{background:'rgba(224,85,85,0.05)',border:'1px solid rgba(224,85,85,0.2)',borderRadius:12,padding:'14px 16px',marginBottom:16}}>
+                <div style={{fontSize:9,color:RED,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10}}>⚠ Overdue follow-ups ({overdueLeads.length})</div>
+                {overdueLeads.slice(0,8).map(l=>{
+                  const daysOver=Math.round((new Date().getTime()-new Date(l.next_action_date).getTime())/86400000)
+                  return(
+                    <div key={l.id} onClick={()=>setTab('pipeline')} style={{cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(224,85,85,0.1)'}}>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:600,color:'#ddd'}}>{l.name}</div>
+                        <div style={{fontSize:10,color:'#666',marginTop:1}}>{l.next_action||'Follow up'}</div>
+                      </div>
+                      <div style={{fontSize:10,fontWeight:700,color:RED,flexShrink:0,marginLeft:12}}>{daysOver}d overdue</div>
+                    </div>
+                  )
+                })}
+                {overdueLeads.length>8&&<div style={{fontSize:10,color:'#555',marginTop:8,textAlign:'center' as const}}>+{overdueLeads.length-8} more · open Pipeline to see all</div>}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!adminGoals&&overdueLeads.length===0&&(
+              <div style={{textAlign:'center' as const,color:'#444',fontSize:13,paddingTop:40}}>
+                <div style={{fontSize:32,marginBottom:12}}>📊</div>
+                <div style={{fontWeight:600,color:'#666',marginBottom:6}}>Goals loading…</div>
+                <div style={{fontSize:11}}>Your weekly targets will appear once admin sets them.</div>
+              </div>
+            )}
+          </div>
         )}
 
-
-
-        {/* Weekly summary — this week at a glance */}
-        {tab==='habits'&&member&&habits&&(()=>{
-          const HABIT_DEFS=[
-            {key:'interruptions',label:'Int.'},
-            {key:'convo',label:'Convos'},
-            {key:'mpa',label:'MPA'},
-            {key:'contact',label:'Contacts'},
-            {key:'catch_up',label:'Catch Ups'},
-            {key:'dtm',label:'DTM'},
-            {key:'pre_filter',label:'PF'},
-            {key:'mg1',label:'MG1'},
-            {key:'launch',label:'Launches'},
-          ]
-          const weekDays=Array.from({length:7},(_,i)=>{
-            const d=new Date();d.setDate(d.getDate()-d.getDay()+i)
-            return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
-          })
-          const weekTotals:Record<string,number>={}
-          HABIT_DEFS.forEach(h=>{
-            weekTotals[h.key]=weekDays.reduce((s,d)=>s+((habits as any)[d]?.[h.key]||0),0)
-          })
-          const hasAny=Object.values(weekTotals).some(v=>v>0)
-          if(!hasAny)return null
-          return(
-            <div style={{background:'rgba(200,162,74,0.04)',border:'1px solid rgba(200,162,74,0.15)',borderRadius:12,padding:'12px 16px',marginBottom:12}}>
-              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10}}>This week</div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
-                {HABIT_DEFS.filter(h=>weekTotals[h.key]>0).map(h=>(
-                  <div key={h.key} style={{display:'flex',justifyContent:'space-between',alignItems:'baseline'}}>
-                    <span style={{fontSize:10,color:'#666'}}>{h.label}</span>
-                    <span style={{fontSize:13,fontWeight:700,color:'#ddd'}}>{weekTotals[h.key]}</span>
+        {tab==='habits'&&(
+          <div>
+            {/* Streak protection warning */}
+            {(()=>{
+              const yest=daysAgo(1)
+              const h=(habits as any)[yest]
+              const todayH=(habits as any)[brisbaneToday()]
+              const hasTodayActivity=todayH&&Object.values(todayH).some((v:any)=>v>0)
+              const hadYestActivity=h&&Object.values(h).some((v:any)=>v>0)
+              if(!(streak>0&&!hadYestActivity&&!hasTodayActivity))return null
+              return(
+                <div style={{background:'rgba(232,145,58,0.08)',border:'1px solid rgba(232,145,58,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:18}}>⚠️</span>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:'#E8913A'}}>Log today to protect your streak</div>
+                    <div style={{fontSize:11,color:'#888',marginTop:2}}>Yesterday had no activity recorded.</div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )
-        })()}
+                </div>
+              )
+            })()}
+            <Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>
+          </div>
+        )}
 
-        {tab==='habits'&&<Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>}
         {tab==='pipeline'&&<Pipeline iboNumber={member?.ibo_number||''}/>}
       </div>
+
       {tab==='candidates'&&(
         <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px',paddingBottom:80}}>
           <Candidates/>
         </div>
       )}
 
-      {/* ── MOBILE BOTTOM TAB BAR ───────────────────────────── */}
+      {/* ── BOTTOM TAB BAR ── */}
       <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:200,background:'#0d0d12',borderTop:'1px solid #1f1f28',display:'flex',paddingBottom:'env(safe-area-inset-bottom)'}}>
         {([
-          ['pipeline','◆','Pipeline'],
-          ['candidates','◇','Candidates'],
-          ['habits','◎','Habits'],
-        ] as const).map(([id,icon,label])=>(
-          <button key={id} onClick={()=>setTab(id)}
-            style={{flex:1,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',padding:'8px 0 6px',border:'none',background:'transparent',cursor:'pointer',color:tab===id?GOLD:'#444',transition:'color 0.15s',gap:2}}>
+          ['today','◉','Today',overdueLeads.length>0&&!loggedToday],
+          ['pipeline','◆','Pipeline',false],
+          ['candidates','◇','Candidates',false],
+          ['habits','◎','Habits',false],
+        ] as [string,string,string,boolean][]).map(([id,icon,label,alert])=>(
+          <button key={id} onClick={()=>setTab(id as any)}
+            style={{flex:1,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',padding:'8px 0 6px',border:'none',background:'transparent',cursor:'pointer',color:tab===id?GOLD:'#444',transition:'color 0.15s',gap:2,position:'relative' as const}}>
             <span style={{fontSize:16}}>{icon}</span>
             <span style={{fontSize:9,fontFamily:'inherit',fontWeight:tab===id?700:400}}>{label}</span>
+            {alert&&<div style={{position:'absolute' as const,top:6,right:'calc(50% - 14px)',width:6,height:6,borderRadius:'50%',background:RED}}/>}
           </button>
         ))}
       </div>
