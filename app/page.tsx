@@ -5,7 +5,6 @@ import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
-import Organisation from '@/components/pages/Organisation'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
@@ -50,7 +49,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'|'org'>('pipeline')
+  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
 
   // ── THE FIX: handle every possible auth state on mount ──────
   useEffect(()=>{
@@ -349,12 +348,11 @@ export default function TrackPage(){
           <button onClick={signOut} style={{padding:'6px 12px',borderRadius:8,border:'1px solid #2a2a35',background:'transparent',color:'#888',cursor:'pointer',fontSize:11}}>Sign out</button>
         </div>
       </div>
-      {/* Top tab nav — hidden on mobile (uses bottom bar) */}
-      <div style={{display:'flex',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}} className="desktop-tabs">
+      {/* Top tab nav */}
+      <div style={{display:'flex',borderBottom:'1px solid #1f1f28',maxWidth:900,margin:'0 auto'}}>
         {([
           ['pipeline','Pipeline'] as const,
           ['candidates','Candidates'] as const,
-          ['org','Organisation'] as const,
           ['habits','Habits'] as const,
         ]).map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
@@ -459,18 +457,12 @@ export default function TrackPage(){
           <Candidates/>
         </div>
       )}
-      {tab==='org'&&(
-        <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px'}}>
-          <Organisation/>
-        </div>
-      )}
 
       {/* ── MOBILE BOTTOM TAB BAR ───────────────────────────── */}
       <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:200,background:'#0d0d12',borderTop:'1px solid #1f1f28',display:'flex',paddingBottom:'env(safe-area-inset-bottom)'}}>
         {([
           ['pipeline','◆','Pipeline'],
           ['candidates','◇','Candidates'],
-          ['org','◉','Org'],
           ['habits','◎','Habits'],
         ] as const).map(([id,icon,label])=>(
           <button key={id} onClick={()=>setTab(id)}
