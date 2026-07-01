@@ -402,6 +402,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       await upsertLead(l)
       if(!ed){
         await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
+        await autoLogHabit('interruptions')
         await autoLogHabit('convo')
       }
     },'Save lead failed')
@@ -450,6 +451,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline to Candidate — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
       await deleteLead(l.id)
     },'Conversion failed')
+    await autoLogHabit('pre_filter')
     setBookPFModal(null)
   }
 
