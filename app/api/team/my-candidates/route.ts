@@ -25,21 +25,13 @@ export async function GET(req: Request) {
     const iboNumber = member?.ibo_number || ''
     if (!iboNumber) return NextResponse.json({ candidates: [], logs: [], iboNumber: '' })
 
-    const { data: allCandidates } = await sbAdmin
+    const { data: candidates } = await sbAdmin
       .from('candidates')
       .select('*')
+      .filter('interview_notes->>_sponsor_ibo', 'eq', iboNumber)
       .order('created_at', { ascending: false })
 
-    const candidates = (allCandidates || []).filter((c: any) => {
-      try {
-        const sponsor = JSON.parse(c.interview_notes || '{}')._sponsor_ibo || ''
-        return sponsor === iboNumber
-      } catch {
-        return false
-      }
-    })
-
-    const ids = candidates.map((c: any) => c.id)
+    const ids = (candidates || []).map((c: any) => c.id)
 
     let logs: any[] = []
     if (ids.length > 0) {
@@ -51,7 +43,7 @@ export async function GET(req: Request) {
       logs = data || []
     }
 
-    return NextResponse.json({ candidates, logs, iboNumber })
+    return NextResponse.json({ candidates: candidates || [], logs, iboNumber })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }

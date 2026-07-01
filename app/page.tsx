@@ -64,6 +64,21 @@ export default function TrackPage(){
   },[]) // eslint-disable-line
 
   useEffect(()=>{
+    function handleOffline(){setIsOffline(true)}
+    function handleOnline(){setIsOffline(false)}
+    function handleInstall(e:Event){e.preventDefault();setDeferredPrompt(e);setShowInstall(true)}
+    setIsOffline(!navigator.onLine)
+    window.addEventListener('offline',handleOffline)
+    window.addEventListener('online',handleOnline)
+    window.addEventListener('beforeinstallprompt',handleInstall)
+    return()=>{
+      window.removeEventListener('offline',handleOffline)
+      window.removeEventListener('online',handleOnline)
+      window.removeEventListener('beforeinstallprompt',handleInstall)
+    }
+  },[])
+
+  useEffect(()=>{
     if(!userId)return
     loadAll()
     supabase.from('team_members').select('*').eq('user_id',userId).single()
@@ -269,7 +284,7 @@ export default function TrackPage(){
               const todayH=(habits as any)[brisbaneToday()]
               const hasTodayActivity=todayH&&Object.values(todayH).some((v:any)=>v>0)
               const hadYestActivity=h&&Object.values(h).some((v:any)=>v>0)
-              if(!(streak>0&&!hadYestActivity&&!hasTodayActivity))return null
+              if(!(hadYestActivity&&!hasTodayActivity))return null
               return(
                 <div style={{background:'rgba(232,145,58,0.08)',border:'1px solid rgba(232,145,58,0.3)',borderRadius:12,padding:'12px 16px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
                   <span style={{fontSize:18}}>⚠️</span>
