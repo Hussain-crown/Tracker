@@ -48,7 +48,7 @@ function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<new Date().toISOString().slice(0,10))}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
 function waLink(l:Lead){const n=(l.phone||l.contact||'').replace(/\D/g,'');return n?`https://wa.me/${n.startsWith('0')?'61'+n.slice(1):n}`:null}
-function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Convo',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
+function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
 
 function parseCSV(text:string){
   const lines=text.trim().split(/\r?\n/).filter(l=>l.trim())
@@ -834,7 +834,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                 </div>
                 <div>
                   <div style={SL}>Stage</div>
-                  <select value={form.stage||'Convo'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
+                  <select value={form.stage||'Contact'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
                     {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
