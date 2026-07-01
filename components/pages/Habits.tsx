@@ -149,10 +149,11 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const [form,setForm]           =useState<Record<FieldKey,number>>({convo:0,mg1:0,mpa:0,catch_up:0,dtm:0,pre_filter:0,launch:0,interruptions:0,contact:0})
   const [saving,setSaving]       =useState(false)
   const [saved,setSaved]         =useState(false)
-  const [tab,setTab]             =useState<Tab>('log')
+  const [tab,setTab]             =useState<Tab>(level>=2?'log':'trends')
   const [teamResources,setTeamResources] = useState<any[]>([])
   const [resLoading,setResLoading]       = useState(false)
-  useEffect(()=>{ if(hideMonth&&tab==='month')setTab('log') },[hideMonth,tab])
+  useEffect(()=>{ if(hideMonth&&tab==='month')setTab('trends') },[hideMonth,tab])
+  useEffect(()=>{ if(level<2&&tab==='log')setTab('trends') },[level,tab])
 
   // Load admin resources when Resources tab opened (tracker mode only)
   useEffect(()=>{
@@ -377,7 +378,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   // Get the goal field definition
   const goalFieldDef = FIELDS.find(f=>f.key===coreGoals.goalField)??FIELDS.find(f=>f.key==='mg1')!
 
-  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'month' as Tab,label:'📅 Month'},{id:'trends' as Tab,label:'📈 Trends'},{id:'core' as Tab,label:'🎯 Core Run'},...(hideMonth?[{id:'resources' as Tab,label:'📚 Resources'}]:[])]).filter(t=>!(hideMonth&&t.id==='month'))
+  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'month' as Tab,label:'📅 Month'},{id:'trends' as Tab,label:'📈 Trends'},{id:'core' as Tab,label:'🎯 Core Run'},...(hideMonth?[{id:'resources' as Tab,label:'📚 Resources'}]:[])]).filter(t=>!(hideMonth&&t.id==='month')).filter(t=>!(level<2&&t.id==='log'))
   const scoreColor=todayScore>=80?GREEN:todayScore>=60?TEAL:todayScore>=40?GOLD:RED
   const consColor=consistency>=80?GREEN:consistency>=60?TEAL:consistency>=40?GOLD:RED
   const currMo=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)
