@@ -7,15 +7,15 @@ import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 
 // ── CONSTANTS ─────────────────────────────────────────────
-const STAGES = ['New','Connected','MPA','Catch-Up','DTM'] as const
+const STAGES = ['Convo','Contact','MPA','Catch-Up','DTM'] as const
 type Stage = typeof STAGES[number]
 
 const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
-  'New':       {color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'Connected'},
-  'Connected': {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'MPA'},
-  'MPA':       {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:'Catch-Up'},
-  'Catch-Up':  {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'DTM'},
-  'DTM':       {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
+  'Convo':    {color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'Contact'},
+  'Contact':  {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'MPA'},
+  'MPA':      {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:'Catch-Up'},
+  'Catch-Up': {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'DTM'},
+  'DTM':      {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
 }
 
 const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
@@ -39,7 +39,7 @@ function healthScore(l:Lead, lastContactDate:string):number{
   const hxlS=Math.min(100,hxl(l.hunger,l.looking))
   const daysSinceContact=lastContactDate?Math.floor((Date.now()-new Date(lastContactDate).getTime())/86400000):daysSince(l.updated_at)
   const recency=Math.max(0,100-daysSinceContact*10)
-  const stageDepth=(['New','Connected','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*16
+  const stageDepth=(['Convo','Contact','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*16
   return Math.round(hxlS*0.5+recency*0.3+stageDepth*0.2)
 }
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
@@ -48,7 +48,7 @@ function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<new Date().toISOString().slice(0,10))}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
 function waLink(l:Lead){const n=(l.phone||l.contact||'').replace(/\D/g,'');return n?`https://wa.me/${n.startsWith('0')?'61'+n.slice(1):n}`:null}
-function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'New',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
+function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Convo',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
 
 function parseCSV(text:string){
   const lines=text.trim().split(/\r?\n/).filter(l=>l.trim())
@@ -94,7 +94,7 @@ interface LeadCardProps {
   nextDue?: string
 }
 function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,touchCount,nextDue}:LeadCardProps){
-  const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['New']
+  const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
   const isDTM=l.stage==='DTM'
@@ -103,7 +103,7 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
   const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
   // Days in current stage (from last stage-change log or created_at)
-  const stageChangeLogs=logs.filter(c=>['connected','mpa','catch_up','dtm','lead_created'].includes(c.event_type))
+  const stageChangeLogs=logs.filter(c=>['convo','contact','mpa','catch_up','dtm','lead_created'].includes(c.event_type))
   const stageChangeDate=stageChangeLogs[0]?.created_at??l.created_at
   const daysInStage=Math.floor((Date.now()-new Date(stageChangeDate).getTime())/86400000)
   const stageAlertColor=daysInStage>=21?RED:daysInStage>=14?GOLD:null
@@ -233,7 +233,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   // Stage → habit field mapping for auto-log
   const STAGE_HABIT: Record<string,keyof HabitEntry> = {
-    'connected': 'convo',
+    'contact':   'contact',
     'mpa':       'mpa',
     'catch_up':  'catch_up',
     'dtm':       'dtm',
@@ -301,7 +301,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   // ── weekly digest ──
   const weeklyDigest = useMemo(()=>{
     const newLeads=active.filter(l=>l.created_at>=weekAgo).length
-    const advances=contactLogs.filter(l=>['connected','mpa','catch_up','dtm'].includes(l.event_type)&&l.created_at>=weekAgo).length
+    const advances=contactLogs.filter(l=>['convo','contact','mpa','catch_up','dtm'].includes(l.event_type)&&l.created_at>=weekAgo).length
     const dtms=contactLogs.filter(l=>l.event_type==='dtm'&&l.created_at>=weekAgo).length
     const archives=archived.filter(l=>l.updated_at>=weekAgo).length
     return{newLeads,advances,dtms,archives}
@@ -400,7 +400,10 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'New',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:form.life_stage||'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'Call',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
     await safeWrite(async()=>{
       await upsertLead(l)
-      if(!ed)await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
+      if(!ed){
+        await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
+        await autoLogHabit('convo')
+      }
     },'Save lead failed')
     setOpen(false)
   }
@@ -717,7 +720,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               <div>
                 <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{drawerLead.name}</div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['New']).bg,color:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['New']).color,fontWeight:600}}>{drawerLead.stage}</span>
+                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['Convo']).bg,color:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['Convo']).color,fontWeight:600}}>{drawerLead.stage}</span>
                   <span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.source}</span>
                   {drawerLead.phone&&<span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.phone}</span>}
                   {drawerLead.instagram&&<span style={{fontSize:10,color:PURPLE}}>@{drawerLead.instagram}</span>}
@@ -759,7 +762,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
               {/* Timeline — stage-change events */}
               {(()=>{
-                const timelineLogs=leadLogs(drawerLead.id).filter(l=>['connected','mpa','catch_up','dtm','lead_created'].includes(l.event_type))
+                const timelineLogs=leadLogs(drawerLead.id).filter(l=>['convo','contact','mpa','catch_up','dtm','lead_created'].includes(l.event_type))
                 if(timelineLogs.length===0)return null
                 return(
                   <div style={{marginTop:16}}>
@@ -829,7 +832,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                 </div>
                 <div>
                   <div style={SL}>Stage</div>
-                  <select value={form.stage||'New'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
+                  <select value={form.stage||'Convo'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
                     {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -1025,7 +1028,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               <div>
                 <div style={{fontSize:11,color:'var(--text4)',marginBottom:12}}>{filteredArchive.length} lead{filteredArchive.length===1?'':'s'}</div>
                 {filteredArchive.map(l=>{
-                  const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['New']
+                  const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
                   return(
                     <div key={l.id} style={{...CARD,marginBottom:8,opacity:0.85}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
