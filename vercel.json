@@ -1,4 +1,5 @@
 {
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- OS/apps/track/app OS/apps/track/components OS/apps/track/lib OS/apps/track/public OS/apps/track/next.config.js OS/apps/track/package.json OS/apps/track/sentry.client.config.ts OS/apps/track/sentry.server.config.ts OS/apps/track/sentry.edge.config.ts",
   "framework": "nextjs",
   "buildCommand": "next build",
   "outputDirectory": ".next",
