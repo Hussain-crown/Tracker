@@ -80,6 +80,19 @@ export default function TrackPage(){
 
   useEffect(()=>{
     if(!userId)return
+    // Refetch when the PWA comes back to the foreground (60-second throttle)
+    let lastRefetch=Date.now()
+    const onVisible=()=>{
+      if(document.hidden)return
+      const now=Date.now()
+      if(now-lastRefetch>60_000){lastRefetch=now;loadAll()}
+    }
+    document.addEventListener('visibilitychange',onVisible)
+    return ()=>document.removeEventListener('visibilitychange',onVisible)
+  },[userId,loadAll])
+
+  useEffect(()=>{
+    if(!userId)return
     loadAll()
     supabase.from('team_members').select('*').eq('user_id',userId).single()
       .then(({data}:any)=>{
