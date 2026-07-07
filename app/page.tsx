@@ -85,9 +85,10 @@ export default function TrackPage(){
       .then(({data}:any)=>{
         if(data){
           setMember(data)
+          // status='pending' means awaiting admin approval — don't show the app yet
           setNeedsProfile(false)
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
-          if(data.first_login)setShowOnboard(true)
+          if(data.first_login&&data.status!=='pending')setShowOnboard(true)
           fetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
             if(d.goals)setAdminGoals(d.goals)
           }).catch(()=>{})
@@ -137,7 +138,7 @@ export default function TrackPage(){
       await supabase.from('team_members').upsert({
         user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
         email:userEmail||'',role:'member',referred_by:'',first_login:true,
-        baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
+        status:'pending',baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
       })
       const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
       setMember(data);setNeedsProfile(false);setShowOnboard(true)
@@ -188,6 +189,22 @@ export default function TrackPage(){
         {busy?'Redirecting to Google…':'Continue with Google'}
       </button>
       <div style={{fontSize:11,color:'#444',textAlign:'center',marginTop:16}}>You'll need your IBO number after signing in.</div>
+    </Shell>
+  )
+
+  // Pending approval screen — shown when status='pending' (after SQL migration)
+  if(member&&member.status==='pending')return(
+    <Shell>
+      <div style={{fontSize:36,marginBottom:16,textAlign:'center' as const}}>⏳</div>
+      <div style={{fontSize:20,fontWeight:800,color:'#fff',marginBottom:8,textAlign:'center' as const}}>Awaiting Approval</div>
+      <div style={{fontSize:13,color:'#888',textAlign:'center' as const,lineHeight:1.6,marginBottom:24}}>
+        Your account is pending approval from your upline.<br/>
+        You'll get access as soon as it's approved.
+      </div>
+      <div style={{background:'rgba(200,162,74,0.08)',border:'1px solid rgba(200,162,74,0.2)',borderRadius:10,padding:'12px 16px',marginBottom:20,fontSize:12,color:'#C8A24A',textAlign:'center' as const}}>
+        IBO {member.ibo_number} · {member.name}
+      </div>
+      <button style={{...btn,background:'transparent',border:'1px solid #333',color:'#888'}} onClick={signOut}>Sign out</button>
     </Shell>
   )
 
