@@ -55,7 +55,7 @@ const TZ='Australia/Brisbane'
 function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
 function fmtTime(iso:string){return new Date(iso).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:TZ})}
 
-type Tab = 'active'|'funnel'|'launched'|'archive'
+type Tab = 'active'|'funnel'|'archive'
 type DetailTab = 'profile'|'history'|'timeline'|'brief'
 
 // ── CANDIDATE CARD ────────────────────────────────────────
@@ -264,19 +264,9 @@ export default function Candidates(){
         ))}
       </div>
 
-      {/* Weekly digest */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:14}}>
-        {[{l:'New',v:weeklyDigest.newCands,c:BLUE},{l:'Advances',v:weeklyDigest.advances,c:GREEN},{l:"DQ'd",v:weeklyDigest.dqs,c:RED},{l:'Launched',v:weeklyDigest.launches,c:GOLD}].map(k=>(
-          <div key={k.l} style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r)',padding:'8px',textAlign:'center'}}>
-            <div className="mono" style={{fontSize:16,fontWeight:700,color:k.c,lineHeight:1}}>{k.v}</div>
-            <div style={{fontSize:8,color:'var(--text4)',marginTop:2}}>{k.l} this week</div>
-          </div>
-        ))}
-      </div>
-
       {/* Tabs */}
       <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto'}}>
-        {([['active',`Active (${active.length})`],['funnel','📊 Funnel'],['launched',`✅ Launched (${launched.length})`],['archive',`🗄 Archive (${archived.length})`]] as const).map(([id,label])=>(
+        {([['active',`Active (${active.length})`],['funnel','📊 Funnel'],['archive',`🗄 Archive (${archived.length})`]] as const).map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{flex:1,padding:'8px 6px',borderRadius:'var(--r)',border:'none',background:tab===id?'var(--s3)':'transparent',color:tab===id?GOLD:'var(--text3)',fontSize:10,fontWeight:tab===id?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",transition:'all 0.15s',whiteSpace:'nowrap',flexShrink:0}}>
             {label}
@@ -409,35 +399,6 @@ export default function Candidates(){
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── LAUNCHED TAB ── */}
-      {tab==='launched'&&(
-        <div>
-          {launched.length===0
-            ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No launched candidates yet</div>
-            :launched.map(c=>{
-              const launchedAt=getLaunchedAt(c)
-              return(
-                <div key={c.id} style={CARD}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:14,fontWeight:700,marginBottom:4}}>{c.name}</div>
-                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                        <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(76,175,125,0.12)',color:GREEN,fontWeight:600}}>🚀 Launched</span>
-                        {launchedAt&&<span style={{fontSize:10,color:'var(--text4)'}}>on {fmtDate(launchedAt)}</span>}
-                        {c.primary_driver&&<span style={{fontSize:10,color:GOLD}}>{c.primary_driver}</span>}
-                      </div>
-                    </div>
-                    <div className="mono" style={{fontSize:18,fontWeight:800,color:GREEN}}>{c.hxl_score??((c.hunger??5)*(c.looking??5))}</div>
-                  </div>
-                  {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>"{c.pain_point}"</div>}
-                  <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
-                </div>
-              )
-            })
-          }
         </div>
       )}
 
