@@ -7,10 +7,11 @@ import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 
 // ── CONSTANTS ─────────────────────────────────────────────
-const STAGES = ['Convo','Contact','MPA','Catch-Up','DTM'] as const
+const STAGES = ['Interruption','Convo','Contact','MPA','Catch-Up','DTM'] as const
 type Stage = typeof STAGES[number]
 
 const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
+  'Interruption':{color:'var(--red)',    bg:'rgba(224,85,85,0.08)',   next:'Convo'},
   'Convo':    {color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'Contact'},
   'Contact':  {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'MPA'},
   'MPA':      {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:'Catch-Up'},
@@ -18,14 +19,13 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
   'DTM':      {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
 }
 
-const SOURCES    = ['Instagram','Referral','Cold Approach','Facebook','Event','LinkedIn','Other']
+const SOURCES    = ['Instagram','Facebook','TikTok','LinkedIn','YouTube','Cold Approach','Referral','Event','University','Gym','Work','Church / Community','Online Ad','Other']
 const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
 const NEXT_ACTS  = ['Call','WhatsApp','MPA','Catch-Up','DTM','Send Info','Other']
 const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
 const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only']
 const AGE_RANGES = ['Under 25','25-35','35-45','45+']
-const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
-const DRIVERS    = ['Time freedom','Extra income','Full-time income','Business ownership','Products only']
+const DRIVERS    = ['Family','Community','Purpose','Personal Development','Time','Money','Lifestyle']
 const HUNGER_ANCHORS = ['Content with life','Mild dissatisfaction','Wants change','Unhappy, exploring','Desperate to change']
 const LOOKING_ANCHORS= ['Completely closed','Politely listening','Curious, open','Actively searching','Ready to start now']
 const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Wrong timing','Other']
@@ -39,7 +39,7 @@ function healthScore(l:Lead, lastContactDate:string):number{
   const hxlS=Math.min(100,hxl(l.hunger,l.looking))
   const daysSinceContact=lastContactDate?Math.floor((Date.now()-new Date(lastContactDate).getTime())/86400000):daysSince(l.updated_at)
   const recency=Math.max(0,100-daysSinceContact*10)
-  const stageDepth=(['Convo','Contact','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*16
+  const stageDepth=(['Interruption','Convo','Contact','MPA','Catch-Up','DTM'].indexOf(l.stage as Stage)+1)*13
   return Math.round(hxlS*0.5+recency*0.3+stageDepth*0.2)
 }
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
@@ -48,7 +48,7 @@ function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<new Date().toISOString().slice(0,10))}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
 function waLink(l:Lead){const n=(l.phone||l.contact||'').replace(/\D/g,'');return n?`https://wa.me/${n.startsWith('0')?'61'+n.slice(1):n}`:null}
-function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',next_action:'Call',next_action_date:'',score:0}}
+function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',score:0}}
 
 function parseCSV(text:string){
   const lines=text.trim().split(/\r?\n/).filter(l=>l.trim())
@@ -232,6 +232,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   // Stage → habit field mapping for auto-log
   const STAGE_HABIT: Record<string,keyof HabitEntry> = {
+    'convo':     'convo',
     'contact':   'contact',
     'mpa':       'mpa',
     'catch_up':  'catch_up',
@@ -355,12 +356,12 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   async function saveLead(){
     if(!form.name?.trim()||!userId)return setErr('Name required')
     const score=hxl(form.hunger??5,form.looking??5)
-    const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'New',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:form.life_stage||'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'Call',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
+    const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'Contact',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
     await safeWrite(async()=>{
       await upsertLead(l)
       if(!ed){
         await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
-        const stageHabits:Record<string,keyof HabitEntry>={Convo:'convo',Contact:'contact',MPA:'mpa','Catch-Up':'catch_up',DTM:'dtm'}
+        const stageHabits:Record<string,keyof HabitEntry>={Interruption:'interruptions',Convo:'convo',Contact:'contact',MPA:'mpa','Catch-Up':'catch_up',DTM:'dtm'}
         const idx=STAGES.indexOf(l.stage as Stage)
         for(let i=0;i<=idx;i++){const h=stageHabits[STAGES[i]];if(h)await autoLogHabit(h)}
       }
@@ -406,7 +407,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   async function convertToCandidate(){
     const l=bookPFModal;if(!l||!userId)return
     await safeWrite(async()=>{
-      await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({_sponsor_ibo:iboNumber}),status:'active',hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
+      await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({_sponsor_ibo:iboNumber}),status:'active',hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
       await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline to Candidate — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
       await deleteLead(l.id)
     },'Conversion failed')
@@ -636,7 +637,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
             </div>
             <div style={{padding:'18px 24px',maxHeight:'70vh',overflowY:'auto' as const}}>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                {[{l:'HxL Score',v:`${hxl(drawerLead.hunger,drawerLead.looking)} (H${drawerLead.hunger}×L${drawerLead.looking})`,c:hxlColor(hxl(drawerLead.hunger,drawerLead.looking))},{l:'Relationship',v:drawerLead.relationship||'—',c:'var(--text2)'},{l:'Age Range',v:drawerLead.age_range||'—',c:'var(--text2)'},{l:'Life Stage',v:drawerLead.life_stage||'—',c:'var(--text2)'},{l:'Primary Driver',v:drawerLead.primary_driver||'—',c:GOLD},{l:'Source',v:drawerLead.source,c:'var(--text2)'}].map(x=>(
+                {[{l:'HxL Score',v:`${hxl(drawerLead.hunger,drawerLead.looking)} (H${drawerLead.hunger}×L${drawerLead.looking})`,c:hxlColor(hxl(drawerLead.hunger,drawerLead.looking))},{l:'Relationship',v:drawerLead.relationship||'—',c:'var(--text2)'},{l:'Age Range',v:drawerLead.age_range||'—',c:'var(--text2)'},{l:'Primary Driver',v:drawerLead.primary_driver||'—',c:GOLD},{l:'Source',v:drawerLead.source,c:'var(--text2)'}].map(x=>(
                   <div key={x.l}>
                     <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div>
                     <div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div>
@@ -645,7 +646,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               </div>
               {drawerLead.pain_point&&(
                 <div style={{marginBottom:16,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}>
-                  <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div>
+                  <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>THEIR WHY</div>
                   <div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{drawerLead.pain_point}"</div>
                 </div>
               )}
@@ -760,32 +761,30 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               </div>
               <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Context</div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                {([{l:'Relationship',k:'relationship' as const,opts:RELATIONS},{l:'Age Range',k:'age_range' as const,opts:AGE_RANGES},{l:'Life Stage',k:'life_stage' as const,opts:LIFE_STAGES},{l:'Primary Driver',k:'primary_driver' as const,opts:DRIVERS}]).map(f=>(
-                  <div key={f.k}>
-                    <div style={SL}>{f.l}</div>
-                    <select value={(form as any)[f.k]||''} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} style={SEL}>
-                      <option value="">Select…</option>
-                      {f.opts.map(o=><option key={o} value={o}>{o}</option>)}
-                    </select>
-                  </div>
-                ))}
-              </div>
-              <div style={{marginBottom:10}}>
-                <div style={SL}>Pain Point (their words)</div>
-                <input value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} placeholder="What are they trying to solve?" style={INP}/>
-              </div>
-              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Tracking</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                 <div>
-                  <div style={SL}>Next Action</div>
-                  <select value={form.next_action||'Call'} onChange={e=>setForm(p=>({...p,next_action:e.target.value}))} style={SEL}>
-                    {NEXT_ACTS.map(a=><option key={a} value={a}>{a}</option>)}
+                  <div style={SL}>Relationship</div>
+                  <select value={form.relationship||''} onChange={e=>setForm(p=>({...p,relationship:e.target.value}))} style={SEL}>
+                    <option value="">Select…</option>
+                    {RELATIONS.map(o=><option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={SL}>Next Action Date</div>
-                  <input type="date" value={form.next_action_date||''} onChange={e=>setForm(p=>({...p,next_action_date:e.target.value}))} style={INP}/>
+                  <div style={SL}>Age Range</div>
+                  <select value={form.age_range||''} onChange={e=>setForm(p=>({...p,age_range:e.target.value}))} style={SEL}>
+                    <option value="">Select…</option>
+                    {AGE_RANGES.map(o=><option key={o} value={o}>{o}</option>)}
+                  </select>
                 </div>
+              </div>
+              <div style={{marginBottom:10}}>
+                <div style={SL}>Primary Driver — choose 1–3</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,marginTop:4}}>
+                  {(()=>{const sel=(form.primary_driver||'').split(',').map((s:string)=>s.trim()).filter(Boolean);return DRIVERS.map(d=>{const on=sel.includes(d);return(<button key={d} type="button" onClick={()=>{const next=on?sel.filter((x:string)=>x!==d):sel.length<3?[...sel,d]:sel;setForm(p=>({...p,primary_driver:next.join(', ')}))}} style={{padding:'5px 12px',borderRadius:999,border:`1px solid ${on?GOLD:'var(--br)'}`,background:on?'rgba(200,162,74,0.15)':'var(--s2)',color:on?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:on?700:400,marginBottom:4}}>{d}</button>)})})()}
+                </div>
+              </div>
+              <div style={{marginBottom:10}}>
+                <div style={SL}>Their Why (goal / motivation)</div>
+                <input value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} placeholder="What drives them? What are they moving toward?" style={INP}/>
               </div>
               <div style={{marginBottom:16}}>
                 <div style={SL}>Notes</div>
