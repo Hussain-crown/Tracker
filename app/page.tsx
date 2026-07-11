@@ -20,7 +20,7 @@ const MILESTONES=[
 ]
 
 const NAV=[
-  {id:'pipeline'   as const, icon:'◆', label:'Pipeline'},
+  {id:'pipeline'   as const, icon:'◆', label:'Prospects'},
   {id:'candidates' as const, icon:'◇', label:'Candidates'},
   {id:'habits'     as const, icon:'◎', label:'Habits'},
 ]

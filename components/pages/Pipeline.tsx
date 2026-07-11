@@ -496,7 +496,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
           {(['leads','funnel','archived'] as View[]).map(v=>(
             <button key={v} onClick={()=>setView(v)}
               style={{flex:1,padding:'8px 10px',borderRadius:'var(--r)',border:'none',background:view===v?'var(--s3)':'transparent',color:view===v?GOLD:'var(--text3)',fontSize:11,fontWeight:view===v?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",textTransform:'capitalize' as const,transition:'all 0.15s',whiteSpace:'nowrap' as const}}>
-              {v==='leads'?`📋 All (${active.length})`:v==='funnel'?'📊 Funnel':`🗄 Archive (${archived.length})`}
+              {v==='leads'?`📋 All (${active.length})`:v==='funnel'?'📊 Funnel':`🗄 Archived (${archived.length})`}
             </button>
           ))}
         </div>
@@ -549,10 +549,10 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone, Instagram…" style={{flex:1,minWidth:160,...INP}}/>
             <button onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='.csv';i.onchange=(e)=>{const f=(e.target as HTMLInputElement).files?.[0];if(f)openCSVFile(f)};i.click()}}
               style={{padding:'9px 12px',borderRadius:'var(--r)',border:`1px solid ${BLUE}50`,background:'transparent',color:BLUE,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>↑ CSV</button>
-            <button onClick={openAdd} style={{padding:'9px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>+ Add Lead</button>
+            <button onClick={openAdd} style={{padding:'9px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>+ Add Prospect</button>
           </div>
           {displayed.length===0
-            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No leads in this view</div>
+            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No prospects in this view</div>
             :displayed.map(l=><LeadCard key={l.id} l={l} {...cardProps} touchCount={touchCountMap[l.id]??0} nextDue={nextDueMap[l.id]}/>)
           }
         </div>
@@ -715,7 +715,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       {open&&(
         <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:520,overflow:'hidden',margin:'auto'}}>
-            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',fontSize:16,fontWeight:700}}>{ed?'Edit Lead':'Lead Profile'}</div>
+            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',fontSize:16,fontWeight:700}}>{ed?'Edit Prospect':'Prospect Profile'}</div>
             <div style={{padding:'20px 24px',maxHeight:'75vh',overflowY:'auto' as const}}>
               <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,marginTop:4}}>Identity</div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
@@ -931,7 +931,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
             ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No archived leads</div>
             :(
               <div>
-                <div style={{fontSize:11,color:'var(--text4)',marginBottom:12}}>{filteredArchive.length} lead{filteredArchive.length===1?'':'s'}</div>
+                <div style={{fontSize:11,color:'var(--text4)',marginBottom:12}}>{filteredArchive.length} prospect{filteredArchive.length===1?'':'s'}</div>
                 {filteredArchive.map(l=>{
                   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
                   return(

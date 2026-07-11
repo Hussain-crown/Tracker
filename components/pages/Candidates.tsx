@@ -124,7 +124,7 @@ export default function Candidates(){
   const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
   const [loading,setLoading]       = useState(true)
   const [tab,setTab]               = useState<Tab>('active')
-  const [stageFilter,setStageFilter] = useState('all')
+  const [stageFilter] = useState('all')
   const [archiveFilter,setArchiveFilter] = useState('all')
   const [detail,setDetail]         = useState<Candidate|null>(null)
   const [detailTab,setDetailTab]   = useState<DetailTab>('profile')
@@ -247,20 +247,6 @@ export default function Candidates(){
       {/* ── ACTIVE TAB ── */}
       {tab==='active'&&(
         <div>
-          <div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:12,paddingBottom:4}}>
-            {(['all',...STAGES] as const).map(s=>{
-              const col=s==='all'?GOLD:(STAGE_CFG[s as Stage]?.color??GOLD)
-              const count=s==='all'?active.length:active.filter(c=>normaliseStage(c.stage)===s).length
-              const isActive=stageFilter===s
-              return(
-                <div key={s} onClick={()=>setStageFilter(s===stageFilter?'all':s)}
-                  style={{padding:'4px 10px',borderRadius:20,border:`1px solid ${isActive?col:'rgba(255,255,255,0.08)'}`,background:isActive?`${col}15`:'transparent',cursor:'pointer',flexShrink:0,display:'flex',gap:5,alignItems:'center'}}>
-                  <span className="mono" style={{fontSize:10,fontWeight:700,color:col}}>{count}</span>
-                  <span style={{fontSize:9,color:isActive?col:'var(--text4)'}}>{s}</span>
-                </div>
-              )
-            })}
-          </div>
           {displayList.length===0
             ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No candidates assigned yet.</div>
             :displayList.map(c=><CandCard key={c.id} c={c} {...cardProps} nextDue={nextDueMap[c.id]} touchCount={touchCountMap[c.id]}/>)

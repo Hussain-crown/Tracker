@@ -21,6 +21,8 @@ const ALL_FIELDS = [
 type FieldKey = typeof ALL_FIELDS[number]['key']
 // Fields hidden entirely at level 1 (entry tier) — restored at level >= 2.
 const LEVEL1_HIDDEN: readonly FieldKey[] = ['interruptions','convo','contact']
+// Fields that are auto-logged only (via advancing prospects/candidates) — never manually entered.
+const AUTO_ONLY: readonly FieldKey[] = ['pre_filter','mg1','launch']
 type Tab = 'log'|'trends'|'core'
 
 const CONV = { mg1PerConvo:0.034, mpaPerConvo:0.83, mg1PerMpa:0.041, dtmPerConvo:0.22, pfPerConvo:0.067, cuPerConvo:0.33 }
@@ -380,9 +382,9 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
             )
           })()}
 
-          {/* Counter grid */}
+          {/* Counter grid — excludes auto-only fields (pre_filter, mg1, launch) */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10,marginBottom:10}}>
-            {FIELDS.map(f=>{
+            {FIELDS.filter(f=>!AUTO_ONLY.includes(f.key)).map(f=>{
               const val=form[f.key]
               const daily=dailyTargets[f.key]??0
               const pb=personalBests[f.key]
