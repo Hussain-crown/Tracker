@@ -10,12 +10,6 @@ export async function GET(req: Request) {
 
     const sbAdmin = getSbAdmin()
 
-    // Admin uses the OS for candidates, not the tracker
-    const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase()
-    if (adminEmail && user.email?.toLowerCase() === adminEmail) {
-      return NextResponse.json({ candidates: [], logs: [], iboNumber: '' })
-    }
-
     const { data: member } = await sbAdmin
       .from('team_members')
       .select('ibo_number')

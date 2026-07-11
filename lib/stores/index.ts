@@ -67,10 +67,9 @@ export function useStore() {
 
     loadAll: async () => {
       await Promise.all([
-        habit.loadHabits(), habit.loadWins(), habit.loadWeeklyReviews(), habit.loadMoodEntries(),
+        habit.loadHabits(),
         ui.loadResources(), pipeline.loadLeads(), pipeline.loadContactLogs(),
         candidate.loadCandidates(), partner.loadPartners(),
-        trackerPipe.loadTrackerLeads(),
       ])
     },
   }

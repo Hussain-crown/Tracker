@@ -402,7 +402,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       await upsertLead(l)
       if(!ed){
         await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
-        await autoLogHabit('interruptions')
         const stageHabits:Record<string,keyof HabitEntry>={Convo:'convo',Contact:'contact',MPA:'mpa','Catch-Up':'catch_up',DTM:'dtm'}
         const idx=STAGES.indexOf(l.stage as Stage)
         for(let i=0;i<=idx;i++){const h=stageHabits[STAGES[i]];if(h)await autoLogHabit(h)}
