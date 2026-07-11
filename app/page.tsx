@@ -5,7 +5,6 @@ import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
-import Organisation from '@/components/pages/Organisation'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'; const GREEN='#4CAF7D'; const RED='#E05555'
@@ -46,7 +45,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals] = useState<any>(null)
-  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'|'organisation'>('pipeline')
+  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -339,19 +338,13 @@ export default function TrackPage(){
         </div>
       )}
 
-      {tab==='organisation'&&(
-        <div style={{maxWidth:900,margin:'0 auto',padding:'16px 18px',paddingBottom:80}}>
-          <Organisation/>
-        </div>
-      )}
-
       {/* ── BOTTOM TAB BAR ── */}
       <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:200,background:'#0d0d12',borderTop:'1px solid #1f1f28',display:'flex',paddingBottom:'env(safe-area-inset-bottom)'}}>
-        {(['pipeline','candidates','organisation','habits'] as const).map(id=>(
+        {(['pipeline','candidates','habits'] as const).map(id=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{flex:1,display:'flex',flexDirection:'column' as const,alignItems:'center',justifyContent:'center',padding:'8px 0 6px',border:'none',background:'transparent',cursor:'pointer',color:tab===id?GOLD:'#444',transition:'color 0.15s',gap:2}}>
-            <span style={{fontSize:16}}>{id==='pipeline'?'◆':id==='candidates'?'◇':id==='organisation'?'⬡':'◎'}</span>
-            <span style={{fontSize:9,fontFamily:'inherit',fontWeight:tab===id?700:400,textTransform:'capitalize' as const}}>{id==='organisation'?'Team':id}</span>
+            <span style={{fontSize:16}}>{id==='pipeline'?'◆':id==='candidates'?'◇':'◎'}</span>
+            <span style={{fontSize:9,fontFamily:'inherit',fontWeight:tab===id?700:400,textTransform:'capitalize' as const}}>{id}</span>
           </button>
         ))}
       </div>
