@@ -33,36 +33,13 @@ function brisbaneToday(){
   return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 
-// Responsive CSS — injected once into the document
-const LAYOUT_CSS=`
-  .bt-rail{width:56px;transition:width 0.2s}
-  .bt-main{margin-left:56px}
-  .bt-nav-icon{font-size:16px;line-height:1;flex-shrink:0}
-  .bt-nav-label{display:none}
-  .bt-rail-name{display:none}
-  .bt-footer-meta{display:none}
-  .bt-signout-full{display:none!important}
-  .bt-signout-icon{display:flex!important}
+const RAIL_W = {open: 200, closed: 48}
+
+const BASE_CSS=`
   .bt-nav-btn{
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:4px;width:100%;padding:13px 0;border:none;cursor:pointer;
-    font-family:inherit;transition:all 0.15s;position:relative;
-    border-left:2px solid transparent;
-  }
-  @media(min-width:768px){
-    .bt-rail{width:200px}
-    .bt-main{margin-left:200px}
-    .bt-nav-label{display:block;font-size:12px;letter-spacing:0.2px}
-    .bt-rail-name{display:block}
-    .bt-footer-meta{display:block}
-    .bt-signout-full{display:flex!important}
-    .bt-signout-icon{display:none!important}
-    .bt-nav-btn{
-      flex-direction:row;align-items:center;justify-content:flex-start;
-      gap:12px;padding:11px 20px;
-    }
-    .bt-nav-icon{font-size:15px}
-    .bt-mob-label{display:none!important}
+    display:flex;align-items:center;width:100%;border:none;cursor:pointer;
+    font-family:inherit;transition:background 0.15s,color 0.15s;
+    border-left:2px solid transparent;white-space:nowrap;overflow:hidden;
   }
 `
 
@@ -82,7 +59,8 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
+  const [tab,setTab]           = useState<'pipeline'|'candidates'|'habits'>('pipeline')
+  const [expanded,setExpanded] = useState(false)
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -255,63 +233,79 @@ export default function TrackPage(){
     </Shell>
   )
 
+  const rw = expanded ? RAIL_W.open : RAIL_W.closed
+
   return(
     <>
-      <style>{LAYOUT_CSS}</style>
+      <style>{BASE_CSS}</style>
       <div style={{minHeight:'100vh',display:'flex',background:'#0d0d12',fontFamily:"'Sora',system-ui,sans-serif"}}>
 
         {/* ── LEFT RAIL ─────────────────────────────────────── */}
-        <nav className="bt-rail" style={{position:'fixed',left:0,top:0,height:'100vh',background:'#0b0b10',borderRight:'1px solid #1a1a24',display:'flex',flexDirection:'column',zIndex:200,overflow:'hidden'}}>
-
-          {/* Brand */}
-          <div style={{padding:'16px 0 14px',display:'flex',flexDirection:'column',alignItems:'center',borderBottom:'1px solid #1a1a24',flexShrink:0}}>
-            <div style={{fontSize:20,color:GOLD,lineHeight:1}}>◈</div>
-            <div className="bt-rail-name" style={{fontSize:10,fontWeight:800,color:'#fff',marginTop:8,textAlign:'center' as const,letterSpacing:'0.5px',textTransform:'uppercase' as const,padding:'0 14px',lineHeight:1.5}}>
-              Business<br/>Tracker
-            </div>
+        <nav style={{
+          position:'fixed',left:0,top:0,height:'100vh',
+          width:rw,transition:'width 0.22s ease',
+          background:'#0a0a0f',borderRight:'1px solid #1a1a24',
+          display:'flex',flexDirection:'column',zIndex:200,overflow:'hidden',
+        }}>
+          {/* Toggle + brand row */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:expanded?'space-between':'center',padding:expanded?'13px 14px 13px 16px':'13px 0',borderBottom:'1px solid #1a1a24',flexShrink:0,minHeight:52}}>
+            {expanded&&(
+              <div style={{display:'flex',alignItems:'center',gap:10,overflow:'hidden'}}>
+                <span style={{fontSize:16,color:GOLD,flexShrink:0}}>◈</span>
+                <span style={{fontSize:11,fontWeight:800,color:'#ddd',letterSpacing:'0.4px',textTransform:'uppercase' as const,whiteSpace:'nowrap' as const}}>Business Tracker</span>
+              </div>
+            )}
+            <button onClick={()=>setExpanded(e=>!e)}
+              style={{width:28,height:28,borderRadius:6,border:'1px solid #222',background:'transparent',color:'#555',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0,fontFamily:'inherit',transition:'color 0.15s'}}>
+              {expanded?'‹':'›'}
+            </button>
           </div>
 
           {/* Nav items */}
-          <div style={{flex:1,padding:'8px 0',display:'flex',flexDirection:'column',gap:1}}>
+          <div style={{flex:1,padding:'6px 0',display:'flex',flexDirection:'column',gap:1,overflow:'hidden'}}>
             {NAV.map(item=>{
               const active=tab===item.id
               return(
                 <button key={item.id} className="bt-nav-btn" onClick={()=>setTab(item.id)}
-                  style={{background:active?'rgba(200,162,74,0.07)':'transparent',color:active?GOLD:'#4a4a5a',borderLeft:`2px solid ${active?GOLD:'transparent'}`}}>
-                  <span className="bt-nav-icon">{item.icon}</span>
-                  <span className="bt-nav-label" style={{fontWeight:active?700:400}}>{item.label}</span>
-                  <span className="bt-mob-label" style={{fontSize:8,fontWeight:active?700:400,lineHeight:1}}>{item.label}</span>
+                  style={{
+                    padding:expanded?'11px 18px':'12px 0',
+                    justifyContent:expanded?'flex-start':'center',
+                    gap:expanded?12:0,
+                    background:active?'rgba(200,162,74,0.08)':'transparent',
+                    color:active?GOLD:'#4a4a5a',
+                    borderLeft:`2px solid ${active?GOLD:'transparent'}`,
+                  }}>
+                  <span style={{fontSize:15,lineHeight:1,flexShrink:0}}>{item.icon}</span>
+                  {expanded&&<span style={{fontSize:12,fontWeight:active?700:400,overflow:'hidden'}}>{item.label}</span>}
                 </button>
               )
             })}
           </div>
 
           {/* Footer */}
-          <div style={{borderTop:'1px solid #1a1a24',padding:'10px 0 calc(10px + env(safe-area-inset-bottom))',flexShrink:0}}>
+          <div style={{borderTop:'1px solid #1a1a24',padding:`10px 0 calc(10px + env(safe-area-inset-bottom))`,flexShrink:0,overflow:'hidden'}}>
             {streak>0&&(
-              <div style={{textAlign:'center' as const,fontSize:11,fontWeight:700,color:GOLD,marginBottom:8,letterSpacing:'0.3px'}}>
-                🔥 {streak}d
+              <div style={{textAlign:'center' as const,fontSize:11,fontWeight:700,color:GOLD,marginBottom:8,letterSpacing:'0.3px',whiteSpace:'nowrap' as const,overflow:'hidden',padding:'0 4px'}}>
+                {expanded?`🔥 ${streak} day streak`:`🔥 ${streak}`}
               </div>
             )}
-            <div className="bt-footer-meta" style={{fontSize:10,color:'#666',textAlign:'center' as const,padding:'0 14px',marginBottom:10,lineHeight:1.5}}>
-              <div style={{color:'#999',fontWeight:600,fontSize:11,marginBottom:2}}>{member?.name}</div>
-              <div>IBO {member?.ibo_number}</div>
-            </div>
-            <div style={{display:'flex',justifyContent:'center'}}>
-              <button className="bt-signout-icon" onClick={signOut}
-                style={{padding:'8px 10px',borderRadius:6,border:'1px solid #1f1f2a',background:'transparent',color:'#3a3a4a',cursor:'pointer',fontSize:14,alignItems:'center'}}>
-                ⏻
-              </button>
-              <button className="bt-signout-full" onClick={signOut}
-                style={{padding:'8px 16px',borderRadius:6,border:'1px solid #1f1f2a',background:'transparent',color:'#666',cursor:'pointer',fontSize:11,fontFamily:'inherit',alignItems:'center',width:'80%',justifyContent:'center'}}>
-                Sign out
-              </button>
+            {expanded&&(
+              <div style={{fontSize:10,color:'#555',textAlign:'center' as const,padding:'0 14px',marginBottom:10,lineHeight:1.5,whiteSpace:'nowrap' as const,overflow:'hidden'}}>
+                <div style={{color:'#888',fontWeight:600,fontSize:11,marginBottom:2,overflow:'hidden',textOverflow:'ellipsis'}}>{member?.name}</div>
+                <div style={{overflow:'hidden',textOverflow:'ellipsis'}}>IBO {member?.ibo_number}</div>
+              </div>
+            )}
+            <div style={{display:'flex',justifyContent:'center',padding:'0 8px'}}>
+              {expanded
+                ? <button onClick={signOut} style={{width:'100%',padding:'7px 12px',borderRadius:6,border:'1px solid #1f1f2a',background:'transparent',color:'#555',cursor:'pointer',fontSize:11,fontFamily:'inherit'}}>Sign out</button>
+                : <button onClick={signOut} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #1f1f2a',background:'transparent',color:'#3a3a4a',cursor:'pointer',fontSize:13}}>⏻</button>
+              }
             </div>
           </div>
         </nav>
 
         {/* ── MAIN CONTENT ──────────────────────────────────── */}
-        <div className="bt-main" style={{flex:1,minWidth:0,display:'flex',flexDirection:'column'}}>
+        <div style={{marginLeft:rw,transition:'margin-left 0.22s ease',flex:1,minWidth:0,display:'flex',flexDirection:'column'}}>
 
           {/* Offline banner */}
           {isOffline&&(
