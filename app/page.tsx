@@ -5,6 +5,8 @@ import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
+import Analytics from '@/components/pages/Analytics'
+import TeamCandidates from '@/components/pages/TeamCandidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'
@@ -19,11 +21,17 @@ const MILESTONES=[
   {days:90, emoji:'💎', msg:"90 days. This is who you are now."},
 ]
 
-const NAV=[
-  {id:'pipeline'   as const, icon:'◆', label:'Prospects'},
-  {id:'candidates' as const, icon:'◇', label:'Candidates'},
-  {id:'habits'     as const, icon:'◎', label:'Habits'},
-]
+type NavId='pipeline'|'candidates'|'habits'|'analytics'|'team'
+function buildNav(level:number):{id:NavId;icon:string;label:string}[]{
+  const nav:{id:NavId;icon:string;label:string}[]=[
+    {id:'pipeline',   icon:'◆', label:'Prospects'},
+    {id:'candidates', icon:'◇', label:'Candidates'},
+    {id:'habits',     icon:'◎', label:'Habits'},
+  ]
+  if(level>=2)nav.push({id:'analytics', icon:'📈', label:'Analytics'})
+  if(level>=4)nav.push({id:'team',      icon:'👥', label:'Team'})
+  return nav
+}
 
 function daysAgo(n:number){
   const d=new Date(); d.setDate(d.getDate()-n)
@@ -49,7 +57,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'>('pipeline')
+  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'|'analytics'|'team'>('pipeline')
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -103,6 +111,15 @@ export default function TrackPage(){
           fetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
             if(d.goals)setAdminGoals(d.goals)
           }).catch(()=>{})
+          // Check for level auto-upgrade after member loads
+          supabase.auth.getSession().then(({data:{session}})=>{
+            const tok=session?.access_token||''
+            if(!tok)return
+            fetch('/api/team/auto-upgrade',{method:'POST',headers:{Authorization:'Bearer '+tok}})
+              .then(r=>r.json())
+              .then(d=>{if(d.upgraded)setMember((prev:any)=>prev?{...prev,level:d.level}:prev)})
+              .catch(()=>{})
+          })
         }else{setNeedsProfile(true)}
       })
   },[userId]) // eslint-disable-line
@@ -324,7 +341,11 @@ export default function TrackPage(){
 
         {tab==='pipeline'&&<Pipeline iboNumber={member?.ibo_number||''}/>}
 
-        {tab==='candidates'&&<Candidates/>}
+        {tab==='candidates'&&<Candidates level={member?.level||1}/>}
+
+        {tab==='analytics'&&<Analytics/>}
+
+        {tab==='team'&&<TeamCandidates level={member?.level||1}/>}
 
       </div>
 
@@ -345,10 +366,10 @@ export default function TrackPage(){
         border:'1px solid rgba(255,255,255,0.055)',
         boxShadow:'0 8px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)',
       }}>
-        {NAV.map(item=>{
+        {buildNav(member?.level||1).map(item=>{
           const active=tab===item.id
           return(
-            <button key={item.id} onClick={()=>setTab(item.id)} style={{
+            <button key={item.id} onClick={()=>setTab(item.id as any)} style={{
               display:'flex',alignItems:'center',gap:7,
               padding:'9px 18px',
               borderRadius:999,

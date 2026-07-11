@@ -65,8 +65,12 @@ interface CardProps{
   onView:(c:Candidate)=>void
   nextDue?:string
   touchCount?:number
+  level?:number
+  onLog?:(c:Candidate)=>void
+  onAdvance?:(c:Candidate)=>void
+  onDq?:(c:Candidate)=>void
 }
-function CandCard({c,contactLogs,scores,onView,nextDue,touchCount}:CardProps){
+function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,onAdvance,onDq}:CardProps){
   const todayStr=new Date().toISOString().slice(0,10)
   const stage=normaliseStage(c.stage)
   const cfg=STAGE_CFG[stage]
@@ -113,13 +117,16 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount}:CardProps){
       {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+        {level>=3&&onLog&&<button onClick={e=>{e.stopPropagation();onLog(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Log</button>}
+        {level>=3&&onAdvance&&STAGE_CFG[normaliseStage(c.stage)].next&&<button onClick={e=>{e.stopPropagation();onAdvance(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Advance →</button>}
+        {level>=3&&onDq&&<button onClick={e=>{e.stopPropagation();onDq(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}40`,background:`${RED}10`,color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>DQ</button>}
       </div>
     </div>
   )
 }
 
 // ── MAIN COMPONENT ────────────────────────────────────────
-export default function Candidates(){
+export default function Candidates({level=1}:{level?:number}={}){
   const [candidates,setCandidates] = useState<Candidate[]>([])
   const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
   const [loading,setLoading]       = useState(true)
@@ -130,6 +137,13 @@ export default function Candidates(){
   const [detailTab,setDetailTab]   = useState<DetailTab>('profile')
   const [briefText,setBriefText]   = useState('')
   const [briefLoading,setBriefLoading] = useState(false)
+  const [refreshKey,setRefreshKey] = useState(0)
+  const [logModal,setLogModal]     = useState<Candidate|null>(null)
+  const [advanceModal,setAdvanceModal] = useState<Candidate|null>(null)
+  const [dqModal,setDqModal]       = useState<Candidate|null>(null)
+  const [logForm,setLogForm]       = useState({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})
+  const [dqReason,setDqReason]     = useState('')
+  const [actionLoading,setActionLoading] = useState(false)
 
   useEffect(()=>{
     async function load(){
@@ -145,7 +159,18 @@ export default function Candidates(){
       }finally{setLoading(false)}
     }
     load()
-  },[])
+  },[refreshKey])
+
+  async function callAction(action:string,candidateId:string,payload:Record<string,unknown>){
+    const {data:{session}}=await supabase.auth.getSession()
+    const token=session?.access_token||''
+    const res=await fetch('/api/team/candidates/action',{
+      method:'POST',
+      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({action,candidateId,...payload})
+    })
+    return res.json()
+  }
 
   const todayStr=new Date().toISOString().slice(0,10)
 
@@ -227,7 +252,7 @@ export default function Candidates(){
     setBriefLoading(false)
   }
 
-  const cardProps={contactLogs:allLogs,scores,onView:openView}
+  const cardProps={contactLogs:allLogs,scores,onView:openView,level,onLog:setLogModal,onAdvance:setAdvanceModal,onDq:setDqModal}
 
   if(loading)return<div style={{padding:'48px',textAlign:'center',color:'var(--text4)',fontSize:12}}>Loading candidates…</div>
 
@@ -421,6 +446,110 @@ export default function Candidates(){
               )
             })
           })()}
+        </div>
+      )}
+
+      {/* ── LOG CONTACT MODAL ── */}
+      {logModal&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setLogModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:480,padding:'24px',margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact</div>
+            <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{logModal.name}</div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Outcome</div>
+              <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                {['Positive','Neutral','Negative','No Show','Not Yet'].map(o=>(
+                  <button key={o} onClick={()=>setLogForm(f=>({...f,outcome:o}))}
+                    style={{padding:'6px 12px',borderRadius:20,border:`1px solid ${logForm.outcome===o?GOLD:'var(--br)'}`,background:logForm.outcome===o?`${GOLD}15`:'transparent',color:logForm.outcome===o?GOLD:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
+                    {o}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Objection</div>
+              <select value={logForm.objection} onChange={e=>setLogForm(f=>({...f,objection:e.target.value}))}
+                style={{...INP,fontSize:12}}>
+                <option value="None">None</option>
+                {DQ_REASONS.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={SL}>Notes</div>
+              <textarea value={logForm.logNotes} onChange={e=>setLogForm(f=>({...f,logNotes:e.target.value}))} rows={3} placeholder="What happened?" style={{...INP,resize:'vertical',fontSize:12}}/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <div style={SL}>Next Follow-up Date</div>
+              <input type="date" value={logForm.nextDate} onChange={e=>setLogForm(f=>({...f,nextDate:e.target.value}))} style={{...INP,fontSize:12}}/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button disabled={actionLoading} onClick={async()=>{
+                setActionLoading(true)
+                await callAction('log_contact',logModal.id,{outcome:logForm.outcome,notes:logForm.logNotes,nextDate:logForm.nextDate,objection:logForm.objection})
+                setActionLoading(false);setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'});setRefreshKey(k=>k+1)
+              }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
+                {actionLoading?'Saving…':'Save Log'}
+              </button>
+              <button onClick={()=>setLogModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADVANCE MODAL ── */}
+      {advanceModal&&(()=>{
+        const cur=normaliseStage(advanceModal.stage)
+        const next=STAGE_CFG[cur].next
+        if(!next)return null
+        return(
+          <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setAdvanceModal(null)}}>
+            <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
+              <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Advance Stage</div>
+              <div style={{fontSize:11,color:'var(--text4)',marginBottom:20}}>{advanceModal.name}</div>
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24,padding:'12px 14px',background:'var(--s2)',borderRadius:'var(--r)'}}>
+                <span style={{fontSize:12,padding:'3px 10px',borderRadius:8,background:STAGE_CFG[cur].bg,color:STAGE_CFG[cur].color,fontWeight:600}}>{cur}</span>
+                <span style={{color:'var(--text4)',fontSize:14}}>→</span>
+                <span style={{fontSize:12,padding:'3px 10px',borderRadius:8,background:STAGE_CFG[next].bg,color:STAGE_CFG[next].color,fontWeight:600}}>{next}</span>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button disabled={actionLoading} onClick={async()=>{
+                  setActionLoading(true)
+                  await callAction('advance_stage',advanceModal.id,{})
+                  setActionLoading(false);setAdvanceModal(null);setRefreshKey(k=>k+1)
+                }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GREEN,color:'#000',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
+                  {actionLoading?'Saving…':'Confirm Advance'}
+                </button>
+                <button onClick={()=>setAdvanceModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── DQ MODAL ── */}
+      {dqModal&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDqModal(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Disqualify</div>
+            <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{dqModal.name}</div>
+            <div style={{marginBottom:16}}>
+              <div style={SL}>Reason</div>
+              <select value={dqReason} onChange={e=>setDqReason(e.target.value)} style={{...INP,fontSize:12}}>
+                <option value="">Select reason…</option>
+                {DQ_REASONS.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button disabled={actionLoading||!dqReason} onClick={async()=>{
+                setActionLoading(true)
+                await callAction('dq',dqModal.id,{reason:dqReason})
+                setActionLoading(false);setDqModal(null);setDqReason('');setRefreshKey(k=>k+1)
+              }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:RED,color:'#fff',fontWeight:700,cursor:(actionLoading||!dqReason)?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:(actionLoading||!dqReason)?0.5:1}}>
+                {actionLoading?'Saving…':'Disqualify'}
+              </button>
+              <button onClick={()=>setDqModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 
