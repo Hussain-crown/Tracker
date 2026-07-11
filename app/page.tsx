@@ -318,7 +318,7 @@ export default function TrackPage(){
                 </div>
               )
             })()}
-            <Habits hideMonth goalOverride={adminGoals} level={member?.level||1}/>
+            <Habits goalOverride={adminGoals} level={member?.level||1}/>
           </div>
         )}
 

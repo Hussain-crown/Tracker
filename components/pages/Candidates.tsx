@@ -22,8 +22,7 @@ const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Gh
 
 // ── STYLE CONSTANTS ───────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
-const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'  // eslint-disable-line @typescript-eslint/no-unused-vars
-const ORANGE='var(--orange)'
+const BLUE='var(--blue)';const PURPLE='var(--purple)';const ORANGE='var(--orange)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase',fontWeight:700,marginBottom:6}
 const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box'}
@@ -149,8 +148,6 @@ export default function Candidates(){
   },[])
 
   const todayStr=new Date().toISOString().slice(0,10)
-  const in3Days=new Date(Date.now()+3*86400000).toISOString().slice(0,10)
-  const weekAgo=new Date(Date.now()-7*86400000).toISOString()
 
   const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
   const archived = useMemo(()=>candidates.filter(c=>c.status==='disqualified'),[candidates])
@@ -181,16 +178,6 @@ export default function Candidates(){
     allLogs.forEach(l=>{m[l.entity_id]=(m[l.entity_id]||0)+1})
     return m
   },[allLogs])
-
-  const weeklyDigest=useMemo(()=>{
-    const ids=new Set(candidates.map(c=>c.id))
-    return{
-      newCands:candidates.filter(c=>c.created_at>=weekAgo).length,
-      advances:allLogs.filter(l=>ids.has(l.entity_id)&&l.created_at>=weekAgo&&!['contacted','disqualified'].includes(l.event_type)).length,
-      dqs:allLogs.filter(l=>ids.has(l.entity_id)&&l.created_at>=weekAgo&&l.event_type==='disqualified').length,
-      launches:candidates.filter(c=>c.status==='launched'&&c.updated_at>=weekAgo).length,
-    }
-  },[candidates,allLogs,weekAgo])
 
   const displayList=useMemo(()=>{
     let l=active
@@ -246,21 +233,6 @@ export default function Candidates(){
 
   return(
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
-
-      {/* Intelligence strip */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
-        {[
-          {l:'Active',v:active.length,c:GOLD},
-          {l:'Hot (70+)',v:active.filter(c=>(scores[c.id]??0)>=70).length,c:GREEN},
-          {l:'Stalling',v:active.filter(c=>FU_STAGES.includes(normaliseStage(c.stage))&&daysSince(allLogs.filter(l=>l.entity_id===c.id)[0]?.created_at??c.updated_at)>=21).length,c:RED},
-          {l:'At Offer',v:active.filter(c=>normaliseStage(c.stage)==='Offer Call').length,c:GREEN},
-        ].map(k=>(
-          <div key={k.l} style={{background:'var(--s1)',border:`1px solid ${k.c}20`,borderRadius:'var(--r2)',padding:'10px',textAlign:'center'}}>
-            <div className="mono" style={{fontSize:20,fontWeight:800,color:k.c,lineHeight:1}}>{k.v}</div>
-            <div style={{fontSize:9,color:'var(--text4)',marginTop:3}}>{k.l}</div>
-          </div>
-        ))}
-      </div>
 
       {/* Tabs */}
       <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto'}}>

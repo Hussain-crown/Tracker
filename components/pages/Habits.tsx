@@ -21,7 +21,7 @@ const ALL_FIELDS = [
 type FieldKey = typeof ALL_FIELDS[number]['key']
 // Fields hidden entirely at level 1 (entry tier) — restored at level >= 2.
 const LEVEL1_HIDDEN: readonly FieldKey[] = ['interruptions','convo','contact']
-type Tab = 'log'|'month'|'trends'|'core'
+type Tab = 'log'|'trends'|'core'
 
 const CONV = { mg1PerConvo:0.034, mpaPerConvo:0.83, mg1PerMpa:0.041, dtmPerConvo:0.22, pfPerConvo:0.067, cuPerConvo:0.33 }
 
@@ -89,53 +89,8 @@ function deriveTargets(goals:CoreGoals):Partial<Record<FieldKey,number>>{
   return result
 }
 
-// Month review type — outside component to avoid JSX parser issues
-type MonthReview={q1:string;q2:string;q3:string;q4:string;q5:string;q6:string;q7:string;q8:string;q9:string;q10:string;q11:string}
-const EMPTY_MR:MonthReview={q1:'',q2:'',q3:'',q4:'',q5:'',q6:'',q7:'',q8:'',q9:'',q10:'',q11:''}
-const MR_QUESTIONS:[keyof MonthReview,string,string,string][]=[
-  ['q1','1. The Reality Question','What do my results prove about me that my intentions cannot?','Intentions are invisible. Results leave evidence.'],
-  ['q2','2. The Bottleneck Question','If my business growth is perfectly constrained by one thing about me, what is it?','Not the market. Not competitors. Not luck. You.'],
-  ['q3','3. The Avoidance Question','What is the highest-leverage action I know I should take that I continue to avoid? Why?','Growth often sits directly behind avoidance.'],
-  ['q4','4. The Delusion Question','Where am I mistaking activity for progress?','Many founders are busy. Few are effective.'],
-  ['q5','5. The Identity Question','Which version of myself must die for the next version of my business to exist?','The habits, beliefs, ego, or comfort that got you here may prevent you from getting further.'],
-  ['q6','6. The Truth Question','What truth have I repeatedly encountered that I still have not fully accepted?','The lesson keeps returning until it is learned.'],
-  ['q7','7. The Future Self Question','If my future self looked back at this month, what would they be frustrated I failed to see?','This creates distance from current biases.'],
-  ['q8','8. The CEO Question','If I were fired from my business and rehired tomorrow as an advisor, what would I tell the owner to change immediately?','You will often give yourself advice you are unwilling to follow.'],
-  ['q9','9. The Compounding Question','What did I do this month that will still matter 5 years from now?','Most effort disappears. Some effort compounds. Know the difference.'],
-  ['q10','10. The Failure Question','If I fail to achieve my vision, what will most likely be the real reason, not the excuse, but the reason?','The answer is usually already visible.'],
-  ['q11','11. The Ultimate Question','If an exceptionally intelligent and completely objective observer studied every decision, thought, action, purchase, meeting, habit, and excuse I made this month, what would they conclude I truly worship and is that worthy of the life I am trying to build?',''],
-]
 
-// Sub-component for accordion question — avoids nested JSX complexity in main component
-function QAccordion({qkey,title,question,sub,value,active,onToggle,onChange}:{
-  qkey:string;title:string;question:string;sub:string
-  value:string;active:boolean;onToggle:()=>void;onChange:(v:string)=>void
-}){
-  return(
-    <div style={{borderBottom:'1px solid var(--br)'}}>
-      <div onClick={onToggle} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 0',cursor:'pointer'}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:10,fontWeight:700,color:value?GREEN:GOLD}}>{title}</div>
-          <div style={{fontSize:11,color:'var(--text3)',marginTop:2,lineHeight:1.4}}>{question}</div>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:8,flexShrink:0,marginLeft:12}}>
-          {value&&<div style={{width:6,height:6,borderRadius:'50%',background:GREEN}}/>}
-          <span style={{fontSize:12,color:'var(--text4)',transform:active?'rotate(90deg)':'none',display:'inline-block',transition:'transform 0.2s'}}>›</span>
-        </div>
-      </div>
-      {active&&(
-        <div style={{paddingBottom:14}}>
-          {sub?<div style={{fontSize:10,color:'var(--text4)',lineHeight:1.5,marginBottom:8,fontStyle:'italic'}}>{sub}</div>:null}
-          <textarea value={value} onChange={e=>onChange(e.target.value)}
-            rows={4} placeholder="Your honest answer…"
-            style={{...INPL,textAlign:'left',fontWeight:400,fontSize:12,resize:'vertical',minHeight:80}}/>
-        </div>
-      )}
-    </div>
-  )
-}
-
-export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hideMonth?:boolean;goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
+export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
   const {userId,habits,loadHabits,saveHabit,getMeta,setMeta,resources,loadResources}=useStore()
   const todayStr=brisbaneToday()
   // Level 1 (entry tier) hides interruptions/convo/contact entirely from the UI.
@@ -150,18 +105,11 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const [saving,setSaving]       =useState(false)
   const [saved,setSaved]         =useState(false)
   const [tab,setTab]             =useState<Tab>(level>=2?'log':'trends')
-  useEffect(()=>{ if(hideMonth&&tab==='month')setTab('trends') },[hideMonth,tab])
   useEffect(()=>{ if(level<2&&tab==='log')setTab('trends') },[level,tab])
-  const [monthOffset,setMonthOffset]=useState(0)
   const [coreGoals,setCoreGoals] =useState<CoreGoals>(EMPTY_CORE)
   const [editCore,setEditCore]   =useState(false)
   const [coreForm,setCoreForm]   =useState<{goalField:FieldKey;goal:string;deadline:string;overrides:Partial<Record<FieldKey,string>>}>({goalField:'mg1',goal:'3',deadline:defaultDeadline(),overrides:{}})
   const [checklist,setChecklist] =useState<{reading:boolean;audio:boolean}>({reading:false,audio:false})
-  const [monthReview,setMonthReview]=useState<MonthReview>(EMPTY_MR)
-  const [showMonthReview,setShowMonthReview]=useState(false)
-  const [mrSaving,setMrSaving]   =useState(false)
-  const [activeQ,setActiveQ]     =useState<string|null>(null)
-  const [reviewMonth,setReviewMonth]=useState('')
   const [baselineTotals,setBaselineTotals]=useState<Record<string,number>>({})
   const [showOnboarding,setShowOnboarding]=useState(false)
   const [onboardingForm,setOnboardingForm]=useState<Record<string,string>>({interruptions:'',convo:'',mpa:'',contact:'',catch_up:'',dtm:'',pre_filter:'',mg1:'',launch:''})
@@ -257,21 +205,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
     const next={...checklist,[key]:val};setChecklist(next)
     setMeta('checklist_'+selDate,JSON.stringify(next))
   }
-  async function openMonthReview(mo:string){
-    setReviewMonth(mo);setActiveQ(null)
-    const saved=await getMeta('month_review_'+mo)
-    if(saved){try{setMonthReview({...EMPTY_MR,...JSON.parse(saved)})}catch{setMonthReview(EMPTY_MR)}}
-    else setMonthReview(EMPTY_MR)
-    setShowMonthReview(true)
-  }
-  async function saveMR(){
-    setMrSaving(true)
-    await setMeta('month_review_'+reviewMonth,JSON.stringify({...monthReview,savedAt:new Date().toISOString()}))
-    setMrSaving(false)
-  }
-  function updateMR(key:keyof MonthReview,val:string){
-    setMonthReview(p=>{const r={...p};r[key]=val;return r})
-  }
   async function saveCoreGoals(){
     const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
     Object.entries(coreForm.overrides).forEach(([k,v])=>{const n=parseInt(v as string)||0;if(n>0)(g.overrides as any)[k]=n})
@@ -335,16 +268,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const personalBests=useMemo(()=>{
     const b:Partial<Record<FieldKey,{val:number;date:string}>>={};FIELDS.forEach(f=>{let best=0;let bd='';allDates.forEach(d=>{const v=getV(habits[d] as HabitEntry|undefined,f.key);if(v>best){best=v;bd=d}});if(best>0)b[f.key]={val:best,date:bd}});return b
   },[habits,allDates])
-  const monthData=useMemo(()=>{
-    const now2=new Date();const y=now2.getFullYear();const m=now2.getMonth()-monthOffset
-    const last=new Date(y,m+1,0);const days:string[]=[]
-    for(let i=1;i<=last.getDate();i++)days.push(new Date(y,m,i,12,0,0).toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))
-    return{days,label:new Date(y,m,15).toLocaleDateString('en-AU',{month:'long',year:'numeric'})}
-  },[monthOffset])
-  const monthTotals=useMemo(()=>{
-    const t:Record<string,number>={convo:0,mg1:0,mpa:0,catch_up:0,dtm:0,pre_filter:0,launch:0,interruptions:0,contact:0}
-    monthData.days.forEach(d=>{const h=habits[d] as any;if(h)FIELDS.forEach(f=>{t[f.key]+=getV(h,f.key)})});return t
-  },[monthData,habits,FIELDS])
 
   // Activity breakdown data for trends (computed outside render to avoid IIFE JSX issues)
   const BDFIELDS=[
@@ -366,7 +289,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   // Get the goal field definition
   const goalFieldDef = FIELDS.find(f=>f.key===coreGoals.goalField)??FIELDS.find(f=>f.key==='mg1')!
 
-  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'month' as Tab,label:'📅 Month'},{id:'trends' as Tab,label:'📈 Trends'},{id:'core' as Tab,label:'🎯 Core Run'}]).filter(t=>!(hideMonth&&t.id==='month')).filter(t=>!(level<2&&t.id==='log'))
+  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'trends' as Tab,label:'📈 Trends'},{id:'core' as Tab,label:'🎯 Core Run'}]).filter(t=>!(level<2&&t.id==='log'))
   const scoreColor=todayScore>=80?GREEN:todayScore>=60?TEAL:todayScore>=40?GOLD:RED
   const consColor=consistency>=80?GREEN:consistency>=60?TEAL:consistency>=40?GOLD:RED
   const currMo=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)
@@ -535,155 +458,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
             )
           })()}
 
-        </div>
-      )}
-
-      {/* ── MONTH TAB ─────────────────────────────────── */}
-      {tab==='month'&&(
-        <div>
-          {/* Month nav */}
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-            <button onClick={()=>setMonthOffset(v=>v+1)} style={{padding:'6px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>← Prev</button>
-            <span style={{fontSize:13,color:GOLD,fontWeight:700}}>{monthData.label}</span>
-            <button onClick={()=>setMonthOffset(v=>Math.max(0,v-1))} disabled={monthOffset===0} style={{padding:'6px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:monthOffset===0?'var(--text4)':'var(--text3)',cursor:monthOffset===0?'default':'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Next →</button>
-          </div>
-
-          {/* Monthly totals */}
-          <div style={CARD}>
-            <div style={SL}>Monthly Totals vs Goal</div>
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              {FIELDS.filter(f=>f.key!=='interruptions').map(f=>{
-                const val=monthTotals[f.key]??0
-                const mTarget=targets[f.key]??0
-                const pct=mTarget>0?Math.min(100,Math.round(val/mTarget*100)):null
-                const isOnTrack=pct!==null&&pct>=80
-                return(
-                  <div key={f.key} style={{display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{width:80,fontSize:11,fontWeight:600,color:val>0?f.color:'var(--text4)',flexShrink:0}}>{f.label}</div>
-                    <div style={{flex:1,height:18,background:'var(--s3)',borderRadius:4,overflow:'hidden',position:'relative'}}>
-                      {mTarget>0&&<div style={{position:'absolute',inset:0,height:'100%',width:(pct??0)+'%',background:isOnTrack?GREEN:f.color,borderRadius:4,transition:'width 0.6s'}}/>}
-                      {mTarget===0&&val>0&&<div style={{position:'absolute',inset:0,height:'100%',width:'100%',background:f.color+'30',borderRadius:4}}/>}
-                    </div>
-                    <div style={{display:'flex',gap:4,alignItems:'center',flexShrink:0,minWidth:70,justifyContent:'flex-end'}}>
-                      <span className="mono" style={{fontSize:13,fontWeight:800,color:val>0?f.color:'var(--text4)'}}>{val}</span>
-                      {mTarget>0&&<span style={{fontSize:10,color:'var(--text4)'}}>/ {mTarget}</span>}
-                      {pct!==null&&<span style={{fontSize:9,color:isOnTrack?GREEN:pct>=50?GOLD:RED,fontWeight:700}}>{pct}%</span>}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <span style={{fontSize:11,color:RED}}>Interruptions</span>
-              <span className="mono" style={{fontSize:14,fontWeight:700,color:RED}}>{monthTotals.interruptions??0}</span>
-            </div>
-          </div>
-
-          {/* Month analytics */}
-          {(()=>{
-            const loggedDays=monthData.days.filter(d=>habits[d])
-            const totalDays=monthData.days.length
-            const activeDays=loggedDays.length
-            const dayScores=loggedDays.map(d=>{const h=(habits[d] as any);const s=h?calcScore({convo:h.convo??0,mg1:h.mg1??0,mpa:h.mpa??0,catch_up:h.catch_up??0,dtm:h.dtm??0,pre_filter:h.pre_filter??0,launch:h.launch??0,interruptions:h.interruptions??0,contact:h.contact??0}):0;return{d,s}}).sort((a,b)=>b.s-a.s)
-            const bestDay=dayScores[0]
-            const weeks:string[][]=[];const wk:string[]=[]
-            monthData.days.forEach(d=>{wk.push(d);if(wk.length===7){weeks.push([...wk]);wk.length=0}});if(wk.length>0)weeks.push([...wk])
-            const wkField=coreGoals.goalField;const wkLabel=FIELDS.find(f=>f.key===wkField)?.label??wkField
-            const weekTotals=weeks.map(w=>({label:'Wk '+(weeks.indexOf(w)+1),goal:w.reduce((s,d)=>s+((habits[d] as any)?.[wkField]??0),0),convo:w.reduce((s,d)=>s+((habits[d] as any)?.convo??0),0),active:w.filter(d=>habits[d]).length}))
-            const maxWkGoal=Math.max(...weekTotals.map(w=>w.goal),1)
-            const isCurrentMonth=monthData.days[0]?.slice(0,7)===currMo
-            const dayOfMonth=isCurrentMonth?parseInt(todayStr.slice(8)):totalDays
-            const pGoal=coreGoals.goalMonthly;const pField=coreGoals.goalField;const pLabel=FIELDS.find(f=>f.key===pField)?.label??pField;const pDone=monthTotals[pField]??0
-            const expectedByNow=isCurrentMonth?Math.round(pGoal*(dayOfMonth/totalDays)*10)/10:pGoal
-            const paceColor=pDone>=expectedByNow?GREEN:pDone>=expectedByNow*0.7?GOLD:RED
-            return(
-              <div>
-                <div style={{...CARD,borderTop:'3px solid '+paceColor}}>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-                    <div style={SL}>Monthly Pace</div>
-                    <span style={{fontSize:10,color:paceColor,fontWeight:700}}>{pDone>=expectedByNow?'✓ On pace':'⚠ Behind pace'}</span>
-                  </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
-                    {[
-                      {l:pLabel+' done',v:pDone,c:pDone>=pGoal?GREEN:paceColor},
-                      {l:'Convos',v:monthTotals.convo,c:GOLD},
-                      {l:'Active days',v:activeDays,c:'var(--text3)'},
-                      {l:'Interruptions',v:monthTotals.interruptions,c:RED},
-                    ].map(x=>(
-                      <div key={x.l} style={{textAlign:'center'}}>
-                        <div className="mono" style={{fontSize:18,fontWeight:800,color:x.c,lineHeight:1}}>{x.v}</div>
-                        <div style={{fontSize:8,color:'var(--text4)',marginTop:3}}>{x.l}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {isCurrentMonth&&<div style={{marginTop:8,fontSize:9,color:'var(--text4)'}}>Expected {expectedByNow} {pLabel} by day {dayOfMonth} · {Math.max(0,pGoal-pDone)} remaining · {Math.max(0,totalDays-dayOfMonth)}d left</div>}
-                </div>
-                {weeks.length>1&&(
-                  <div style={CARD}>
-                    <div style={SL}>Week by Week</div>
-                    <div style={{display:'flex',gap:3,alignItems:'flex-end',height:50,marginBottom:6}}>
-                      {weekTotals.map((w,i)=>(
-                        <div key={i} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
-                          <div style={{width:'100%',height:Math.max(2,(w.goal/maxWkGoal)*46),background:w.goal>0?GREEN:TEAL,borderRadius:'2px 2px 0 0'}}/>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{display:'flex',gap:3}}>
-                      {weekTotals.map((w,i)=>(
-                        <div key={i} style={{flex:1,textAlign:'center'}}>
-                          <div style={{fontSize:8,color:'var(--text4)'}}>{w.label}</div>
-                          <div className="mono" style={{fontSize:10,color:w.goal>0?GREEN:'var(--text4)',fontWeight:700}}>{w.goal}</div>
-                          <div style={{fontSize:8,color:'var(--text4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{wkLabel.slice(0,3)}</div>
-                          <div style={{fontSize:8,color:w.active>3?GREEN:GOLD}}>{w.active}d</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {bestDay&&bestDay.s>0&&(
-                  <div style={{...CARD,background:'rgba(200,162,74,0.04)',border:'1px solid rgba(200,162,74,0.25)'}}>
-                    <div style={SL}>Best Day This Month</div>
-                    {(()=>{
-                      const h=(habits[bestDay.d] as any)
-                      const goalVal=h?.[pField]??0
-                      return(
-                        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                          <div>
-                            <div style={{fontSize:12,fontWeight:700,color:GOLD}}>{new Date(bestDay.d+'T12:00:00').toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'short'})}</div>
-                            <div style={{fontSize:10,color:'var(--text4)',marginTop:3}}>
-                              {goalVal>0&&<span style={{marginRight:8,color:FIELDS.find(f=>f.key===pField)?.color??GOLD}}>{goalVal} {pLabel}</span>}
-                              <span style={{color:'var(--text4)'}}>Score: {bestDay.s}</span>
-                            </div>
-                          </div>
-                          <button onClick={()=>{setSelDate(bestDay.d);setTab('log')}} style={{padding:'5px 10px',borderRadius:'var(--r)',border:'1px solid rgba(200,162,74,0.3)',background:'rgba(200,162,74,0.06)',color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>View →</button>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-
-          {/* Monthly Review button */}
-          {(()=>{
-            const mo=monthData.days[0]?.slice(0,7)??currMo
-            const answered=Object.values(monthReview).filter(v=>v.length>0).length
-            const isThisMonth=reviewMonth===mo
-            return(
-              <div style={CARD}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div>
-                    <div style={SL}>Monthly Review</div>
-                    {isThisMonth&&answered>0&&<div style={{fontSize:10,color:GREEN,marginTop:2}}>{answered}/11 answered</div>}
-                  </div>
-                  <button onClick={()=>openMonthReview(mo)} style={{padding:'8px 16px',borderRadius:'var(--r)',border:'1px solid rgba(200,162,74,0.4)',background:'rgba(200,162,74,0.08)',color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
-                    📝 Review {mo}
-                  </button>
-                </div>
-              </div>
-            )
-          })()}
         </div>
       )}
 
@@ -1037,42 +811,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
               style={{padding:'13px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
               Starting fresh
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── MONTH REVIEW MODAL ─────────────────────────── */}
-      {showMonthReview&&(
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:600,display:'flex',flexDirection:'column',backdropFilter:'blur(8px)'}}>
-          <div style={{background:'var(--s1)',borderBottom:'1px solid var(--br)',padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:700,color:GOLD}}>Monthly Review — {reviewMonth}</div>
-              <div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>{Object.values(monthReview).filter(v=>v.length>0).length}/11 answered</div>
-            </div>
-            <div style={{display:'flex',gap:8,alignItems:'center'}}>
-              <button onClick={saveMR} disabled={mrSaving} style={{padding:'8px 16px',borderRadius:'var(--r)',border:'none',background:'linear-gradient(135deg,var(--green),var(--green2))',color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
-                {mrSaving?'Saving…':'Save'}
-              </button>
-              <button onClick={()=>setShowMonthReview(false)} style={{width:32,height:32,borderRadius:'50%',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text4)',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
-            </div>
-          </div>
-          <div style={{flex:1,overflowY:'auto',padding:'0 20px 60px'}}>
-            <div style={{height:3,background:'var(--s3)',margin:'12px 0',borderRadius:2,overflow:'hidden'}}>
-              <div style={{height:'100%',width:Math.round(Object.values(monthReview).filter(v=>v.length>0).length/11*100)+'%',background:GREEN,borderRadius:2,transition:'width 0.4s'}}/>
-            </div>
-            {MR_QUESTIONS.map(([key,title,question,sub])=>(
-              <QAccordion
-                key={key}
-                qkey={key}
-                title={title}
-                question={question}
-                sub={sub}
-                value={monthReview[key]}
-                active={activeQ===key}
-                onToggle={()=>setActiveQ(activeQ===key?null:key)}
-                onChange={v=>updateMR(key,v)}
-              />
-            ))}
           </div>
         </div>
       )}
