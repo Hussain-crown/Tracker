@@ -125,7 +125,6 @@ export default function Candidates(){
   const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
   const [loading,setLoading]       = useState(true)
   const [tab,setTab]               = useState<Tab>('active')
-  const [search,setSearch]         = useState('')
   const [stageFilter,setStageFilter] = useState('all')
   const [archiveFilter,setArchiveFilter] = useState('all')
   const [detail,setDetail]         = useState<Candidate|null>(null)
@@ -195,7 +194,6 @@ export default function Candidates(){
 
   const displayList=useMemo(()=>{
     let l=active
-    if(search)l=l.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()))
     if(stageFilter!=='all')l=l.filter(c=>normaliseStage(c.stage)===stageFilter)
     return [...l].sort((a,b)=>{
       const as=FU_STAGES.includes(normaliseStage(a.stage))&&daysSince(allLogs.filter(l=>l.entity_id===a.id)[0]?.created_at??a.updated_at)>=21
@@ -203,7 +201,7 @@ export default function Candidates(){
       if(as!==bs)return as?-1:1
       return (scores[b.id]??0)-(scores[a.id]??0)
     })
-  },[active,search,stageFilter,scores,allLogs])
+  },[active,stageFilter,scores,allLogs])
 
   const funnel=useMemo(()=>{
     const total=active.length||1
@@ -277,9 +275,6 @@ export default function Candidates(){
       {/* ── ACTIVE TAB ── */}
       {tab==='active'&&(
         <div>
-          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search candidates…" style={{flex:1,minWidth:140,...INP}}/>
-          </div>
           <div style={{display:'flex',gap:5,overflowX:'auto',marginBottom:12,paddingBottom:4}}>
             {(['all',...STAGES] as const).map(s=>{
               const col=s==='all'?GOLD:(STAGE_CFG[s as Stage]?.color??GOLD)
