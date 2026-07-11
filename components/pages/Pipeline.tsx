@@ -543,16 +543,12 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               )
             })}
           </div>
-          {/* Search + sort row */}
+          {/* Search row */}
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone, Instagram…" style={{flex:1,minWidth:160,...INP}}/>
+            <button onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='.csv';i.onchange=(e)=>{const f=(e.target as HTMLInputElement).files?.[0];if(f)openCSVFile(f)};i.click()}}
+              style={{padding:'9px 12px',borderRadius:'var(--r)',border:`1px solid ${BLUE}50`,background:'transparent',color:BLUE,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>↑ CSV</button>
             <button onClick={openAdd} style={{padding:'9px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0}}>+ Add Lead</button>
-            <select value={sortBy} onChange={e=>setSortBy(e.target.value as any)} style={{...SEL,width:'auto'}}>
-              <option value="overdue">Sort: Overdue</option>
-              <option value="score">Sort: HxL Score</option>
-              <option value="stale">Sort: Stale</option>
-              <option value="date">Sort: Latest</option>
-            </select>
           </div>
           {displayed.length===0
             ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No leads in this view</div>
@@ -1012,15 +1008,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         </div>
       )}
 
-      {/* ── FLOATING BUTTONS ──────────────────────────────── */}
-      <button onClick={openAdd}
-        style={{position:'fixed',bottom:24,right:24,zIndex:100,padding:'13px 20px',borderRadius:999,border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:800,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:14,boxShadow:'0 4px 20px rgba(200,162,74,0.4)'}}>
-        + Add Lead
-      </button>
-      <button onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='.csv';i.onchange=(e)=>{const f=(e.target as HTMLInputElement).files?.[0];if(f)openCSVFile(f)};i.click()}}
-        style={{position:'fixed',bottom:24,right:148,zIndex:100,padding:'13px 16px',borderRadius:999,border:`1px solid ${BLUE}50`,background:'var(--s1)',color:BLUE,fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13,boxShadow:'0 2px 10px rgba(91,155,213,0.2)'}}>
-        ↑ CSV
-      </button>
 
       {/* ── DRAG OVERLAY ──────────────────────────────────── */}
       {dragOver&&(

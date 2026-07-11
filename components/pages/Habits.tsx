@@ -21,7 +21,7 @@ const ALL_FIELDS = [
 type FieldKey = typeof ALL_FIELDS[number]['key']
 // Fields hidden entirely at level 1 (entry tier) — restored at level >= 2.
 const LEVEL1_HIDDEN: readonly FieldKey[] = ['interruptions','convo','contact']
-type Tab = 'log'|'month'|'trends'|'core'|'resources'
+type Tab = 'log'|'month'|'trends'|'core'
 
 const CONV = { mg1PerConvo:0.034, mpaPerConvo:0.83, mg1PerMpa:0.041, dtmPerConvo:0.22, pfPerConvo:0.067, cuPerConvo:0.33 }
 
@@ -150,20 +150,8 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   const [saving,setSaving]       =useState(false)
   const [saved,setSaved]         =useState(false)
   const [tab,setTab]             =useState<Tab>(level>=2?'log':'trends')
-  const [teamResources,setTeamResources] = useState<any[]>([])
-  const [resLoading,setResLoading]       = useState(false)
   useEffect(()=>{ if(hideMonth&&tab==='month')setTab('trends') },[hideMonth,tab])
   useEffect(()=>{ if(level<2&&tab==='log')setTab('trends') },[level,tab])
-
-  // Load admin resources when Resources tab opened (tracker mode only)
-  useEffect(()=>{
-    if(tab!=='resources'||!hideMonth)return
-    setResLoading(true)
-    fetch('/api/team/resources').then(r=>r.json()).then(d=>{
-      setTeamResources(d.resources||[])
-      setResLoading(false)
-    }).catch(()=>setResLoading(false))
-  },[tab,hideMonth]) // eslint-disable-line
   const [monthOffset,setMonthOffset]=useState(0)
   const [coreGoals,setCoreGoals] =useState<CoreGoals>(EMPTY_CORE)
   const [editCore,setEditCore]   =useState(false)
@@ -378,7 +366,7 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
   // Get the goal field definition
   const goalFieldDef = FIELDS.find(f=>f.key===coreGoals.goalField)??FIELDS.find(f=>f.key==='mg1')!
 
-  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'month' as Tab,label:'📅 Month'},{id:'trends' as Tab,label:'📈 Trends'},{id:'core' as Tab,label:'🎯 Core Run'},...(hideMonth?[{id:'resources' as Tab,label:'📚 Resources'}]:[])]).filter(t=>!(hideMonth&&t.id==='month')).filter(t=>!(level<2&&t.id==='log'))
+  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'month' as Tab,label:'📅 Month'},{id:'trends' as Tab,label:'📈 Trends'},{id:'core' as Tab,label:'🎯 Core Run'}]).filter(t=>!(hideMonth&&t.id==='month')).filter(t=>!(level<2&&t.id==='log'))
   const scoreColor=todayScore>=80?GREEN:todayScore>=60?TEAL:todayScore>=40?GOLD:RED
   const consColor=consistency>=80?GREEN:consistency>=60?TEAL:consistency>=40?GOLD:RED
   const currMo=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)
@@ -1014,48 +1002,6 @@ export default function Habits({hideMonth=false,goalOverride=null,level=1}:{hide
       )}
 
 
-      {/* ── RESOURCES TAB (tracker only, admin-controlled) ─── */}
-      {tab==='resources'&&hideMonth&&(
-        <div>
-          {resLoading&&<div style={{textAlign:'center' as const,padding:40,color:'var(--text4)',fontSize:13}}>Loading resources…</div>}
-          {!resLoading&&teamResources.length===0&&(
-            <div style={{textAlign:'center' as const,padding:48,color:'var(--text4)',fontSize:13,border:'1px dashed var(--br)',borderRadius:'var(--r2)'}}>
-              No resources yet — your leader will add them here.
-            </div>
-          )}
-          {!resLoading&&teamResources.map((r:any)=>{
-            const CAT_COLORS:Record<string,string>={Leadership:'var(--gold)',Mindset:'var(--purple)',Business:'var(--green)',Skills:'var(--teal)',Health:'var(--blue)',Other:'var(--text3)'}
-            const c=CAT_COLORS[r.category]||'var(--text3)'
-            return(
-              <div key={r.id} style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px 16px',marginBottom:10,borderLeft:'3px solid '+c}}>
-                <div style={{display:'flex',gap:8,alignItems:'flex-start',justifyContent:'space-between'}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' as const,marginBottom:4}}>
-                      <span style={{fontSize:13,fontWeight:700}}>{r.title}</span>
-                      <span style={{fontSize:9,padding:'1px 7px',borderRadius:8,background:c+'15',color:c}}>{r.type}</span>
-                      <span style={{fontSize:9,padding:'1px 7px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{r.category}</span>
-                    </div>
-                    {r.author&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:4}}>by {r.author}</div>}
-                    {(()=>{
-                      const takeaway=r.key_takeaway?.replace(/\[\[PROG:\d+\]\]/g,'').replace(/\[\[ACT:[^\]]*\]\]/g,'').replace(/\[\[ACTDONE:1\]\]/g,'').trim()
-                      return takeaway?<div style={{fontSize:11,color:'var(--text2)',lineHeight:1.5}}>{takeaway}</div>:null
-                    })()}
-                    {r.url&&(
-                      <a href={r.url} target="_blank" rel="noopener noreferrer"
-                        style={{display:'inline-block',marginTop:8,fontSize:11,color:'var(--blue)',fontWeight:600}}>
-                        Open resource ↗
-                      </a>
-                    )}
-                  </div>
-                  {r.rating>0&&r.status==='done'&&(
-                    <div style={{fontSize:14,color:'var(--gold)',flexShrink:0}}>{'★'.repeat(r.rating)}</div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
       {/* ── HISTORICAL BASELINE ONBOARDING ─────────────── */}
       {showOnboarding&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.96)',zIndex:700,display:'flex',flexDirection:'column',backdropFilter:'blur(12px)'}}>
