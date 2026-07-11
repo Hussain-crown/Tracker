@@ -57,7 +57,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<'pipeline'|'candidates'|'habits'|'analytics'|'team'>('pipeline')
+  const [tab,setTab] = useState<NavId>('pipeline')
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{

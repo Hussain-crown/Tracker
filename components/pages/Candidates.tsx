@@ -22,7 +22,7 @@ const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Gh
 
 // ── STYLE CONSTANTS ───────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
-const BLUE='var(--blue)';const PURPLE='var(--purple)';const ORANGE='var(--orange)'
+const PURPLE='var(--purple)';const ORANGE='var(--orange)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase',fontWeight:700,marginBottom:6}
 const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box'}
@@ -131,7 +131,6 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
   const [loading,setLoading]       = useState(true)
   const [tab,setTab]               = useState<Tab>('active')
-  const [stageFilter] = useState('all')
   const [archiveFilter,setArchiveFilter] = useState('all')
   const [detail,setDetail]         = useState<Candidate|null>(null)
   const [detailTab,setDetailTab]   = useState<DetailTab>('profile')
@@ -205,15 +204,13 @@ export default function Candidates({level=1}:{level?:number}={}){
   },[allLogs])
 
   const displayList=useMemo(()=>{
-    let l=active
-    if(stageFilter!=='all')l=l.filter(c=>normaliseStage(c.stage)===stageFilter)
-    return [...l].sort((a,b)=>{
+    return [...active].sort((a,b)=>{
       const as=FU_STAGES.includes(normaliseStage(a.stage))&&daysSince(allLogs.filter(l=>l.entity_id===a.id)[0]?.created_at??a.updated_at)>=21
       const bs=FU_STAGES.includes(normaliseStage(b.stage))&&daysSince(allLogs.filter(l=>l.entity_id===b.id)[0]?.created_at??b.updated_at)>=21
       if(as!==bs)return as?-1:1
       return (scores[b.id]??0)-(scores[a.id]??0)
     })
-  },[active,stageFilter,scores,allLogs])
+  },[active,scores,allLogs])
 
   const funnel=useMemo(()=>{
     const total=active.length||1

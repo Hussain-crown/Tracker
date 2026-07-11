@@ -3,8 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { Candidate, ContactLog } from '@/lib/stores/types'
 
-const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
-const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)';const ORANGE='var(--orange)'
+const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)';const ORANGE='var(--orange)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase',fontWeight:700,marginBottom:6}
 

@@ -143,16 +143,13 @@ export default function Analytics(){
         <div style={SL}>Activity Breakdown — Monthly (Last 12 months)</div>
         <div style={{fontSize:10,color:'var(--text4)',marginBottom:12}}>How your activity splits each month</div>
         {(()=>{
-          const data=actData
-          const maxTotal=actMaxTotal
-          const cm=currMo
           return(
             <div>
               <div style={{display:'flex',gap:3,alignItems:'flex-end',height:90,marginBottom:6}}>
-                {data.map((m,i)=>{
-                  const totalH=Math.max(3,(m.total/maxTotal)*86)
+                {actData.map((m,i)=>{
+                  const totalH=Math.max(3,(m.total/actMaxTotal)*86)
                   return(
-                    <div key={i} title={m.mo+': '+m.total+' total'} style={{flex:1,height:totalH,display:'flex',flexDirection:'column',justifyContent:'flex-end',borderRadius:'2px 2px 0 0',overflow:'hidden',outline:m.mo===cm?'2px solid var(--gold)':'none',outlineOffset:1}}>
+                    <div key={i} title={m.mo+': '+m.total+' total'} style={{flex:1,height:totalH,display:'flex',flexDirection:'column',justifyContent:'flex-end',borderRadius:'2px 2px 0 0',overflow:'hidden',outline:m.mo===currMo?'2px solid var(--gold)':'none',outlineOffset:1}}>
                       {BDFIELDS.map(f=>{
                         const val=(m as any)[f.k]??0
                         const bh=m.total>0?(val/m.total)*totalH:0
@@ -164,9 +161,9 @@ export default function Analytics(){
                 })}
               </div>
               <div style={{display:'flex',gap:3,marginBottom:10}}>
-                {data.map((m,i)=>(
+                {actData.map((m,i)=>(
                   <div key={i} style={{flex:1,textAlign:'center'}}>
-                    <div style={{fontSize:7,color:m.mo===cm?GOLD:'var(--text4)',fontWeight:m.mo===cm?700:400}}>{m.mo.slice(5)}</div>
+                    <div style={{fontSize:7,color:m.mo===currMo?GOLD:'var(--text4)',fontWeight:m.mo===currMo?700:400}}>{m.mo.slice(5)}</div>
                   </div>
                 ))}
               </div>
@@ -187,8 +184,8 @@ export default function Analytics(){
                   <div style={{width:28,textAlign:'center',fontSize:9,color:'var(--text4)',fontWeight:600}}>Int</div>
                   <div style={{width:32,textAlign:'center',fontSize:9,color:'var(--text4)',fontWeight:600}}>Tot</div>
                 </div>
-                {[...data].reverse().map(m=>{
-                  const isCurr=m.mo===cm
+                {[...actData].reverse().map(m=>{
+                  const isCurr=m.mo===currMo
                   return(
                     <div key={m.mo} style={{display:'flex',borderBottom:'1px solid var(--br)',padding:'4px 0',background:isCurr?'rgba(200,162,74,0.04)':'transparent'}}>
                       <div style={{width:52,flexShrink:0,fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:isCurr?GOLD:'var(--text3)',fontWeight:isCurr?700:400}}>{m.mo.slice(2)}</div>

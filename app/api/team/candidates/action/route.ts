@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
 
     if (action === 'log_contact') {
-      const { outcome, logNotes, nextDate, objection } = body
+      const { outcome, notes: logNotes, nextDate, objection } = body
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
         entity_id: candidateId,
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       if (!nextStage) return NextResponse.json({ error: 'already at final stage' }, { status: 400 })
 
       const history = notes._stage_history || []
-      history.push({ stage: nextStage, date: now.slice(0, 10) })
+      history.push({ stage: candidate.stage as string, date: now.slice(0, 10) })
       const newNotes = JSON.stringify({ ...notes, _stage_history: history })
 
       await sbAdmin.from('candidates').update({
