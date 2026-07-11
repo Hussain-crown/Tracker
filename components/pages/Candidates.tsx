@@ -55,7 +55,7 @@ const TZ='Australia/Brisbane'
 function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
 function fmtTime(iso:string){return new Date(iso).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:TZ})}
 
-type Tab = 'focus'|'active'|'funnel'|'launched'|'archive'
+type Tab = 'active'|'funnel'|'launched'|'archive'
 type DetailTab = 'profile'|'history'|'timeline'|'brief'
 
 // ── CANDIDATE CARD ────────────────────────────────────────
@@ -124,7 +124,7 @@ export default function Candidates(){
   const [candidates,setCandidates] = useState<Candidate[]>([])
   const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
   const [loading,setLoading]       = useState(true)
-  const [tab,setTab]               = useState<Tab>('focus')
+  const [tab,setTab]               = useState<Tab>('active')
   const [search,setSearch]         = useState('')
   const [stageFilter,setStageFilter] = useState('all')
   const [archiveFilter,setArchiveFilter] = useState('all')
@@ -182,13 +182,6 @@ export default function Candidates(){
     allLogs.forEach(l=>{m[l.entity_id]=(m[l.entity_id]||0)+1})
     return m
   },[allLogs])
-
-  const focusList=useMemo(()=>{
-    return active.filter(c=>{
-      const nd=nextDueMap[c.id]
-      return nd&&nd<=in3Days
-    }).sort((a,b)=>(nextDueMap[a.id]??'9999').localeCompare(nextDueMap[b.id]??'9999'))
-  },[active,nextDueMap,in3Days])
 
   const weeklyDigest=useMemo(()=>{
     const ids=new Set(candidates.map(c=>c.id))
@@ -283,57 +276,13 @@ export default function Candidates(){
 
       {/* Tabs */}
       <div style={{display:'flex',gap:3,marginBottom:14,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto'}}>
-        {([['focus','🎯 Focus'],['active',`Active (${active.length})`],['funnel','📊 Funnel'],['launched',`✅ Launched (${launched.length})`],['archive',`🗄 Archive (${archived.length})`]] as const).map(([id,label])=>(
+        {([['active',`Active (${active.length})`],['funnel','📊 Funnel'],['launched',`✅ Launched (${launched.length})`],['archive',`🗄 Archive (${archived.length})`]] as const).map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)}
             style={{flex:1,padding:'8px 6px',borderRadius:'var(--r)',border:'none',background:tab===id?'var(--s3)':'transparent',color:tab===id?GOLD:'var(--text3)',fontSize:10,fontWeight:tab===id?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",transition:'all 0.15s',whiteSpace:'nowrap',flexShrink:0}}>
             {label}
           </button>
         ))}
       </div>
-
-      {/* ── FOCUS TAB ── */}
-      {tab==='focus'&&(
-        <div>
-          {focusList.length===0?(
-            <div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>
-              <div style={{fontSize:24,marginBottom:8}}>✓</div>
-              <div style={{fontSize:13,fontWeight:600}}>All caught up</div>
-              <div style={{fontSize:11,marginTop:4}}>No follow-ups due in the next 3 days</div>
-            </div>
-          ):(
-            <div>
-              <div style={SL}>Who to call ({focusList.length})</div>
-              {focusList.map(c=>{
-                const nd=nextDueMap[c.id]
-                const overdue=nd<todayStr;const dueToday=nd===todayStr
-                const col=overdue?RED:dueToday?GOLD:'var(--text4)'
-                const label=overdue?`${daysSince(nd)}d overdue`:dueToday?'Due today':`Due ${fmtDate(nd)}`
-                const stage=normaliseStage(c.stage);const cfg=STAGE_CFG[stage]
-                const lastLog=allLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
-                return(
-                  <div key={c.id} style={{...CARD,borderLeft:`3px solid ${col}`}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700}}>{c.name}</div>
-                        <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
-                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{stage}</span>
-                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:`${col}15`,color:col,fontWeight:overdue||dueToday?700:400}}>{label}</span>
-                          {lastLog&&<span style={{fontSize:10,color:'var(--text4)'}}>Last: {lastLog.outcome}</span>}
-                        </div>
-                      </div>
-                      <div className="mono" style={{fontSize:18,fontWeight:800,color:healthColor(scores[c.id]??0)}}>{scores[c.id]??0}</div>
-                    </div>
-                    {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,60)}{c.pain_point.length>60?'…':''}"</div>}
-                    <div style={{display:'flex',gap:6}}>
-                      <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ── ACTIVE TAB ── */}
       {tab==='active'&&(

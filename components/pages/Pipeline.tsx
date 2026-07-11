@@ -76,7 +76,7 @@ const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br
 const SEL:React.CSSProperties={...INP as object,cursor:'pointer'} as React.CSSProperties
 const OVERLAY:React.CSSProperties={position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)',overflowY:'auto'}
 
-type View = 'focus'|'leads'|'funnel'|'archived'
+type View = 'leads'|'funnel'|'archived'
 
 // ── LEAD CARD — defined OUTSIDE Pipeline so React doesn't recreate it ──
 interface LeadCardProps {
@@ -202,7 +202,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
          addContactLog,loadContactLogs,contactLogs,
          habits,saveHabit,loadHabits} = useStore()
 
-  const [view,setView]         = useState<View>('focus')
+  const [view,setView]         = useState<View>('leads')
   const [filter,setFilter]     = useState<Stage|'all'|'archived'>('all')
   const [sortBy,setSortBy]     = useState<'overdue'|'score'|'stale'|'date'>('overdue')
   const [search,setSearch]     = useState('')
@@ -217,7 +217,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [briefModal,setBriefModal]     = useState<{lead:Lead;text:string;loading:boolean}|null>(null)
   const [archiveModal,setArchiveModal] = useState<Lead|null>(null)
   const [banner,setBanner]             = useState<{type:'error'|'success';msg:string}|null>(null)
-  const [noShowFilter,setNoShowFilter] = useState(false)
   const [archiveReasonFilter,setArchiveReasonFilter] = useState<string>('all')
   const [dragOver,setDragOver]         = useState(false)
   const [deleteLeadConfirm,setDeleteLeadConfirm] = useState<Lead|null>(null)
@@ -308,47 +307,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   },[active,archived,contactLogs,weekAgo])
 
   const showDigest=weeklyDigest.newLeads>0||weeklyDigest.advances>0||weeklyDigest.dtms>0||weeklyDigest.archives>0
-
-  // ── no-show leads (last outcome = No Show, >= 3 days ago) ──
-  const noShowLeads = useMemo(()=>{
-    return active.filter(l=>{
-      const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
-      const last=logs[0]
-      if(!last||last.outcome!=='No Show')return false
-      return daysSince(last.created_at)>=3
-    })
-  },[active,contactLogs])
-
-  // ── focus queue grouped ──
-  const focusQueue = useMemo(()=>[...active].sort((a,b)=>{
-    const ao=isOverdue(a)?1:0;const bo=isOverdue(b)?1:0
-    if(ao!==bo)return bo-ao
-    const ad=isOverdue(a)?daysSince(a.next_action_date||a.updated_at):0
-    const bd=isOverdue(b)?daysSince(b.next_action_date||b.updated_at):0
-    if(ad!==bd)return bd-ad
-    const si=STAGES.indexOf(a.stage as Stage);const sj=STAGES.indexOf(b.stage as Stage)
-    if(si!==sj)return sj-si
-    const aLast=contactLogs.filter(c=>c.entity_id===a.id)[0]?.created_at??a.updated_at
-      const bLast=contactLogs.filter(c=>c.entity_id===b.id)[0]?.created_at??b.updated_at
-      return healthScore(b,bLast)-healthScore(a,aLast)
-  }),[active,contactLogs])
-
-  // Grouped focus sections
-  const focusGrouped = useMemo(()=>{
-    const getHealth=(l:Lead)=>{
-      const last=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))[0]
-      return healthScore(l,last?.created_at??l.updated_at)
-    }
-    const byHealth=(a:Lead,b:Lead)=>getHealth(b)-getHealth(a)
-
-    let base=noShowFilter?noShowLeads:[...active]
-
-    const overdue=base.filter(l=>l.next_action_date&&l.next_action_date<today).sort(byHealth)
-    const dueToday=base.filter(l=>l.next_action_date===today).sort(byHealth)
-    const dueWeek=base.filter(l=>l.next_action_date&&l.next_action_date>today&&l.next_action_date<=weekAhead).sort(byHealth)
-    const warm=base.filter(l=>!l.next_action_date||l.next_action_date>weekAhead).sort(byHealth)
-    return{overdue,dueToday,dueWeek,warm}
-  },[active,contactLogs,noShowLeads,noShowFilter,today,weekAhead])
 
   const displayed = useMemo(()=>{
     let list=filter==='archived'?archived:active.filter(l=>filter==='all'||l.stage===filter)
@@ -519,17 +477,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}
 
-  // ── helper to render a group section ──
-  function renderFocusGroup(label:string,labelColor:string,leads:Lead[]){
-    if(leads.length===0)return null
-    return(
-      <div key={label} style={{marginBottom:4}}>
-        <div style={{fontSize:10,fontWeight:700,color:labelColor,letterSpacing:'1.5px',textTransform:'uppercase' as const,marginBottom:8,marginTop:4,paddingLeft:2}}>{label} · {leads.length}</div>
-        {leads.map(l=><LeadCard key={l.id} l={l} {...cardProps} touchCount={touchCountMap[l.id]??0} nextDue={nextDueMap[l.id]}/>)}
-      </div>
-    )
-  }
-
   return(
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:100}}
       onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
@@ -545,10 +492,10 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       {/* ── TABS ──────────────────────────────────────────── */}
       <div style={{marginBottom:10}}>
         <div style={{display:'flex',gap:3,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto' as const}}>
-          {(['focus','leads','funnel','archived'] as View[]).map(v=>(
+          {(['leads','funnel','archived'] as View[]).map(v=>(
             <button key={v} onClick={()=>setView(v)}
               style={{flex:1,padding:'8px 10px',borderRadius:'var(--r)',border:'none',background:view===v?'var(--s3)':'transparent',color:view===v?GOLD:'var(--text3)',fontSize:11,fontWeight:view===v?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",textTransform:'capitalize' as const,transition:'all 0.15s',whiteSpace:'nowrap' as const}}>
-              {v==='focus'?`🎯 Focus (${focusQueue.length})`:v==='leads'?`📋 All (${active.length})`:v==='funnel'?'📊 Funnel':`🗄 Archive (${archived.length})`}
+              {v==='leads'?`📋 All (${active.length})`:v==='funnel'?'📊 Funnel':`🗄 Archive (${archived.length})`}
             </button>
           ))}
         </div>
@@ -577,46 +524,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
           {weeklyDigest.advances>0&&<span style={{color:GREEN}}>↑{weeklyDigest.advances} advanced</span>}
           {weeklyDigest.dtms>0&&<span style={{color:GOLD}}>{weeklyDigest.dtms} DTMs</span>}
           {weeklyDigest.archives>0&&<span style={{color:'var(--text4)'}}>✗{weeklyDigest.archives} archived</span>}
-        </div>
-      )}
-
-      {/* ── FOCUS VIEW ────────────────────────────────────── */}
-      {view==='focus'&&(
-        <div>
-          {/* No-show recovery banner */}
-          {noShowLeads.length>0&&(
-            <div style={{marginBottom:12,padding:'10px 14px',background:'rgba(232,145,58,0.08)',border:'1px solid rgba(232,145,58,0.25)',borderRadius:'var(--r)',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}}>
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:'var(--orange)',marginBottom:6}}>
-                  ⚡ {noShowLeads.length} no-show{noShowLeads.length>1?'s':''} need re-booking
-                </div>
-                <div style={{display:'flex',gap:8,flexWrap:'wrap' as const}}>
-                  {noShowLeads.map(l=>(
-                    <button key={l.id} onClick={()=>setDrawerLead(l)}
-                      style={{fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid rgba(232,145,58,0.3)',background:'transparent',color:'var(--orange)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>
-                      {l.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <button onClick={()=>setNoShowFilter(f=>!f)}
-                style={{fontSize:10,padding:'4px 10px',borderRadius:6,border:'1px solid rgba(232,145,58,0.4)',background:noShowFilter?'rgba(232,145,58,0.2)':'transparent',color:'var(--orange)',cursor:'pointer',fontFamily:"'Sora',sans-serif",flexShrink:0,fontWeight:noShowFilter?700:400}}>
-                {noShowFilter?'Show all':'Filter'}
-              </button>
-            </div>
-          )}
-
-          {focusQueue.length===0
-            ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No active leads yet.</div>
-            :(
-              <div>
-                {renderFocusGroup('Overdue',RED,focusGrouped.overdue)}
-                {renderFocusGroup('Due Today',GOLD,focusGrouped.dueToday)}
-                {renderFocusGroup('Due This Week','var(--text3)',focusGrouped.dueWeek)}
-                {renderFocusGroup('Warm','var(--text4)',focusGrouped.warm)}
-              </div>
-            )
-          }
         </div>
       )}
 
