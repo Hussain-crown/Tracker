@@ -69,8 +69,9 @@ interface CardProps{
   onLog?:(c:Candidate)=>void
   onAdvance?:(c:Candidate)=>void
   onDq?:(c:Candidate)=>void
+  isDupe?:boolean
 }
-function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,onAdvance,onDq}:CardProps){
+function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,onAdvance,onDq,isDupe}:CardProps){
   const todayStr=new Date().toISOString().slice(0,10)
   const stage=normaliseStage(c.stage)
   const cfg=STAGE_CFG[stage]
@@ -90,6 +91,7 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,
           <div style={{fontSize:14,fontWeight:700,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
             <span>{c.name}</span>
             {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:outColor[lastLog.outcome]??'var(--text4)',display:'inline-block',flexShrink:0}}/>}
+            {isDupe&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'rgba(249,115,22,0.15)',color:'#f97316',fontWeight:700,letterSpacing:'0.5px'}}>DUPE</span>}
           </div>
           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
             <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{stage}</span>
@@ -176,6 +178,21 @@ export default function Candidates({level=1}:{level?:number}={}){
   const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
   const archived = useMemo(()=>candidates.filter(c=>c.status==='disqualified'),[candidates])
   const launched = useMemo(()=>candidates.filter(c=>c.status==='launched'),[candidates])
+
+  const dupeSet = useMemo(()=>{
+    const seen=new Set<string>()
+    const phoneGroups:Record<string,string[]>={}
+    const nameGroups:Record<string,string[]>={}
+    active.forEach(c=>{
+      const p=(c.phone||'').replace(/\D/g,'')
+      if(p.length>=8){if(!phoneGroups[p])phoneGroups[p]=[];phoneGroups[p].push(c.id)}
+      const n=c.name.toLowerCase().trim()
+      if(n){if(!nameGroups[n])nameGroups[n]=[];nameGroups[n].push(c.id)}
+    })
+    Object.values(phoneGroups).forEach(ids=>{if(ids.length>1)ids.forEach(id=>seen.add(id))})
+    Object.values(nameGroups).forEach(ids=>{if(ids.length>1)ids.forEach(id=>seen.add(id))})
+    return seen
+  },[active])
 
   const scores=useMemo(()=>{
     const m:Record<string,number>={}
@@ -271,7 +288,7 @@ export default function Candidates({level=1}:{level?:number}={}){
         <div>
           {displayList.length===0
             ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No candidates assigned yet.</div>
-            :displayList.map(c=><CandCard key={c.id} c={c} {...cardProps} nextDue={nextDueMap[c.id]} touchCount={touchCountMap[c.id]}/>)
+            :displayList.map(c=><CandCard key={c.id} c={c} {...cardProps} isDupe={dupeSet.has(c.id)} nextDue={nextDueMap[c.id]} touchCount={touchCountMap[c.id]}/>)
           }
         </div>
       )}

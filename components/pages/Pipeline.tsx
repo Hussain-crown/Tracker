@@ -92,8 +92,9 @@ interface LeadCardProps {
   advanceStage: (l:Lead)=>void
   touchCount?: number
   nextDue?: string
+  isDupe?: boolean
 }
-function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,touchCount,nextDue}:LeadCardProps){
+function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,touchCount,nextDue,isDupe}:LeadCardProps){
   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
@@ -127,6 +128,7 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
           <div style={{fontSize:14,fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:8}}>
             <span>{l.name}</span>
             {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:dotColor,display:'inline-block',flexShrink:0}}/>}
+            {isDupe&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'rgba(249,115,22,0.15)',color:'#f97316',fontWeight:700,letterSpacing:'0.5px'}}>DUPE</span>}
           </div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
             <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{l.stage}</span>
@@ -260,6 +262,21 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const active   = useMemo(()=>myLeads.filter(l=>!l.archived),[myLeads])
   const archived = useMemo(()=>myLeads.filter(l=>l.archived),[myLeads])
 
+  const dupeSet = useMemo(()=>{
+    const seen=new Set<string>()
+    const phoneGroups:Record<string,string[]>={}
+    const nameGroups:Record<string,string[]>={}
+    active.forEach(l=>{
+      const p=(l.phone||'').replace(/\D/g,'')
+      if(p.length>=8){if(!phoneGroups[p])phoneGroups[p]=[];phoneGroups[p].push(l.id)}
+      const n=l.name.toLowerCase().trim()
+      if(n){if(!nameGroups[n])nameGroups[n]=[];nameGroups[n].push(l.id)}
+    })
+    Object.values(phoneGroups).forEach(ids=>{if(ids.length>1)ids.forEach(id=>seen.add(id))})
+    Object.values(nameGroups).forEach(ids=>{if(ids.length>1)ids.forEach(id=>seen.add(id))})
+    return seen
+  },[active])
+
   const stageCounts = useMemo(()=>{
     const c:Record<string,number>={};STAGES.forEach(s=>{c[s]=active.filter(l=>l.stage===s).length});return c
   },[active])
@@ -353,8 +370,15 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   function openAdd(){setEd(null);setForm(blankLead());setErr('');setOpen(true)}
   function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setOpen(true)}
 
-  async function saveLead(){
+  async function saveLead(force=false){
     if(!form.name?.trim()||!userId)return setErr('Name required')
+    if(!ed&&!force){
+      const normName=form.name.trim().toLowerCase()
+      const normPhone=(form.phone||'').replace(/\D/g,'')
+      const dupe=active.find(l=>l.name.toLowerCase().trim()===normName||(normPhone.length>=8&&(l.phone||'').replace(/\D/g,'')===normPhone))
+      if(dupe){setErr(`⚠ Duplicate: "${dupe.name}" already in pipeline. Tap Save again to add anyway.`);return}
+    }
+    setErr('')
     const score=hxl(form.hunger??5,form.looking??5)
     const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'Contact',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
     await safeWrite(async()=>{
@@ -553,7 +577,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
           </div>
           {displayed.length===0
             ?<div style={{...CARD,textAlign:'center' as const,padding:'48px',color:'var(--text4)'}}>No prospects in this view</div>
-            :displayed.map(l=><LeadCard key={l.id} l={l} {...cardProps} touchCount={touchCountMap[l.id]??0} nextDue={nextDueMap[l.id]}/>)
+            :displayed.map(l=><LeadCard key={l.id} l={l} {...cardProps} isDupe={dupeSet.has(l.id)} touchCount={touchCountMap[l.id]??0} nextDue={nextDueMap[l.id]}/>)
           }
         </div>
       )}
@@ -792,8 +816,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               </div>
               {err&&<div style={{color:RED,fontSize:12,marginBottom:10}}>{err}</div>}
               <div style={{display:'flex',gap:8}}>
-                <button onClick={saveLead} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
-                  {ed?'Save Changes':'Save'}
+                <button onClick={()=>saveLead(err.startsWith('⚠ Duplicate'))} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                  {ed?'Save Changes':err.startsWith('⚠ Duplicate')?'Add Anyway':'Save'}
                 </button>
                 <button onClick={()=>setOpen(false)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
                 {ed&&<button onClick={()=>{setArchiveModal(ed);setOpen(false)}} style={{padding:'11px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
