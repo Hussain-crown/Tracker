@@ -30,25 +30,15 @@ export async function POST(req: Request) {
         .eq('archived', false)
       if ((count || 0) >= 100) newLevel = 2
     } else if (currentLevel === 2) {
-      // L2 → L3: 3+ launched candidates AND no inactive direct legs
+      // L2 → L3: 3+ launched candidates
       const iboNumber = member.ibo_number || ''
       if (iboNumber) {
-        const [{ data: launched }, { data: inactiveLegs }] = await Promise.all([
-          sbAdmin.from('candidates').select('id').filter('interview_notes->>_sponsor_ibo', 'eq', iboNumber).eq('status', 'launched'),
-          sbAdmin.from('team_members').select('user_id').eq('referred_by', iboNumber).eq('status', 'inactive'),
-        ])
-        if ((launched?.length || 0) >= 3 && (inactiveLegs?.length || 0) === 0) newLevel = 3
-      }
-    } else if (currentLevel === 3) {
-      // L3 → L2 demotion: any directly referred partner is inactive
-      const iboNumber = member.ibo_number || ''
-      if (iboNumber) {
-        const { data: inactiveLegs } = await sbAdmin
-          .from('team_members')
-          .select('user_id')
-          .eq('referred_by', iboNumber)
-          .eq('status', 'inactive')
-        if ((inactiveLegs?.length || 0) > 0) newLevel = 2
+        const { data: launched } = await sbAdmin
+          .from('candidates')
+          .select('id')
+          .filter('interview_notes->>_sponsor_ibo', 'eq', iboNumber)
+          .eq('status', 'launched')
+        if ((launched?.length || 0) >= 3) newLevel = 3
       }
     }
     // L4 is manual-only — no auto-upgrade or auto-demotion

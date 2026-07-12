@@ -28,7 +28,6 @@ export async function GET(req: Request) {
       .from('team_members')
       .select('ibo_number, name, user_id')
       .eq('referred_by', myIbo)
-      .eq('status', 'active')
 
     const reportIbos = (directReports || []).map((r: any) => r.ibo_number).filter(Boolean)
 
