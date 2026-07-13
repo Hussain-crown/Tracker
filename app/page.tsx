@@ -345,7 +345,7 @@ export default function TrackPage(){
 
         {tab==='analytics'&&<Analytics/>}
 
-        {tab==='team'&&<TeamCandidates level={member?.level||1} adminGoals={adminGoals}/>}
+        {tab==='team'&&<TeamCandidates level={member?.level||1}/>}
 
       </div>
 
