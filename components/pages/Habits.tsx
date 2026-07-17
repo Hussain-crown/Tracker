@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
 import type { HabitEntry } from '@/lib/stores'
+import Analytics from './Analytics'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -23,7 +24,7 @@ type FieldKey = typeof ALL_FIELDS[number]['key']
 const LEVEL1_HIDDEN: readonly FieldKey[] = ['interruptions','convo','contact']
 // Fields that are auto-logged only (via advancing prospects/candidates) — never manually entered.
 const AUTO_ONLY: readonly FieldKey[] = ['pre_filter','mg1','launch']
-type Tab = 'log'|'core'
+type Tab = 'log'|'core'|'analytics'
 
 const CONV = { mg1PerConvo:0.034, mpaPerConvo:0.83, mg1PerMpa:0.041, dtmPerConvo:0.22, pfPerConvo:0.067, cuPerConvo:0.33 }
 
@@ -273,7 +274,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   // Get the goal field definition
   const goalFieldDef = FIELDS.find(f=>f.key===coreGoals.goalField)??FIELDS.find(f=>f.key==='mg1')!
 
-  const TABS=[{id:'log' as Tab,label:'📝 Log'},{id:'core' as Tab,label:'🎯 Core Run'}]
+  const TABS=[{id:'log' as Tab,label:'📝 Log'},{id:'core' as Tab,label:'🎯 Core Run'},{id:'analytics' as Tab,label:'📊 Analytics'}]
   const scoreColor=todayScore>=80?GREEN:todayScore>=60?TEAL:todayScore>=40?GOLD:RED
   const consColor=consistency>=80?GREEN:consistency>=60?TEAL:consistency>=40?GOLD:RED
   const currMo=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)
@@ -570,6 +571,9 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
         </div>
       )}
 
+
+      {/* ── ANALYTICS TAB ────────────────────────────── */}
+      {tab==='analytics'&&<Analytics/>}
 
       {/* ── HISTORICAL BASELINE ONBOARDING ─────────────── */}
       {showOnboarding&&(

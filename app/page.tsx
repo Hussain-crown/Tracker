@@ -5,7 +5,6 @@ import { useStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
-import Analytics from '@/components/pages/Analytics'
 import TeamCandidates from '@/components/pages/TeamCandidates'
 import { now } from '@/lib/utils'
 
@@ -21,16 +20,14 @@ const MILESTONES=[
   {days:90, emoji:'💎', msg:"90 days. This is who you are now."},
 ]
 
-type NavId='pipeline'|'candidates'|'habits'|'analytics'|'team'
+type NavId='pipeline'|'candidates'|'habits'|'team'
 const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
   {id:'pipeline',   icon:'◆', label:'Prospects',  minLevel:1},
   {id:'candidates', icon:'◇', label:'Candidates', minLevel:1},
   {id:'habits',     icon:'◎', label:'Habits',     minLevel:1},
-  {id:'analytics',  icon:'📈', label:'Analytics',  minLevel:1},
   {id:'team',       icon:'👥', label:'Team',       minLevel:4},
 ]
 function buildNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel)}
-function buildBottomNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel&&n.id!=='analytics')}
 
 function daysAgo(n:number){
   const d=new Date(); d.setDate(d.getDate()-n)
@@ -371,15 +368,6 @@ export default function TrackPage(){
         {tab==='pipeline'&&<Pipeline iboNumber={member?.ibo_number||''}/>}
 
         {tab==='candidates'&&<Candidates level={member?.level||1}/>}
-
-        {tab==='analytics'&&(
-          <div>
-            <button onClick={()=>setTab('habits')} style={{display:'inline-flex',alignItems:'center',gap:6,marginBottom:18,padding:'7px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.03)',color:'#666',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12}}>
-              ← Habits
-            </button>
-            <Analytics/>
-          </div>
-        )}
 
         {tab==='team'&&<TeamCandidates level={member?.level||1}/>}
 
