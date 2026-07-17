@@ -22,16 +22,15 @@ const MILESTONES=[
 ]
 
 type NavId='pipeline'|'candidates'|'habits'|'analytics'|'team'
-function buildNav(level:number):{id:NavId;icon:string;label:string}[]{
-  const nav:{id:NavId;icon:string;label:string}[]=[
-    {id:'pipeline',   icon:'◆', label:'Prospects'},
-    {id:'candidates', icon:'◇', label:'Candidates'},
-    {id:'habits',     icon:'◎', label:'Habits'},
-  ]
-  if(level>=2)nav.push({id:'analytics', icon:'📈', label:'Analytics'})
-  if(level>=4)nav.push({id:'team',      icon:'👥', label:'Team'})
-  return nav
-}
+const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
+  {id:'pipeline',   icon:'◆', label:'Prospects',  minLevel:1},
+  {id:'candidates', icon:'◇', label:'Candidates', minLevel:1},
+  {id:'habits',     icon:'◎', label:'Habits',     minLevel:1},
+  {id:'analytics',  icon:'📈', label:'Analytics',  minLevel:1},
+  {id:'team',       icon:'👥', label:'Team',       minLevel:4},
+]
+function buildNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel)}
+function buildBottomNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel&&n.id!=='analytics')}
 
 function daysAgo(n:number){
   const d=new Date(); d.setDate(d.getDate()-n)
@@ -57,7 +56,8 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab] = useState<NavId>('pipeline')
+  const [tab,setTab]       = useState<NavId>('pipeline')
+  const [showMenu,setShowMenu] = useState(false)
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -266,13 +266,42 @@ export default function TrackPage(){
           {member?.name&&<span style={{color:'#4a4a58'}}>{member.name}</span>}
           {member?.ibo_number&&<span style={{color:'#2a2a34'}}> · {member.ibo_number}</span>}
         </div>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
           {streak>0&&(
             <div style={{fontSize:11,fontWeight:700,color:GOLD,letterSpacing:'0.2px'}}>🔥 {streak}d</div>
           )}
-          <button onClick={signOut} style={{fontSize:11,color:'#333',background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>
-            sign out
-          </button>
+          {/* 3-dot menu */}
+          <div style={{position:'relative'}}>
+            <button
+              onClick={()=>setShowMenu(v=>!v)}
+              style={{display:'flex',flexDirection:'column' as const,justifyContent:'center',alignItems:'center',gap:4,width:34,height:34,borderRadius:9,border:'1px solid rgba(255,255,255,0.07)',background:showMenu?'rgba(200,162,74,0.1)':'rgba(255,255,255,0.03)',cursor:'pointer',padding:0}}
+            >
+              {[0,1,2].map(i=><div key={i} style={{width:14,height:1.5,borderRadius:1,background:showMenu?GOLD:'#555'}}/>)}
+            </button>
+            {showMenu&&(
+              <>
+                <div onClick={()=>setShowMenu(false)} style={{position:'fixed',inset:0,zIndex:299}}/>
+                <div style={{position:'absolute',right:0,top:'calc(100% + 8px)',zIndex:300,background:'rgba(10,10,16,0.97)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,boxShadow:'0 12px 48px rgba(0,0,0,0.75)',overflow:'hidden',minWidth:190,backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)'}}>
+                  {buildNav(member?.level||1).map((item,i,arr)=>{
+                    const active=tab===item.id
+                    return(
+                      <button key={item.id} onClick={()=>{setTab(item.id as NavId);setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'13px 18px',border:'none',borderBottom:i<arr.length-1?'1px solid rgba(255,255,255,0.04)':'none',background:active?'rgba(200,162,74,0.09)':'transparent',color:active?GOLD:'#777',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:13,fontWeight:active?700:400,textAlign:'left' as const,transition:'background 0.12s'}}>
+                        <span style={{fontSize:14,lineHeight:1}}>{item.icon}</span>
+                        <span style={{flex:1}}>{item.label}</span>
+                        {active&&<div style={{width:5,height:5,borderRadius:'50%',background:GOLD,flexShrink:0}}/>}
+                      </button>
+                    )
+                  })}
+                  <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'4px 0'}}>
+                    <button onClick={()=>{signOut();setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
+                      <span style={{fontSize:13}}>↪</span>
+                      <span>Sign out</span>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -343,7 +372,14 @@ export default function TrackPage(){
 
         {tab==='candidates'&&<Candidates level={member?.level||1}/>}
 
-        {tab==='analytics'&&<Analytics/>}
+        {tab==='analytics'&&(
+          <div>
+            <button onClick={()=>setTab('habits')} style={{display:'inline-flex',alignItems:'center',gap:6,marginBottom:18,padding:'7px 14px',borderRadius:8,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.03)',color:'#666',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12}}>
+              ← Habits
+            </button>
+            <Analytics/>
+          </div>
+        )}
 
         {tab==='team'&&<TeamCandidates level={member?.level||1}/>}
 
@@ -366,7 +402,7 @@ export default function TrackPage(){
         border:'1px solid rgba(255,255,255,0.055)',
         boxShadow:'0 8px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)',
       }}>
-        {buildNav(member?.level||1).map(item=>{
+        {buildBottomNav(member?.level||1).map(item=>{
           const active=tab===item.id
           return(
             <button key={item.id} onClick={()=>setTab(item.id as any)} style={{
