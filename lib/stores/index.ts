@@ -30,6 +30,9 @@ export function useStore() {
     setUser: ui.setUser, setUserId: ui.setUserId,
     getMeta: ui.getMeta, setMeta: ui.setMeta,
     resources: ui.resources, loadResources: ui.loadResources,
+    upsertResource: ui.upsertResource, deleteResource: ui.deleteResource,
+    audios: ui.audios, loadAudios: ui.loadAudios,
+    upsertAudio: ui.upsertAudio, deleteAudio: ui.deleteAudio,
 
     // Pipeline (Habits creates leads from logged contacts)
     leads: pipeline.leads, loadLeads: pipeline.loadLeads,

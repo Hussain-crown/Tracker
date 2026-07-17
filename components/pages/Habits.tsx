@@ -96,10 +96,10 @@ function deriveTargets(goals:CoreGoals):Partial<Record<FieldKey,number>>{
 export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
   const {userId,habits,loadHabits,saveHabit,getMeta,setMeta,resources,loadResources}=useStore()
   const todayStr=brisbaneToday()
-  // Level 1 (entry tier) hides interruptions/convo/contact entirely from the UI.
-  // Level >= 2 gets full field set. Gate as >= so future levels need no rework.
+  // Level 2 (entry tier) hides interruptions/convo/contact entirely from the UI.
+  // Level >= 3 gets full field set.
   const FIELDS = useMemo(
-    () => level>=2 ? ALL_FIELDS : ALL_FIELDS.filter(f=>!LEVEL1_HIDDEN.includes(f.key)),
+    () => level>=3 ? ALL_FIELDS : ALL_FIELDS.filter(f=>!LEVEL1_HIDDEN.includes(f.key)),
     [level]
   )
 
@@ -497,9 +497,9 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
           {/* Level badge */}
           {(()=>{
-            const lvName=level>=4?'Leader':level>=3?'Builder':level>=2?'Active':'Entry Tier'
+            const lvName=level>=3?'Active':level>=2?'Entry Tier':'Training'
             const lvColor=level>=3?GREEN:level>=2?GOLD:TEAL
-            const lvNext=level===1?'100 active prospects → Level 2':level===2?'3 launched partners → Level 3':level===3?'Maintain active leg for Level 4 (manual)':'Maximum level'
+            const lvNext=level===1?'100 active prospects → Level 2':level===2?'3 launched partners → Level 3':'Maximum level'
             return(
               <div style={{marginBottom:12,padding:'10px 14px',background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r)'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
