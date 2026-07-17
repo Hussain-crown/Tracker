@@ -56,7 +56,7 @@ export default function TrackPage(){
   const [seenMilestones,setSeenMilestones] = useState<number[]>([])
   const [showOnboard,setShowOnboard] = useState(false)
   const [adminGoals,setAdminGoals]   = useState<any>(null)
-  const [tab,setTab]       = useState<NavId>('pipeline')
+  const [tab,setTab]       = useState<NavId>('habits')
   const [showMenu,setShowMenu] = useState(false)
 
   useEffect(()=>{
@@ -343,7 +343,7 @@ export default function TrackPage(){
       )}
 
       {/* ── PAGE CONTENT ────────────────────────────────────── */}
-      <div style={{maxWidth:860,margin:'0 auto',padding:'4px 18px 100px',boxSizing:'border-box' as const}}>
+      <div style={{maxWidth:860,margin:'0 auto',padding:'4px 18px 40px',boxSizing:'border-box' as const}}>
 
         {tab==='habits'&&(
           <div>
@@ -385,47 +385,6 @@ export default function TrackPage(){
 
       </div>
 
-      {/* ── FLOATING PILL NAV ───────────────────────────────── */}
-      <div style={{
-        position:'fixed',
-        bottom:'calc(20px + env(safe-area-inset-bottom))',
-        left:'50%',
-        transform:'translateX(-50%)',
-        zIndex:200,
-        display:'flex',
-        gap:2,
-        padding:5,
-        borderRadius:999,
-        background:'rgba(10,10,16,0.85)',
-        backdropFilter:'blur(24px)',
-        WebkitBackdropFilter:'blur(24px)',
-        border:'1px solid rgba(255,255,255,0.055)',
-        boxShadow:'0 8px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04)',
-      }}>
-        {buildBottomNav(member?.level||1).map(item=>{
-          const active=tab===item.id
-          return(
-            <button key={item.id} onClick={()=>setTab(item.id as any)} style={{
-              display:'flex',alignItems:'center',gap:7,
-              padding:'9px 18px',
-              borderRadius:999,
-              border:'none',
-              background:active?'rgba(200,162,74,0.13)':'transparent',
-              color:active?GOLD:'#4a4a5a',
-              cursor:'pointer',
-              fontFamily:"'Sora',system-ui,sans-serif",
-              fontSize:12,
-              fontWeight:active?700:400,
-              transition:'all 0.18s ease',
-              whiteSpace:'nowrap' as const,
-              outline:'none',
-            }}>
-              <span style={{fontSize:13,lineHeight:1}}>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          )
-        })}
-      </div>
 
     </div>
   )

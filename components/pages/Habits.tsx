@@ -106,8 +106,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const [form,setForm]           =useState<Record<FieldKey,number>>({convo:0,mg1:0,mpa:0,catch_up:0,dtm:0,pre_filter:0,launch:0,interruptions:0,contact:0})
   const [saving,setSaving]       =useState(false)
   const [saved,setSaved]         =useState(false)
-  const [tab,setTab]             =useState<Tab>(level>=2?'log':'core')
-  useEffect(()=>{ if(level<2&&tab==='log')setTab('core') },[level,tab])
+  const [tab,setTab]             =useState<Tab>('log')
   const [coreGoals,setCoreGoals] =useState<CoreGoals>(EMPTY_CORE)
   const [editCore,setEditCore]   =useState(false)
   const [coreForm,setCoreForm]   =useState<{goalField:FieldKey;goal:string;deadline:string;overrides:Partial<Record<FieldKey,string>>}>({goalField:'mg1',goal:'3',deadline:defaultDeadline(),overrides:{}})
@@ -274,7 +273,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   // Get the goal field definition
   const goalFieldDef = FIELDS.find(f=>f.key===coreGoals.goalField)??FIELDS.find(f=>f.key==='mg1')!
 
-  const TABS=([{id:'log' as Tab,label:'📝 Log'},{id:'core' as Tab,label:'🎯 Core Run'}]).filter(t=>!(level<2&&t.id==='log'))
+  const TABS=[{id:'log' as Tab,label:'📝 Log'},{id:'core' as Tab,label:'🎯 Core Run'}]
   const scoreColor=todayScore>=80?GREEN:todayScore>=60?TEAL:todayScore>=40?GOLD:RED
   const consColor=consistency>=80?GREEN:consistency>=60?TEAL:consistency>=40?GOLD:RED
   const currMo=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)
