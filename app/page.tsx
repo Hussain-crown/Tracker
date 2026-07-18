@@ -8,7 +8,6 @@ import Candidates from '@/components/pages/Candidates'
 import Training from '@/components/pages/Training'
 import Resources from '@/components/pages/Resources'
 import PersonalDev from '@/components/pages/PersonalDev'
-import TeamCandidates from '@/components/pages/TeamCandidates'
 import { now } from '@/lib/utils'
 
 const GOLD='#C8A24A'
@@ -23,15 +22,14 @@ const MILESTONES=[
   {days:90, emoji:'💎', msg:"90 days. This is who you are now."},
 ]
 
-type NavId='pipeline'|'candidates'|'habits'|'training'|'resources'|'personaldev'|'team'
+type NavId='pipeline'|'candidates'|'habits'|'training'|'resources'|'personaldev'
 const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
-  {id:'training',    icon:'📚', label:'Training',      minLevel:1},
-  {id:'pipeline',    icon:'◆',  label:'Prospects',     minLevel:1},
-  {id:'resources',   icon:'📖', label:'Resources',     minLevel:1},
-  {id:'personaldev', icon:'🌱', label:'Personal Dev',  minLevel:1},
-  {id:'candidates',  icon:'◇',  label:'Candidates',    minLevel:2},
   {id:'habits',      icon:'◎',  label:'Habits',        minLevel:2},
-  {id:'team',        icon:'👥', label:'Team',          minLevel:4},
+  {id:'pipeline',    icon:'◆',  label:'Prospects',     minLevel:1},
+  {id:'candidates',  icon:'◇',  label:'Candidates',    minLevel:2},
+  {id:'personaldev', icon:'🌱', label:'Personal Dev',  minLevel:1},
+  {id:'training',    icon:'📚', label:'Training',      minLevel:1},
+  {id:'resources',   icon:'📖', label:'Resources',     minLevel:1},
 ]
 function buildNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel)}
 
@@ -379,7 +377,6 @@ export default function TrackPage(){
         {tab==='training'&&<Training/>}
         {tab==='resources'&&<Resources/>}
         {tab==='personaldev'&&<PersonalDev/>}
-        {tab==='team'&&<TeamCandidates level={member?.level||1}/>}
 
       </div>
 
