@@ -29,7 +29,7 @@ const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
   {id:'candidates',  icon:'◇',  label:'Candidates',    minLevel:2},
   {id:'personaldev', icon:'🌱', label:'Personal Dev',  minLevel:1},
   {id:'training',    icon:'📚', label:'Training',      minLevel:1},
-  {id:'resources',   icon:'📖', label:'Resources',     minLevel:1},
+  {id:'resources',   icon:'📖', label:'Resources',     minLevel:2},
 ]
 function buildNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel)}
 

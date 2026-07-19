@@ -1,8 +1,7 @@
 'use client'
 import React, { useEffect, useState, useMemo } from 'react'
-import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
-import type { Resource } from '@/lib/stores'
+import { authFetch } from '@/lib/authFetch'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -10,7 +9,6 @@ const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
 const TYPES=['Book','Podcast','Course','Video','Article','Tool','Other']
 const CATS=['All','Leadership','Mindset','Business','Skills','Health','Other']
 const TYPE_COLOR:Record<string,string>={Book:GOLD,Podcast:PURPLE,Course:BLUE,Video:TEAL,Article:'#5B9BD5',Tool:GREEN,Other:'var(--text4)'}
-const STATUS_COLOR:Record<string,string>={reading:TEAL,completed:GREEN,'want-to-read':'var(--text4)'}
 
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px',marginBottom:8}
 const INP:React.CSSProperties={width:'100%',background:'var(--s2)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',boxSizing:'border-box' as const}
@@ -18,51 +16,57 @@ const FL:React.CSSProperties={fontSize:10,color:GOLD,fontWeight:700,letterSpacin
 const OVERLAY:React.CSSProperties={position:'fixed',inset:0,background:'rgba(0,0,0,0.88)',zIndex:500,display:'flex',alignItems:'center',justifyContent:'center',padding:20,backdropFilter:'blur(8px)'}
 const MODAL:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:480,padding:24,maxHeight:'90vh',overflowY:'auto' as const,margin:'auto'}
 
-const EMPTY={title:'',type:'Article',category:'Other',author:'',url:'',notes:'',status:'want-to-read'}
+interface Res { id:string; title:string; type:string; category:string; author:string; url:string; description:string; created_at:string }
+const EMPTY={title:'',type:'Article',category:'Other',author:'',url:'',description:''}
 
 export default function Resources(){
-  const {userId,resources,loadResources,upsertResource,deleteResource}=useStore()
+  const [resources,setResources]=useState<Res[]>([])
+  const [loading,setLoading]=useState(true)
   const [cat,setCat]=useState('All')
   const [modal,setModal]=useState(false)
-  const [edit,setEdit]=useState<Resource|null>(null)
+  const [edit,setEdit]=useState<Res|null>(null)
   const [form,setForm]=useState(EMPTY)
 
-  useEffect(()=>{ loadResources() },[]) // eslint-disable-line
+  async function load(){
+    setLoading(true)
+    try {
+      const r=await fetch('/api/shared-resources')
+      const json=await r.json()
+      setResources(json.resources||[])
+    } finally { setLoading(false) }
+  }
+
+  useEffect(()=>{ load() },[])
 
   function openAdd(){ setEdit(null); setForm(EMPTY); setModal(true) }
-  function openEdit(r:Resource){
-    setEdit(r)
-    setForm({title:r.title,type:r.type,category:r.category,author:r.author,url:r.url,notes:r.key_takeaway||'',status:r.status})
-    setModal(true)
-  }
+  function openEdit(r:Res){ setEdit(r); setForm({title:r.title,type:r.type,category:r.category,author:r.author,url:r.url,description:r.description||''}); setModal(true) }
+
   async function save(){
-    if(!form.title.trim()||!userId)return
-    const base=edit??{id:uid(),user_id:userId,created_at:now()}
-    await upsertResource({...base,title:form.title.trim(),type:form.type,category:form.category,author:form.author.trim(),url:form.url.trim(),key_takeaway:form.notes.trim(),status:form.status,rating:0,date_completed:'',updated_at:now()} as Resource)
+    if(!form.title.trim())return
+    const resource={id:edit?.id??uid(),title:form.title.trim(),type:form.type,category:form.category,author:form.author.trim(),url:form.url.trim(),description:form.description.trim(),created_at:edit?.created_at??now()}
+    await authFetch('/api/shared-resources',{method:'POST',body:JSON.stringify({resource})})
     setModal(false)
+    load()
   }
 
-  const filtered=useMemo(()=>
-    cat==='All' ? resources : resources.filter(r=>r.category===cat)
-  ,[resources,cat])
+  async function del(id:string){
+    await authFetch('/api/shared-resources',{method:'DELETE',body:JSON.stringify({id})})
+    setResources(p=>p.filter(r=>r.id!==id))
+  }
 
-  const byType=useMemo(()=>{
-    const m:Record<string,number>={}
-    resources.forEach(r=>{m[r.type]=(m[r.type]||0)+1})
-    return m
-  },[resources])
+  const filtered=useMemo(()=>cat==='All'?resources:resources.filter(r=>r.category===cat),[resources,cat])
+  const byType=useMemo(()=>{const m:Record<string,number>={};resources.forEach(r=>{m[r.type]=(m[r.type]||0)+1});return m},[resources])
 
   return(
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:48}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
         <div>
-          <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:4}}>My Library</div>
+          <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:4}}>Team Library</div>
           <div style={{fontSize:20,fontWeight:800,color:'var(--text)'}}>Resources</div>
         </div>
         <button onClick={openAdd} style={{padding:'8px 16px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,flexShrink:0}}>+ Add</button>
       </div>
 
-      {/* Type badges summary */}
       {resources.length>0&&(
         <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,marginBottom:14}}>
           {Object.entries(byType).map(([type,count])=>(
@@ -75,7 +79,6 @@ export default function Resources(){
         </div>
       )}
 
-      {/* Category filter */}
       <div style={{display:'flex',gap:4,overflowX:'auto' as const,marginBottom:14,paddingBottom:2}}>
         {CATS.map(c=>(
           <button key={c} onClick={()=>setCat(c)} style={{padding:'5px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:cat===c?GOLD:'var(--s1)',color:cat===c?'#000':'var(--text4)',fontSize:10,fontWeight:cat===c?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",whiteSpace:'nowrap' as const,flexShrink:0}}>
@@ -84,17 +87,17 @@ export default function Resources(){
         ))}
       </div>
 
-      {filtered.length===0&&(
+      {!loading&&filtered.length===0&&(
         <div style={{...CARD,textAlign:'center' as const,padding:'40px 20px',marginBottom:0}}>
           <div style={{fontSize:28,marginBottom:10}}>📖</div>
           <div style={{fontSize:13,fontWeight:700,color:'var(--text2)',marginBottom:4}}>
-            {resources.length===0 ? 'Nothing saved yet' : 'None in this category'}
+            {resources.length===0?'No resources yet':'None in this category'}
           </div>
           <div style={{fontSize:11,color:'var(--text4)'}}>
-            {resources.length===0 ? 'Save books, articles, tools and links you want to come back to.' : 'Try a different filter.'}
+            {resources.length===0?'Add books, articles, tools or links for the whole team to see.':'Try a different filter.'}
           </div>
           {resources.length===0&&(
-            <button onClick={openAdd} style={{marginTop:14,padding:'8px 20px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>+ Add your first resource</button>
+            <button onClick={openAdd} style={{marginTop:14,padding:'8px 20px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>+ Add first resource</button>
           )}
         </div>
       )}
@@ -102,7 +105,6 @@ export default function Resources(){
       <div style={{display:'flex',flexDirection:'column' as const,gap:0}}>
         {filtered.map(r=>{
           const color=TYPE_COLOR[r.type]||'var(--text4)'
-          const sColor=STATUS_COLOR[r.status]||'var(--text4)'
           return(
             <div key={r.id} style={{...CARD,borderLeft:`3px solid ${color}`}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:8,marginBottom:6}}>
@@ -110,17 +112,14 @@ export default function Resources(){
                   <div style={{fontSize:13,fontWeight:700,color:'var(--text)',marginBottom:1,wordBreak:'break-word' as const}}>{r.title}</div>
                   {r.author&&<div style={{fontSize:10,color:'var(--text4)'}}>by {r.author}</div>}
                 </div>
-                <div style={{display:'flex',flexDirection:'column' as const,alignItems:'flex-end',gap:3,flexShrink:0}}>
-                  <span style={{fontSize:9,fontWeight:700,color,padding:'2px 7px',borderRadius:'var(--r)',background:color+'18'}}>{r.type}</span>
-                  <span style={{fontSize:9,color:sColor,textTransform:'capitalize' as const}}>{r.status==='want-to-read'?'Want to read':r.status}</span>
-                </div>
+                <span style={{fontSize:9,fontWeight:700,color,padding:'2px 7px',borderRadius:'var(--r)',background:color+'18',flexShrink:0}}>{r.type}</span>
               </div>
-              {r.key_takeaway&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.6,marginBottom:8}}>{r.key_takeaway}</div>}
+              {r.description&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.6,marginBottom:8}}>{r.description}</div>}
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
                 <div style={{display:'flex',gap:5,alignItems:'center'}}>
                   <span style={{fontSize:9,color:'var(--text4)',padding:'3px 8px',borderRadius:'var(--r)',background:'var(--s2)',border:'1px solid var(--br)'}}>{r.category}</span>
                   <button onClick={()=>openEdit(r)} style={{fontSize:9,padding:'3px 8px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Edit</button>
-                  <button onClick={()=>deleteResource(r.id)} style={{fontSize:9,padding:'3px 8px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.2)',background:'rgba(224,85,85,0.05)',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Delete</button>
+                  <button onClick={()=>del(r.id)} style={{fontSize:9,padding:'3px 8px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.2)',background:'rgba(224,85,85,0.05)',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Delete</button>
                 </div>
                 {r.url&&(
                   <a href={r.url} target="_blank" rel="noopener noreferrer"
@@ -154,14 +153,7 @@ export default function Resources(){
               </div>
               <div><div style={FL}>Author / Creator</div><input style={INP} value={form.author} onChange={e=>setForm(p=>({...p,author:e.target.value}))} placeholder="Optional"/></div>
               <div><div style={FL}>URL</div><input style={INP} value={form.url} onChange={e=>setForm(p=>({...p,url:e.target.value}))} placeholder="https://…" type="url"/></div>
-              <div><div style={FL}>Status</div>
-                <select style={INP} value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))}>
-                  <option value="want-to-read">Want to read</option>
-                  <option value="reading">Reading / In progress</option>
-                  <option value="completed">Completed</option>
-                </select>
-              </div>
-              <div><div style={FL}>Notes</div><textarea style={{...INP,minHeight:70,resize:'vertical' as const}} value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} placeholder="Key points, why it's useful…"/></div>
+              <div><div style={FL}>Notes</div><textarea style={{...INP,minHeight:70,resize:'vertical' as const}} value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} placeholder="Why it's useful, key takeaways…"/></div>
             </div>
             <div style={{display:'flex',gap:8,marginTop:20}}>
               <button onClick={save} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>Save</button>
