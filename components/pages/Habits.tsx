@@ -112,12 +112,18 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const [editCore,setEditCore]   =useState(false)
   const [coreForm,setCoreForm]   =useState<{goalField:FieldKey;goal:string;deadline:string;overrides:Partial<Record<FieldKey,string>>}>({goalField:'mg1',goal:'3',deadline:defaultDeadline(),overrides:{}})
   const [checklist,setChecklist] =useState<{reading:boolean;audio:boolean}>({reading:false,audio:false})
+  const [pdGoals,setPdGoals]     =useState<{id:string;text:string;done?:boolean;action_steps:{id:string;text:string}[]}[]>([])
+  const [actionCheckins,setActionCheckins]=useState<Record<string,Record<string,boolean>>>({})
   const [baselineTotals,setBaselineTotals]=useState<Record<string,number>>({})
   const [showOnboarding,setShowOnboarding]=useState(false)
   const [onboardingForm,setOnboardingForm]=useState<Record<string,string>>({interruptions:'',convo:'',mpa:'',contact:'',catch_up:'',dtm:'',pre_filter:'',mg1:'',launch:''})
   const [onboardingSaving,setOnboardingSaving]=useState(false)
 
-  useEffect(()=>{ loadHabits();loadResources() },[]) // eslint-disable-line
+  useEffect(()=>{
+    loadHabits();loadResources()
+    getMeta('pd_goals').then(v=>{if(v)try{setPdGoals(JSON.parse(v))}catch{}})
+    getMeta('pd_action_checkins').then(v=>{if(v)try{setActionCheckins(JSON.parse(v))}catch{}})
+  },[]) // eslint-disable-line
   useEffect(()=>{
     if(!userId)return
     getMeta('historical_baseline').then(b=>{
@@ -206,6 +212,11 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   async function saveChecklist(key:'reading'|'audio',val:boolean){
     const next={...checklist,[key]:val};setChecklist(next)
     setMeta('checklist_'+selDate,JSON.stringify(next))
+  }
+  async function saveActionCheckin(stepId:string,val:boolean){
+    const next={...actionCheckins,[selDate]:{...(actionCheckins[selDate]||{}),[stepId]:val}}
+    setActionCheckins(next)
+    setMeta('pd_action_checkins',JSON.stringify(next))
   }
   async function saveCoreGoals(){
     const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
@@ -442,6 +453,32 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
               </div>
             )
           })()}
+
+          {/* Goal Actions */}
+          {pdGoals.filter(g=>!g.done&&(g.action_steps||[]).length>0).length>0&&(
+            <div style={{...CARD,marginBottom:10}}>
+              <div style={SL}>Today's Goal Actions</div>
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                {pdGoals.filter(g=>!g.done&&(g.action_steps||[]).length>0).map(g=>(
+                  <div key={g.id}>
+                    <div style={{fontSize:10,color:GOLD,fontWeight:700,marginBottom:6,letterSpacing:'0.5px'}}>{g.text}</div>
+                    {(g.action_steps||[]).map(s=>{
+                      const done=actionCheckins[selDate]?.[s.id]===true
+                      return(
+                        <div key={s.id} onClick={()=>saveActionCheckin(s.id,!done)}
+                          style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:done?'rgba(76,175,125,0.06)':'var(--s2)',border:'1px solid '+(done?'rgba(76,175,125,0.3)':'var(--br2)'),borderRadius:'var(--r)',cursor:'pointer',transition:'all 0.2s',marginBottom:5}}>
+                          <div style={{width:20,height:20,borderRadius:5,border:'2px solid '+(done?GREEN:'var(--br2)'),background:done?GREEN:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.2s'}}>
+                            {done&&<span style={{color:'#000',fontSize:11,fontWeight:700}}>✓</span>}
+                          </div>
+                          <span style={{fontSize:12,color:done?GREEN:'var(--text2)',textDecoration:done?'line-through':'none'}}>{s.text}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
       )}
