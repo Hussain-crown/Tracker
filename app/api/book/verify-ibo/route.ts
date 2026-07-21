@@ -45,8 +45,6 @@ export async function GET(req: Request) {
         partner: {
           id: 'admin',
           name: nameMeta?.[0]?.value || 'Hussain',
-          email: process.env.NEXT_PUBLIC_ADMIN_EMAIL || process.env.ADMIN_EMAIL || '',
-          phone: '',
           ibo_number: ibo,
         }
       })
@@ -55,7 +53,7 @@ export async function GET(req: Request) {
     // ── CHECK 2: Partners table ──
     const { data: partners } = await getSb()
       .from('partners')
-      .select('id, name, email, phone, ibo_number')
+      .select('id, name, ibo_number')
       .eq('user_id', adminId)
       .eq('ibo_number', ibo)
       .eq('archived', false)
@@ -66,13 +64,12 @@ export async function GET(req: Request) {
     }
 
     const p = partners[0]
+    // Return only name — email/phone are resolved server-side in submit/route.ts to prevent PII enumeration
     return NextResponse.json({
       valid: true,
       partner: {
         id: p.id,
         name: p.name,
-        email: p.email,
-        phone: p.phone,
         ibo_number: p.ibo_number,
       }
     })
