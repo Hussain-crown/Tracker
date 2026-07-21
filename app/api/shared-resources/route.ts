@@ -42,6 +42,11 @@ export async function POST(req: Request) {
     if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
     const body = await req.json()
     const resource = { ...body.resource, admin_id: adminId }
+    // If updating an existing resource, verify it belongs to this admin before touching it
+    if (resource.id) {
+      const { data: existing } = await sbAdmin.from('team_resources').select('admin_id').eq('id', resource.id).maybeSingle()
+      if (existing && existing.admin_id !== adminId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    }
     const { error } = await sbAdmin.from('team_resources').upsert(resource, { onConflict: 'id' })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
@@ -56,7 +61,9 @@ export async function DELETE(req: Request) {
     const level = await getMemberLevel(requester.id)
     if (level < 2) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     const body = await req.json()
-    const { error } = await sbAdmin.from('team_resources').delete().eq('id', body.id)
+    const adminId = await resolveAdminId()
+    if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
+    const { error } = await sbAdmin.from('team_resources').delete().eq('id', body.id).eq('admin_id', adminId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e: any) { return NextResponse.json({ error: e.message }, { status: 500 }) }

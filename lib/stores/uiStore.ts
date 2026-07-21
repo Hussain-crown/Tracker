@@ -57,7 +57,7 @@ export const useUIStore = create<UIStore>((set) => ({
     if (!userId) return null
     try {
       const { data } = await sb.from('meta').select('value').eq('user_id', userId).eq('key', key)
-      return data?.[data.length-1]?.value ?? null
+      return data?.[0]?.value ?? null
     } catch { return null }
   },
 
@@ -65,11 +65,21 @@ export const useUIStore = create<UIStore>((set) => ({
     const { data: { user } } = await sb.auth.getUser()
     const userId = user?.id ?? ''
     if (!userId) return
-    // delete then insert — avoids unique constraint errors if index is missing
-    const del = await sb.from('meta').delete().eq('user_id', userId).eq('key', key)
-    if (del.error) throw del.error
-    const ins = await sb.from('meta').insert({ key, user_id: userId, value })
-    if (ins.error) throw ins.error
+    const { error: uErr } = await sb.from('meta').upsert(
+      { user_id: userId, key, value, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,key' }
+    )
+    if (uErr) {
+      // Fallback: read old value, delete, insert — restore on insert failure
+      const { data: existing } = await sb.from('meta').select('value').eq('user_id', userId).eq('key', key).limit(1)
+      const oldValue = existing?.[0]?.value
+      await sb.from('meta').delete().eq('user_id', userId).eq('key', key)
+      const { error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value })
+      if (iErr) {
+        if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue }) } catch {}
+        throw iErr
+      }
+    }
   },
 
   loadResources: async () => {
