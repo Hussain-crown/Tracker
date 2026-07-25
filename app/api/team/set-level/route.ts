@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sbAdmin as sb, verifyUser } from '@/lib/supabase/admin'
 
+export const dynamic = 'force-dynamic'
+
 // POST — admin only: set a team member's level
 export async function POST(req: Request) {
   try {

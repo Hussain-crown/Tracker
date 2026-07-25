@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sbAdmin, verifyUser } from '@/lib/supabase/admin'
 
+export const dynamic = 'force-dynamic'
+
 async function resolveAdminId(): Promise<string> {
   const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
   if (!adminEmail) return ''

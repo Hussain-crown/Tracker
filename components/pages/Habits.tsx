@@ -636,7 +636,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
                     value={onboardingForm[f.key]??''}
                     placeholder="0"
                     onChange={e=>setOnboardingForm(p=>({...p,[f.key]:e.target.value}))}
-                    style={{...INP,width:80,fontSize:18,fontWeight:800,color:f.key==='interruptions'&&parseInt(onboardingForm[f.key]||'0')>0?RED:f.color,padding:'8px 6px'}}
+                    style={{...INP,width:80,fontSize:18,fontWeight:800,color:f.key==='interruptions'&&parseInt(onboardingForm[f.key]||'0',10)>0?RED:f.color,padding:'8px 6px'}}
                   />
                 </div>
               ))}

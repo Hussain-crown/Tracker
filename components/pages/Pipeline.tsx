@@ -487,7 +487,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       let hasName=false
       Object.entries(mapping).forEach(([colStr,field])=>{
         if(!field)return
-        const val=(row[parseInt(colStr)]||'').trim()
+        const val=(row[parseInt(colStr,10)]||'').trim()
         if(val)(base as any)[field]=val
         if(field==='name'&&val)hasName=true
       })
@@ -775,7 +775,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                     <div style={SL}>{f.label}</div>
                     <span className="mono" style={{fontSize:12,fontWeight:700,color:hxlColor((form[f.k]??5)*10)}}>{form[f.k]??5}/10</span>
                   </div>
-                  <input type="range" min={1} max={10} value={form[f.k]??5} onChange={e=>setForm(p=>({...p,[f.k]:parseInt(e.target.value)}))} style={{width:'100%',accentColor:hxlColor((form[f.k]??5)*10),marginBottom:4}}/>
+                  <input type="range" min={1} max={10} value={form[f.k]??5} onChange={e=>setForm(p=>({...p,[f.k]:parseInt(e.target.value,10)}))} style={{width:'100%',accentColor:hxlColor((form[f.k]??5)*10),marginBottom:4}}/>
                   <div style={{fontSize:9,color:'var(--text4)',textAlign:'center' as const}}>{f.anchors[Math.round(((form[f.k]??5)-1)/9*4)]}</div>
                 </div>
               ))}

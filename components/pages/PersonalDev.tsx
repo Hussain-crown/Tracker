@@ -18,7 +18,7 @@ const FLt:React.CSSProperties={fontSize:10,color:TEAL,fontWeight:700,letterSpaci
 
 function decodeRes(r:Resource){
   const raw=r.key_takeaway||''
-  const prog=parseInt((raw.match(/\[\[PROG:(\d+)\]\]/)||[])[1]||'0')
+  const prog=parseInt((raw.match(/\[\[PROG:(\d+)\]\]/)||[])[1]||'0',10)
   const act=(raw.match(/\[\[ACT:([^\]]*)\]\]/)||[])[1]||''
   const actDone=/\[\[ACTDONE:1\]\]/.test(raw)
   const takeaway=raw.replace(/\[\[PROG:\d+\]\]/g,'').replace(/\[\[ACT:[^\]]*\]\]/g,'').replace(/\[\[ACTDONE:1\]\]/g,'').trim()
@@ -455,7 +455,7 @@ export default function PersonalDev(){
             {rForm.status==='reading'&&(
               <div style={{marginBottom:10}}>
                 <div style={FL}>Progress — {rForm.prog}%</div>
-                <input type="range" min={0} max={100} step={5} value={rForm.prog} onChange={e=>setRForm(f=>({...f,prog:parseInt(e.target.value)}))} style={{width:'100%',accentColor:GOLD}}/>
+                <input type="range" min={0} max={100} step={5} value={rForm.prog} onChange={e=>setRForm(f=>({...f,prog:parseInt(e.target.value,10)}))} style={{width:'100%',accentColor:GOLD}}/>
               </div>
             )}
             <div style={{marginBottom:10}}>
@@ -540,7 +540,7 @@ export default function PersonalDev(){
             {gEdit&&(
               <div style={{marginBottom:10}}>
                 <div style={FL}>Progress — {gForm.progress}%</div>
-                <input type="range" min={0} max={100} step={5} value={gForm.progress} onChange={e=>setGForm(f=>({...f,progress:parseInt(e.target.value)}))} style={{width:'100%',accentColor:GOLD}}/>
+                <input type="range" min={0} max={100} step={5} value={gForm.progress} onChange={e=>setGForm(f=>({...f,progress:parseInt(e.target.value,10)}))} style={{width:'100%',accentColor:GOLD}}/>
               </div>
             )}
 
