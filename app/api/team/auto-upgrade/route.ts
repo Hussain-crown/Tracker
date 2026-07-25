@@ -53,6 +53,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ level: newLevel, upgraded })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error('team/auto-upgrade error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }

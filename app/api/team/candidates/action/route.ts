@@ -28,7 +28,7 @@ export async function POST(req: Request) {
 
     const { data: candidate } = await sbAdmin
       .from('candidates')
-      .select('id, stage, interview_notes, status')
+      .select('id, name, stage, interview_notes, status')
       .eq('id', candidateId)
       .maybeSingle()
 
@@ -47,8 +47,10 @@ export async function POST(req: Request) {
       const { outcome, notes: logNotes, nextDate, objection } = body
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
+        user_id: user.id,
+        entity_type: 'candidate',
         entity_id: candidateId,
-        entity_name: candidate.stage,
+        entity_name: (candidate as any).name || candidateId,
         outcome: outcome || 'Neutral',
         notes: logNotes || '',
         next_date: nextDate || null,
@@ -77,8 +79,10 @@ export async function POST(req: Request) {
 
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
+        user_id: user.id,
+        entity_type: 'candidate',
         entity_id: candidateId,
-        entity_name: `Advanced to ${nextStage}`,
+        entity_name: (candidate as any).name || candidateId,
         outcome: 'Positive',
         notes: `Stage advanced to ${nextStage}`,
         event_type: 'advance',
@@ -96,8 +100,10 @@ export async function POST(req: Request) {
 
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
+        user_id: user.id,
+        entity_type: 'candidate',
         entity_id: candidateId,
-        entity_name: 'DQ',
+        entity_name: (candidate as any).name || candidateId,
         outcome: 'Negative',
         notes: reason || 'Disqualified',
         event_type: 'disqualified',
@@ -108,6 +114,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: 'unknown action' }, { status: 400 })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error('track/candidates/action error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }

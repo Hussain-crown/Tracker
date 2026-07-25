@@ -39,6 +39,6 @@ export async function GET() {
     const goals = JSON.parse(data.value)
     return NextResponse.json({ goals })
   } catch (e: any) {
-    return NextResponse.json({ goals: null, error: e.message })
+    console.error('track/member-goals error:', e); return NextResponse.json({ goals: null, error: 'internal_error' })
   }
 }

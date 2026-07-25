@@ -23,20 +23,20 @@ export const useTrackerLeadsStore = create<TrackerLeadsStore>((set) => ({
   },
 
   upsertTrackerLead: async (l) => {
+    let prev: Lead[] = []
     set(s => {
+      prev = s.trackerLeads
       const idx = s.trackerLeads.findIndex(x => x.id === l.id)
-      const trackerLeads = idx >= 0
-        ? s.trackerLeads.map(x => x.id === l.id ? l : x)
-        : [l, ...s.trackerLeads]
-      return { trackerLeads }
+      return { trackerLeads: idx >= 0 ? s.trackerLeads.map(x => x.id === l.id ? l : x) : [l, ...s.trackerLeads] }
     })
-    try {
-      await sb.from('tracker_leads').upsert(l as unknown as Record<string, unknown>, { onConflict: 'id' })
-    } catch {}
+    const { error } = await sb.from('tracker_leads').upsert(l as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ trackerLeads: prev }); throw error }
   },
 
   deleteTrackerLead: async (id) => {
-    set(s => ({ trackerLeads: s.trackerLeads.filter(l => l.id !== id) }))
-    try { await sb.from('tracker_leads').delete().eq('id', id) } catch {}
+    let prev: Lead[] = []
+    set(s => { prev = s.trackerLeads; return { trackerLeads: s.trackerLeads.filter(l => l.id !== id) } })
+    const { error } = await sb.from('tracker_leads').delete().eq('id', id)
+    if (error) { set({ trackerLeads: prev }); throw error }
   },
 }))

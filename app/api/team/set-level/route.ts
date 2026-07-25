@@ -20,6 +20,6 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error('track/team/set-level error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }
