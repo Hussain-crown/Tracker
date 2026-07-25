@@ -35,7 +35,8 @@ export async function POST(req: Request) {
     if (!candidate) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
     let notes: any = {}
-    try { notes = JSON.parse((candidate.interview_notes as string) || '{}') } catch {}
+    const raw = candidate.interview_notes
+    try { notes = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw ?? {}) } catch {}
     if (notes._sponsor_ibo !== member.ibo_number) {
       return NextResponse.json({ error: 'not your candidate' }, { status: 403 })
     }

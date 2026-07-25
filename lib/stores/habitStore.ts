@@ -38,7 +38,8 @@ export const useHabitStore = create<HabitStore>((set) => ({
 
   saveHabit: async (e) => {
     set(s => ({ habits: { ...s.habits, [e.date]: e } }))
-    try { await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    const { error } = await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) throw error
   },
 
   loadWins: async () => {
