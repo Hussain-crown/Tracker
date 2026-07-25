@@ -93,16 +93,17 @@ export const useUIStore = create<UIStore>((set) => ({
   },
 
   upsertResource: async (r) => {
-    set(s => {
-      const idx = s.resources.findIndex(x => x.id === r.id)
-      return { resources: idx >= 0 ? s.resources.map(x => x.id === r.id ? r : x) : [r, ...s.resources] }
-    })
-    try { await sb.from('resources').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    let prev: Resource[] = []
+    set(s => { prev = s.resources; const idx = s.resources.findIndex(x => x.id === r.id); return { resources: idx >= 0 ? s.resources.map(x => x.id === r.id ? r : x) : [r, ...s.resources] } })
+    const { error } = await sb.from('resources').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ resources: prev }); throw error }
   },
 
   deleteResource: async (id) => {
-    set(s => ({ resources: s.resources.filter(r => r.id !== id) }))
-    try { await sb.from('resources').delete().eq('id', id) } catch {}
+    let prev: Resource[] = []
+    set(s => { prev = s.resources; return { resources: s.resources.filter(r => r.id !== id) } })
+    const { error } = await sb.from('resources').delete().eq('id', id)
+    if (error) { set({ resources: prev }); throw error }
   },
 
   loadAudios: async () => {
@@ -116,16 +117,17 @@ export const useUIStore = create<UIStore>((set) => ({
   },
 
   upsertAudio: async (a) => {
-    set(s => {
-      const idx = s.audios.findIndex(x => x.id === a.id)
-      return { audios: idx >= 0 ? s.audios.map(x => x.id === a.id ? a : x) : [a, ...s.audios] }
-    })
-    try { await sb.from('audios').upsert(a as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    let prev: Audio[] = []
+    set(s => { prev = s.audios; const idx = s.audios.findIndex(x => x.id === a.id); return { audios: idx >= 0 ? s.audios.map(x => x.id === a.id ? a : x) : [a, ...s.audios] } })
+    const { error } = await sb.from('audios').upsert(a as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ audios: prev }); throw error }
   },
 
   deleteAudio: async (id) => {
-    set(s => ({ audios: s.audios.filter(a => a.id !== id) }))
-    try { await sb.from('audios').delete().eq('id', id) } catch {}
+    let prev: Audio[] = []
+    set(s => { prev = s.audios; return { audios: s.audios.filter(a => a.id !== id) } })
+    const { error } = await sb.from('audios').delete().eq('id', id)
+    if (error) { set({ audios: prev }); throw error }
   },
 
   loadTasks: async () => {
@@ -139,15 +141,16 @@ export const useUIStore = create<UIStore>((set) => ({
   },
 
   upsertTask: async (t) => {
-    set(s => {
-      const idx = s.tasks.findIndex(x => x.id === t.id)
-      return { tasks: idx >= 0 ? s.tasks.map(x => x.id === t.id ? t : x) : [t, ...s.tasks] }
-    })
-    try { await sb.from('tasks').upsert(t as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    let prev: Task[] = []
+    set(s => { prev = s.tasks; const idx = s.tasks.findIndex(x => x.id === t.id); return { tasks: idx >= 0 ? s.tasks.map(x => x.id === t.id ? t : x) : [t, ...s.tasks] } })
+    const { error } = await sb.from('tasks').upsert(t as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ tasks: prev }); throw error }
   },
 
   deleteTask: async (id) => {
-    set(s => ({ tasks: s.tasks.filter(t => t.id !== id) }))
-    try { await sb.from('tasks').delete().eq('id', id) } catch {}
+    let prev: Task[] = []
+    set(s => { prev = s.tasks; return { tasks: s.tasks.filter(t => t.id !== id) } })
+    const { error } = await sb.from('tasks').delete().eq('id', id)
+    if (error) { set({ tasks: prev }); throw error }
   },
 }))

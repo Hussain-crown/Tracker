@@ -156,6 +156,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
   // Auto-save debounce ref
   const saveTimerRef=useRef<ReturnType<typeof setTimeout>|null>(null)
+  useEffect(()=>()=>{if(saveTimerRef.current)clearTimeout(saveTimerRef.current)},[])
 
   // ── OFFLINE QUEUE ──────────────────────────────────────
   const [isOffline,setIsOffline]=useState(typeof navigator!=='undefined'&&!navigator.onLine)
@@ -178,14 +179,17 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     setOfflineQueue(failed)
     if(failed.length===0){setSaved(true);setTimeout(()=>setSaved(false),2000)}
   }
+  // Keep a stable ref so the online handler always calls the latest version of flushQueue
+  const flushQueueRef=useRef(flushQueue)
+  flushQueueRef.current=flushQueue
 
   useEffect(()=>{
-    function handleOnline(){setIsOffline(false);flushQueue()}
+    function handleOnline(){setIsOffline(false);flushQueueRef.current()}
     function handleOffline(){setIsOffline(true)}
     window.addEventListener('online',handleOnline)
     window.addEventListener('offline',handleOffline)
     // flush on load in case there's a queue from a previous offline session
-    flushQueue()
+    flushQueueRef.current()
     setQueueCount(getOfflineQueue().length)
     return()=>{window.removeEventListener('online',handleOnline);window.removeEventListener('offline',handleOffline)}
   },[userId]) // eslint-disable-line
@@ -219,14 +223,14 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     setMeta('pd_action_checkins',JSON.stringify(next))
   }
   async function saveCoreGoals(){
-    const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
-    Object.entries(coreForm.overrides).forEach(([k,v])=>{const n=parseInt(v as string)||0;if(n>0)(g.overrides as any)[k]=n})
+    const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
+    Object.entries(coreForm.overrides).forEach(([k,v])=>{const n=parseInt(v as string,10)||0;if(n>0)(g.overrides as any)[k]=n})
     setCoreGoals(g);await setMeta('core_goals_v4',JSON.stringify(g));setEditCore(false)
   }
   async function saveBaseline(skip=false){
     setOnboardingSaving(true)
     const totals:Record<string,number>={}
-    if(!skip)Object.entries(onboardingForm).forEach(([k,v])=>{const n=parseInt(v)||0;if(n>0)totals[k]=n})
+    if(!skip)Object.entries(onboardingForm).forEach(([k,v])=>{const n=parseInt(v,10)||0;if(n>0)totals[k]=n})
     await setMeta('historical_baseline',JSON.stringify(totals))
     setBaselineTotals(totals)
     setShowOnboarding(false)
@@ -246,7 +250,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   },[liveTotals,baselineTotals])
   const targets=useMemo(()=>deriveTargets(coreGoals),[coreGoals])
   const dailyTargets=useMemo(()=>{
-    const daysInMonth=new Date(parseInt(todayStr.slice(0,4)),parseInt(todayStr.slice(5,7)),0).getDate()
+    const daysInMonth=new Date(parseInt(todayStr.slice(0,4),10),parseInt(todayStr.slice(5,7),10),0).getDate()
     const result:Partial<Record<FieldKey,number>>={};Object.entries(targets).forEach(([k,v])=>{if(v&&v!==0)result[k as FieldKey]=Math.round(v/daysInMonth*10)/10});return result
   },[targets,todayStr])
   const monthProgress=useMemo(()=>{
@@ -632,7 +636,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
                     value={onboardingForm[f.key]??''}
                     placeholder="0"
                     onChange={e=>setOnboardingForm(p=>({...p,[f.key]:e.target.value}))}
-                    style={{...INP,width:80,fontSize:18,fontWeight:800,color:f.key==='interruptions'&&parseInt(onboardingForm[f.key]||'0')>0?RED:f.color,padding:'8px 6px'}}
+                    style={{...INP,width:80,fontSize:18,fontWeight:800,color:f.key==='interruptions'&&parseInt(onboardingForm[f.key]||'0',10)>0?RED:f.color,padding:'8px 6px'}}
                   />
                 </div>
               ))}
@@ -678,8 +682,8 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
                 onChange={e=>setCoreForm(p=>({...p,deadline:e.target.value}))}
                 style={{...INPL,textAlign:'center'}}/>
             </div>
-            {parseInt(coreForm.goal)>0&&(()=>{
-              const preview=deriveTargets({goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal)||3,deadline:coreForm.deadline,overrides:{}})
+            {parseInt(coreForm.goal,10)>0&&(()=>{
+              const preview=deriveTargets({goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline,overrides:{}})
               const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate()
               return(
                 <div style={{padding:'12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:20}}>

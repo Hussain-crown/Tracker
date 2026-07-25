@@ -60,6 +60,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ candidates: allCandidates, logs, memberMap })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error('track/downline-candidates error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }

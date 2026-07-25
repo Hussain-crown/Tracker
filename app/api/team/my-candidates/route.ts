@@ -39,6 +39,6 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ candidates: candidates || [], logs, iboNumber })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error('track/my-candidates error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }

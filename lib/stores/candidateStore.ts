@@ -24,12 +24,14 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
   },
 
   upsertCandidate: async (c) => {
+    let prev: Candidate[] = []
     set(s => {
+      prev = s.candidates
       const idx = s.candidates.findIndex(x => x.id === c.id)
-      const candidates = idx >= 0 ? s.candidates.map(x => x.id === c.id ? c : x) : [c, ...s.candidates]
-      return { candidates }
+      return { candidates: idx >= 0 ? s.candidates.map(x => x.id === c.id ? c : x) : [c, ...s.candidates] }
     })
-    try { await sb.from('candidates').upsert(c as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    const { error } = await sb.from('candidates').upsert(c as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ candidates: prev }); throw error }
   },
 
   deleteCandidate: async (id) => {

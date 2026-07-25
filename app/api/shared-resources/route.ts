@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sbAdmin, verifyUser } from '@/lib/supabase/admin'
 
+export const dynamic = 'force-dynamic'
+
 async function resolveAdminId(): Promise<string> {
   const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
   if (!adminEmail) return ''
@@ -28,7 +30,7 @@ export async function GET() {
     const { data, error } = await sbAdmin.from('team_resources').select('*').eq('admin_id', adminId).order('created_at', { ascending: false })
     if (error) return NextResponse.json({ resources: [], error: error.message })
     return NextResponse.json({ resources: data || [] })
-  } catch (e: any) { return NextResponse.json({ resources: [], error: e.message }) }
+  } catch (e: any) { console.error('shared-resources error:', e); return NextResponse.json({ resources: [], error: 'internal_error' }) }
 }
 
 // POST — level 2+ members can add to the shared pool
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
     const { error } = await sbAdmin.from('team_resources').upsert(resource, { onConflict: 'id' })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
-  } catch (e: any) { return NextResponse.json({ error: e.message }, { status: 500 }) }
+  } catch (e: any) { console.error('shared-resources error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 }) }
 }
 
 // DELETE — level 2+ members can delete from the shared pool
@@ -66,5 +68,5 @@ export async function DELETE(req: Request) {
     const { error } = await sbAdmin.from('team_resources').delete().eq('id', body.id).eq('admin_id', adminId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
-  } catch (e: any) { return NextResponse.json({ error: e.message }, { status: 500 }) }
+  } catch (e: any) { console.error('shared-resources error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 }) }
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sbAdmin as sb, verifyUser } from '@/lib/supabase/admin'
 
+export const dynamic = 'force-dynamic'
+
 // POST — admin only: set a team member's level
 export async function POST(req: Request) {
   try {
@@ -20,6 +22,6 @@ export async function POST(req: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    console.error('track/team/set-level error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }

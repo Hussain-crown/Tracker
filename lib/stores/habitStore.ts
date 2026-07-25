@@ -38,7 +38,8 @@ export const useHabitStore = create<HabitStore>((set) => ({
 
   saveHabit: async (e) => {
     set(s => ({ habits: { ...s.habits, [e.date]: e } }))
-    try { await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    const { error } = await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) throw error
   },
 
   loadWins: async () => {
@@ -52,16 +53,17 @@ export const useHabitStore = create<HabitStore>((set) => ({
   },
 
   upsertWin: async (w) => {
-    set(s => {
-      const idx = s.wins.findIndex(x => x.id === w.id)
-      return { wins: idx >= 0 ? s.wins.map(x => x.id === w.id ? w : x) : [w, ...s.wins] }
-    })
-    try { await sb.from('wins').upsert(w as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    let prev: Win[] = []
+    set(s => { prev = s.wins; const idx = s.wins.findIndex(x => x.id === w.id); return { wins: idx >= 0 ? s.wins.map(x => x.id === w.id ? w : x) : [w, ...s.wins] } })
+    const { error } = await sb.from('wins').upsert(w as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ wins: prev }); throw error }
   },
 
   deleteWin: async (id) => {
-    set(s => ({ wins: s.wins.filter(w => w.id !== id) }))
-    try { await sb.from('wins').delete().eq('id', id) } catch {}
+    let prev: Win[] = []
+    set(s => { prev = s.wins; return { wins: s.wins.filter(w => w.id !== id) } })
+    const { error } = await sb.from('wins').delete().eq('id', id)
+    if (error) { set({ wins: prev }); throw error }
   },
 
   loadWeeklyReviews: async () => {
@@ -93,7 +95,9 @@ export const useHabitStore = create<HabitStore>((set) => ({
   },
 
   addMoodEntry: async (m) => {
-    set(s => ({ moodEntries: [m, ...s.moodEntries] }))
-    try { await sb.from('mood_entries').insert(m as unknown as Record<string, unknown>) } catch {}
+    let prev: MoodEntry[] = []
+    set(s => { prev = s.moodEntries; return { moodEntries: [m, ...s.moodEntries] } })
+    const { error } = await sb.from('mood_entries').insert(m as unknown as Record<string, unknown>)
+    if (error) { set({ moodEntries: prev }); throw error }
   },
 }))

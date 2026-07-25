@@ -74,6 +74,6 @@ export async function GET(req: Request) {
       }
     })
   } catch (e: any) {
-    return NextResponse.json({ valid: false, error: e.message }, { status: 500 })
+    console.error('verify-ibo error:', e); return NextResponse.json({ valid: false, error: 'internal_error' }, { status: 500 })
   }
 }
