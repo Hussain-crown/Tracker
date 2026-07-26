@@ -227,9 +227,9 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs(); loadHabits() },[]) // eslint-disable-line
 
-  async function safeWrite(fn:()=>Promise<void>, errMsg='Save failed'){
-    try{ await fn() }
-    catch(e:any){ setBanner({type:'error',msg:errMsg+': '+(e?.message||'unknown error')}) }
+  async function safeWrite(fn:()=>Promise<void>, errMsg='Save failed'): Promise<boolean>{
+    try{ await fn(); return true }
+    catch(e:any){ setBanner({type:'error',msg:errMsg+': '+(e?.message||'unknown error')}); return false }
   }
 
   // Stage → habit field mapping for auto-log
