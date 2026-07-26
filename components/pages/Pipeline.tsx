@@ -406,37 +406,37 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   async function advanceStage(l:Lead){
     const cfg=STAGE_CFG[l.stage as Stage];if(!cfg?.next)return
     const eventType=cfg.next!.toLowerCase().replace('-','_')
-    await safeWrite(async()=>{
+    const ok=await safeWrite(async()=>{
       await upsertLead({...l,stage:cfg.next as Stage,updated_at:now()})
       await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:eventType,outcome:'Positive',notes:`Advanced to ${cfg.next}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
     },'Advance stage failed')
     const habitField=STAGE_HABIT[eventType]
-    if(habitField)await autoLogHabit(habitField)
+    if(ok&&habitField)await autoLogHabit(habitField)
   }
 
   async function logContact(){
     if(!contactModal||!userId)return
     const l=contactModal
-    await safeWrite(async()=>{
+    const ok=await safeWrite(async()=>{
       await upsertLead({...l,next_action:contactLog.nextAction,next_action_date:contactLog.nextDate,updated_at:now()})
       const logObj:any={id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()}
       if(contactLog.objection&&contactLog.objection!=='None')logObj.objection=contactLog.objection
       await addContactLog(logObj)
     },'Log contact failed')
-    // Every contact = a conversation logged for today
-    await autoLogHabit('convo')
-    setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+    if(ok){
+      await autoLogHabit('convo')
+      setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+    }
   }
 
   async function convertToCandidate(){
     const l=bookPFModal;if(!l||!userId)return
-    await safeWrite(async()=>{
+    const ok=await safeWrite(async()=>{
       await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({_sponsor_ibo:iboNumber}),status:'active',hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
       await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline to Candidate — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
       await deleteLead(l.id)
     },'Conversion failed')
-    await autoLogHabit('pre_filter')
-    setBookPFModal(null)
+    if(ok){await autoLogHabit('pre_filter');setBookPFModal(null)}
   }
 
   async function getPreCallBrief(l:Lead){

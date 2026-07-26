@@ -75,13 +75,13 @@ export default function PersonalDev(){
     getMeta('pd_action_checkins').then(v=>{ if(v)try{setActionCheckins(JSON.parse(v))}catch{} })
   },[]) // eslint-disable-line
 
-  async function saveGoals(next:Goal[]){ setGoals(next); await setMeta('pd_goals',JSON.stringify(next)) }
-  async function saveNotes(next:Note[]){ setNotes(next); await setMeta('pd_notes',JSON.stringify(next)) }
+  async function saveGoals(next:Goal[]){ setGoals(next); try{await setMeta('pd_goals',JSON.stringify(next))}catch(e){console.error('saveGoals failed:',e)} }
+  async function saveNotes(next:Note[]){ setNotes(next); try{await setMeta('pd_notes',JSON.stringify(next))}catch(e){console.error('saveNotes failed:',e)} }
 
   // ── GROWTH (based on goal action checkins) ──────────────
   const growth = useMemo(()=>{
     const last30:string[]=[]
-    for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toISOString().slice(0,10))}
+    for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
     const dayHasGrowth=(d:string)=>{
       const checkins=actionCheckins[d]
       if(checkins && Object.values(checkins).some(v=>v)) return true
@@ -95,7 +95,7 @@ export default function PersonalDev(){
     let streak=0
     for(let i=0;i<30;i++){
       const d=new Date();d.setDate(d.getDate()-i)
-      if(dayHasGrowth(d.toISOString().slice(0,10)))streak++; else break
+      if(dayHasGrowth(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})))streak++; else break
     }
     const last7=last30.slice(0,7)
     const weekDone=last7.filter(dayHasGrowth).length
@@ -233,7 +233,7 @@ export default function PersonalDev(){
             <div style={{display:'flex',gap:3,flexWrap:'wrap' as const}}>
               {growth.last30.slice().reverse().map(d=>{
                 const on=growth.dayHasGrowth(d)
-                const isToday=d===new Date().toISOString().slice(0,10)
+                const isToday=d===new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
                 return <div key={d} title={d} style={{width:18,height:18,borderRadius:4,background:on?GREEN:'var(--s3)',border:isToday?`2px solid ${GOLD}`:'1px solid var(--br)',flexShrink:0}}/>
               })}
             </div>
