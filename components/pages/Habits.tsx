@@ -215,12 +215,12 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
   async function saveChecklist(key:'reading'|'audio',val:boolean){
     const next={...checklist,[key]:val};setChecklist(next)
-    setMeta('checklist_'+selDate,JSON.stringify(next))
+    try{await setMeta('checklist_'+selDate,JSON.stringify(next))}catch(e){console.error('saveChecklist error:',e)}
   }
   async function saveActionCheckin(stepId:string,val:boolean){
     const next={...actionCheckins,[selDate]:{...(actionCheckins[selDate]||{}),[stepId]:val}}
     setActionCheckins(next)
-    setMeta('pd_action_checkins',JSON.stringify(next))
+    try{await setMeta('pd_action_checkins',JSON.stringify(next))}catch(e){console.error('saveActionCheckin error:',e)}
   }
   async function saveCoreGoals(){
     const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
