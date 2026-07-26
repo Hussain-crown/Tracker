@@ -31,8 +31,7 @@ export default function Resources(){
     setLoading(true)
     try {
       const r=await fetch('/api/shared-resources')
-      const json=await r.json()
-      setResources(json.resources||[])
+      if(r.ok){const json=await r.json();setResources(json.resources||[])}
     } finally { setLoading(false) }
   }
 
