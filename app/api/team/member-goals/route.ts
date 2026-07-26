@@ -17,7 +17,7 @@ export async function GET() {
       const adminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase()
       if (adminEmail) {
         let page = 1
-        while (true) {
+        while (page <= 200) {
           const { data } = await sb.auth.admin.listUsers({ page, perPage: 50 })
           const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
           if (found) { adminId = found.id; break }

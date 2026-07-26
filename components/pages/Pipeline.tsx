@@ -492,7 +492,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         if(field==='name'&&val)hasName=true
       })
       if(!hasName){skipped++;done++;setCsvProgress({done,total:rows.length,skipped});continue}
-      if(base.phone&&myLeads.some(l=>l.phone&&l.phone.replace(/\D/g,'')===base.phone.replace(/\D/g,''))){skipped++;done++;setCsvProgress({done,total:rows.length,skipped});continue}
+      const basePhone=(base.phone||'').replace(/\D/g,'')
+      if(basePhone&&myLeads.some(l=>(l.phone||'').replace(/\D/g,'')===basePhone)){skipped++;done++;setCsvProgress({done,total:rows.length,skipped});continue}
       const l:Lead={...base,id:uid(),user_id:userId,score:hxl(base.hunger??5,base.looking??5),created_at:now(),updated_at:now()}
       await upsertLead(l)
       done++;setCsvProgress({done,total:rows.length,skipped})

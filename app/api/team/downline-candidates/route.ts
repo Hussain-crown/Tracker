@@ -36,16 +36,15 @@ export async function GET(req: Request) {
 
     if (reportIbos.length === 0) return NextResponse.json({ candidates: [], logs: [], memberMap })
 
-    // Fetch candidates for each direct report's IBO
-    const allCandidates: any[] = []
-    for (const ibo of reportIbos) {
-      const { data } = await sbAdmin
-        .from('candidates')
-        .select('*')
-        .filter('interview_notes->>_sponsor_ibo', 'eq', ibo)
-        .order('created_at', { ascending: false })
-      if (data) allCandidates.push(...data)
-    }
+    // Fetch candidates for all direct reports in parallel
+    const candidateResults = await Promise.all(
+      reportIbos.map(ibo =>
+        sbAdmin.from('candidates').select('*')
+          .filter('interview_notes->>_sponsor_ibo', 'eq', ibo)
+          .order('created_at', { ascending: false })
+      )
+    )
+    const allCandidates: any[] = candidateResults.flatMap(r => r.data || [])
 
     const ids = allCandidates.map((c: any) => c.id)
     let logs: any[] = []

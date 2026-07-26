@@ -77,11 +77,10 @@ export const useHabitStore = create<HabitStore>((set) => ({
   },
 
   upsertWeeklyReview: async (r) => {
-    set(s => {
-      const idx = s.weeklyReviews.findIndex(x => x.id === r.id)
-      return { weeklyReviews: idx >= 0 ? s.weeklyReviews.map(x => x.id === r.id ? r : x) : [r, ...s.weeklyReviews] }
-    })
-    try { await sb.from('weekly_reviews').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    let prev: WeeklyReview[] = []
+    set(s => { prev = s.weeklyReviews; const idx = s.weeklyReviews.findIndex(x => x.id === r.id); return { weeklyReviews: idx >= 0 ? s.weeklyReviews.map(x => x.id === r.id ? r : x) : [r, ...s.weeklyReviews] } })
+    const { error } = await sb.from('weekly_reviews').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ weeklyReviews: prev }); throw error }
   },
 
   loadMoodEntries: async () => {

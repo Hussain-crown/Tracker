@@ -7,8 +7,9 @@ export async function authFetch(url: string, opts: RequestInit = {}): Promise<Re
     ...opts,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
       ...((opts.headers as Record<string, string>) || {}),
+      // Always override Authorization last so callers cannot spoof the session token
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   })
 }

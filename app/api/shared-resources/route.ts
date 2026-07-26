@@ -7,7 +7,7 @@ async function resolveAdminId(): Promise<string> {
   const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
   if (!adminEmail) return ''
   let page = 1
-  while (true) {
+  while (page <= 200) {
     const { data } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
     const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
     if (found) return found.id
@@ -42,8 +42,19 @@ export async function POST(req: Request) {
     if (level < 2) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     const adminId = await resolveAdminId()
     if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
-    const body = await req.json()
-    const resource = { ...body.resource, admin_id: adminId }
+    let body: any
+    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+    const r = body.resource || {}
+    const resource = {
+      ...(r.id ? { id: r.id } : {}),
+      title: String(r.title || '').slice(0, 200),
+      type: String(r.type || '').slice(0, 100),
+      category: String(r.category || '').slice(0, 100),
+      author: String(r.author || '').slice(0, 200),
+      url: String(r.url || '').slice(0, 500),
+      description: String(r.description || '').slice(0, 1000),
+      admin_id: adminId,
+    }
     // If updating an existing resource, verify it belongs to this admin before touching it
     if (resource.id) {
       const { data: existing } = await sbAdmin.from('team_resources').select('admin_id').eq('id', resource.id).maybeSingle()

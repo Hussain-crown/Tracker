@@ -499,8 +499,7 @@ export default function Candidates({level=1}:{level?:number}={}){
             <div style={{display:'flex',gap:8}}>
               <button disabled={actionLoading} onClick={async()=>{
                 setActionLoading(true)
-                await callAction('log_contact',logModal.id,{outcome:logForm.outcome,notes:logForm.logNotes,nextDate:logForm.nextDate,objection:logForm.objection})
-                setActionLoading(false);setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'});setRefreshKey(k=>k+1)
+                try{await callAction('log_contact',logModal.id,{outcome:logForm.outcome,notes:logForm.logNotes,nextDate:logForm.nextDate,objection:logForm.objection});setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'});setRefreshKey(k=>k+1)}catch{}finally{setActionLoading(false)}
               }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
                 {actionLoading?'Saving…':'Save Log'}
               </button>
@@ -528,8 +527,7 @@ export default function Candidates({level=1}:{level?:number}={}){
               <div style={{display:'flex',gap:8}}>
                 <button disabled={actionLoading} onClick={async()=>{
                   setActionLoading(true)
-                  await callAction('advance_stage',advanceModal.id,{})
-                  setActionLoading(false);setAdvanceModal(null);setRefreshKey(k=>k+1)
+                  try{await callAction('advance_stage',advanceModal.id,{});setAdvanceModal(null);setRefreshKey(k=>k+1)}catch{}finally{setActionLoading(false)}
                 }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GREEN,color:'#000',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
                   {actionLoading?'Saving…':'Confirm Advance'}
                 </button>
@@ -556,8 +554,7 @@ export default function Candidates({level=1}:{level?:number}={}){
             <div style={{display:'flex',gap:8}}>
               <button disabled={actionLoading||!dqReason} onClick={async()=>{
                 setActionLoading(true)
-                await callAction('dq',dqModal.id,{reason:dqReason})
-                setActionLoading(false);setDqModal(null);setDqReason('');setRefreshKey(k=>k+1)
+                try{await callAction('dq',dqModal.id,{reason:dqReason});setDqModal(null);setDqReason('');setRefreshKey(k=>k+1)}catch{}finally{setActionLoading(false)}
               }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:RED,color:'#fff',fontWeight:700,cursor:(actionLoading||!dqReason)?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:(actionLoading||!dqReason)?0.5:1}}>
                 {actionLoading?'Saving…':'Disqualify'}
               </button>

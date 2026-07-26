@@ -9,7 +9,7 @@ async function resolveAdminId(): Promise<string> {
   const adminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
   if (!adminEmail) return ''
   let page = 1
-  while (true) {
+  while (page <= 200) {
     const { data } = await sb.auth.admin.listUsers({ page, perPage: 50 })
     const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
     if (found) return found.id

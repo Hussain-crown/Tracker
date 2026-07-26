@@ -28,19 +28,17 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
   },
 
   upsertPartner: async (p) => {
-    set(s => {
-      const idx = s.partners.findIndex(x => x.id === p.id)
-      const partners = idx >= 0 ? s.partners.map(x => x.id === p.id ? p : x) : [...s.partners, p]
-      return { partners }
-    })
+    let prev: Partner[] = []
+    set(s => { prev = s.partners; const idx = s.partners.findIndex(x => x.id === p.id); return { partners: idx >= 0 ? s.partners.map(x => x.id === p.id ? p : x) : [...s.partners, p] } })
     const { error } = await sb.from('partners').upsert(p as unknown as Record<string, unknown>, { onConflict: 'id' })
-    if (error) throw error
+    if (error) { set({ partners: prev }); throw error }
   },
 
   deletePartner: async (id) => {
-    set(s => ({ partners: s.partners.filter(p => p.id !== id) }))
+    let prev: Partner[] = []
+    set(s => { prev = s.partners; return { partners: s.partners.filter(p => p.id !== id) } })
     const { error } = await sb.from('partners').delete().eq('id', id)
-    if (error) throw error
+    if (error) { set({ partners: prev }); throw error }
   },
 
   loadPartnerNotes: async (partnerId) => {
@@ -57,8 +55,9 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
   },
 
   deletePartnerNote: async (id, partnerId) => {
-    set(s => ({ partnerNotes: { ...s.partnerNotes, [partnerId]: (s.partnerNotes[partnerId] ?? []).filter(n => n.id !== id) } }))
+    let prevNotes: PartnerNote[] = []
+    set(s => { prevNotes = s.partnerNotes[partnerId] ?? []; return { partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes.filter(n => n.id !== id) } } })
     const { error } = await sb.from('partner_notes').delete().eq('id', id)
-    if (error) throw error
+    if (error) { set(s => ({ partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes } })); throw error }
   },
 }))

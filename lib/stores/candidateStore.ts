@@ -35,11 +35,14 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
   },
 
   deleteCandidate: async (id) => {
-    set(s => ({ candidates: s.candidates.filter(c => c.id !== id) }))
-    try { await sb.from('candidates').delete().eq('id', id) } catch {}
+    let prev: Candidate[] = []
+    set(s => { prev = s.candidates; return { candidates: s.candidates.filter(c => c.id !== id) } })
+    const { error } = await sb.from('candidates').delete().eq('id', id)
+    if (error) { set({ candidates: prev }); throw error }
   },
 
   addContactLog: async (log) => {
-    try { await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>) } catch {}
+    const { error } = await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>)
+    if (error) throw error
   },
 }))

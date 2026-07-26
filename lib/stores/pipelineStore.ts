@@ -27,12 +27,10 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   },
 
   upsertLead: async (l) => {
-    set(s => {
-      const idx = s.leads.findIndex(x => x.id === l.id)
-      const leads = idx >= 0 ? s.leads.map(x => x.id === l.id ? l : x) : [l, ...s.leads]
-      return { leads }
-    })
-    try { await sb.from('leads').upsert(l as unknown as Record<string, unknown>, { onConflict: 'id' }) } catch {}
+    let prev: Lead[] = []
+    set(s => { prev = s.leads; const idx = s.leads.findIndex(x => x.id === l.id); return { leads: idx >= 0 ? s.leads.map(x => x.id === l.id ? l : x) : [l, ...s.leads] } })
+    const { error } = await sb.from('leads').upsert(l as unknown as Record<string, unknown>, { onConflict: 'id' })
+    if (error) { set({ leads: prev }); throw error }
   },
 
   deleteLead: async (id) => {
@@ -49,9 +47,10 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   },
 
   addContactLog: async (log) => {
-    set(s => ({ contactLogs: [log, ...s.contactLogs] }))
+    let prev: ContactLog[] = []
+    set(s => { prev = s.contactLogs; return { contactLogs: [log, ...s.contactLogs] } })
     const { error } = await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>)
-    if (error) throw error
+    if (error) { set({ contactLogs: prev }); throw error }
   },
 
   loadContactLogs: async (entityId?) => {
