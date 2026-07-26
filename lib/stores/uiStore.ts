@@ -74,9 +74,10 @@ export const useUIStore = create<UIStore>((set) => ({
       const { data: existing } = await sb.from('meta').select('value').eq('user_id', userId).eq('key', key).limit(1)
       const oldValue = existing?.[0]?.value
       await sb.from('meta').delete().eq('user_id', userId).eq('key', key)
-      const { error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value })
+      const now = new Date().toISOString()
+      const { error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value, updated_at: now })
       if (iErr) {
-        if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue }) } catch {}
+        if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) } catch {}
         throw iErr
       }
     }

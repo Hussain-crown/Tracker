@@ -8,6 +8,6 @@ export const supabase = createClient(url, key, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'implicit',  // implicit flow: session comes back in URL hash, no separate callback needed
+    flowType: 'pkce',
   },
 })
