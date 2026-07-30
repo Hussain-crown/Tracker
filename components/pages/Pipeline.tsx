@@ -5,6 +5,7 @@ import type { HabitEntry } from '@/lib/stores/types'
 import { uid, now } from '@/lib/utils'
 import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 // ── CONSTANTS ─────────────────────────────────────────────
 const STAGES = ['Interruption','Convo','Contact','MPA','Catch-Up','DTM'] as const
@@ -254,7 +255,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     }
     ;(base as any)[field]=(base[field] as number)+1
     base.updated_at=now()
-    try{ await saveHabit(base) }catch{}
+    try{ await saveHabit(base) }catch(e){ console.error(e) }
   }
 
   // ── SECURITY: Only show this user's leads ──
@@ -394,11 +395,11 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   }
 
   async function archiveLead(l:Lead,reason=''){
-    await safeWrite(async()=>{
+    const ok=await safeWrite(async()=>{
       await upsertLead({...l,archived:true,archived_reason:reason,updated_at:now()})
       await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'disqualified',outcome:'Negative',notes:reason||'Archived',fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
     },'Archive lead failed')
-    if(drawerLead?.id===l.id)setDrawerLead(null)
+    if(ok&&drawerLead?.id===l.id)setDrawerLead(null)
   }
 
   async function restoreLead(l:Lead){await safeWrite(()=>upsertLead({...l,archived:false,archived_reason:'',updated_at:now()}),'Restore lead failed')}
@@ -504,6 +505,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}
 
   return(
+    <ErrorBoundary label="Pipeline">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:100}}
       onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
 
@@ -1087,5 +1089,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       )}
 
     </div>
+    </ErrorBoundary>
   )
 }

@@ -37,10 +37,20 @@ export async function POST(req: Request) {
     const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
     if (!requester || !adminEmail || requester.email !== adminEmail)
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    const body = await req.json()
+    let body: any
+    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+    if (!body?.resource || typeof body.resource !== 'object') return NextResponse.json({ error: 'resource object required' }, { status: 400 })
     const adminId = await resolveAdminId()
     if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
-    const resource = { ...body.resource, admin_id: adminId }
+    const resource = {
+      ...(body.resource.id ? { id: body.resource.id } : {}),
+      title: String(body.resource.title ?? '').slice(0, 120),
+      url: String(body.resource.url ?? '').slice(0, 500),
+      description: String(body.resource.description ?? '').slice(0, 500),
+      category: String(body.resource.category ?? '').slice(0, 60),
+      icon: String(body.resource.icon ?? '').slice(0, 10),
+      admin_id: adminId,
+    }
     const { error } = await sb.from('team_resources').upsert(resource, { onConflict: 'id' })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
@@ -55,7 +65,9 @@ export async function DELETE(req: Request) {
     if (!requester || !adminEmail || requester.email !== adminEmail)
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     const body = await req.json()
-    const { error } = await sb.from('team_resources').delete().eq('id', body.id)
+    if (!body.id || typeof body.id !== 'string') return NextResponse.json({ error: 'id required' }, { status: 400 })
+    const adminId = await resolveAdminId()
+    const { error } = await sb.from('team_resources').delete().eq('id', body.id).eq('admin_id', adminId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e: any) { console.error('track/team/resources error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 }) }

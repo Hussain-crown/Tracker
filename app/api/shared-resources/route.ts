@@ -4,6 +4,7 @@ import { sbAdmin, verifyUser } from '@/lib/supabase/admin'
 export const dynamic = 'force-dynamic'
 
 async function resolveAdminId(): Promise<string> {
+  if (process.env.ADMIN_USER_ID) return process.env.ADMIN_USER_ID
   const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
   if (!adminEmail) return ''
   let page = 1
@@ -73,7 +74,9 @@ export async function DELETE(req: Request) {
     if (!requester) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     const level = await getMemberLevel(requester.id)
     if (level < 2) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    const body = await req.json()
+    let body: any
+    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+    if (!body.id || typeof body.id !== 'string') return NextResponse.json({ error: 'id required' }, { status: 400 })
     const adminId = await resolveAdminId()
     if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
     const { error } = await sbAdmin.from('team_resources').delete().eq('id', body.id).eq('admin_id', adminId)

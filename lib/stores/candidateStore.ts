@@ -20,7 +20,7 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
     try {
       const { data } = await sb.from('candidates').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ candidates: (data ?? []) as Candidate[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertCandidate: async (c) => {
@@ -37,7 +37,8 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
   deleteCandidate: async (id) => {
     let prev: Candidate[] = []
     set(s => { prev = s.candidates; return { candidates: s.candidates.filter(c => c.id !== id) } })
-    const { error } = await sb.from('candidates').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('candidates').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ candidates: prev }); throw error }
   },
 

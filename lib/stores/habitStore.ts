@@ -16,9 +16,11 @@ interface HabitStore {
   upsertWeeklyReview: (r: WeeklyReview) => Promise<void>
   loadMoodEntries: () => Promise<void>
   addMoodEntry: (m: MoodEntry) => Promise<void>
+  // NOTE: Supabase Realtime must be enabled on the project for live updates to work.
+  subscribeRealtime: (userId: string) => () => void
 }
 
-export const useHabitStore = create<HabitStore>((set) => ({
+export const useHabitStore = create<HabitStore>((set, get) => ({
   habits: {},
   wins: [],
   weeklyReviews: [],
@@ -33,13 +35,17 @@ export const useHabitStore = create<HabitStore>((set) => ({
       const map: Record<string, HabitEntry> = {}
       for (const e of (data ?? [])) map[(e as HabitEntry).date] = e as HabitEntry
       set({ habits: map })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   saveHabit: async (e) => {
+    const prevEntry = get().habits[e.date]
     set(s => ({ habits: { ...s.habits, [e.date]: e } }))
     const { error } = await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'user_id,date' })
-    if (error) throw error
+    if (error) {
+      set(s => { const h = { ...s.habits }; if (prevEntry === undefined) { delete h[e.date] } else { h[e.date] = prevEntry }; return { habits: h } })
+      throw error
+    }
   },
 
   loadWins: async () => {
@@ -49,7 +55,7 @@ export const useHabitStore = create<HabitStore>((set) => ({
     try {
       const { data } = await sb.from('wins').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ wins: (data ?? []) as Win[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertWin: async (w) => {
@@ -62,7 +68,8 @@ export const useHabitStore = create<HabitStore>((set) => ({
   deleteWin: async (id) => {
     let prev: Win[] = []
     set(s => { prev = s.wins; return { wins: s.wins.filter(w => w.id !== id) } })
-    const { error } = await sb.from('wins').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('wins').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ wins: prev }); throw error }
   },
 
@@ -73,7 +80,7 @@ export const useHabitStore = create<HabitStore>((set) => ({
     try {
       const { data } = await sb.from('weekly_reviews').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ weeklyReviews: (data ?? []) as WeeklyReview[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertWeeklyReview: async (r) => {
@@ -90,7 +97,7 @@ export const useHabitStore = create<HabitStore>((set) => ({
     try {
       const { data } = await sb.from('mood_entries').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(90)
       set({ moodEntries: (data ?? []) as MoodEntry[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   addMoodEntry: async (m) => {
@@ -98,5 +105,20 @@ export const useHabitStore = create<HabitStore>((set) => ({
     set(s => { prev = s.moodEntries; return { moodEntries: [m, ...s.moodEntries] } })
     const { error } = await sb.from('mood_entries').insert(m as unknown as Record<string, unknown>)
     if (error) { set({ moodEntries: prev }); throw error }
+  },
+
+  subscribeRealtime: (userId) => {
+    const channel = sb.channel(`habits:${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'habits', filter: `user_id=eq.${userId}` }, (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const entry = payload.new as HabitEntry
+          set(s => ({ habits: { ...s.habits, [entry.date]: entry } }))
+        } else if (payload.eventType === 'DELETE') {
+          const entry = payload.old as HabitEntry
+          set(s => { const h = { ...s.habits }; delete h[entry.date]; return { habits: h } })
+        }
+      })
+      .subscribe()
+    return () => { sb.removeChannel(channel) }
   },
 }))

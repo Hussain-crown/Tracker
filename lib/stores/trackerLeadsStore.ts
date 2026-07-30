@@ -19,7 +19,7 @@ export const useTrackerLeadsStore = create<TrackerLeadsStore>((set) => ({
     try {
       const { data } = await sb.from('tracker_leads').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ trackerLeads: (data ?? []) as Lead[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertTrackerLead: async (l) => {
@@ -36,7 +36,8 @@ export const useTrackerLeadsStore = create<TrackerLeadsStore>((set) => ({
   deleteTrackerLead: async (id) => {
     let prev: Lead[] = []
     set(s => { prev = s.trackerLeads; return { trackerLeads: s.trackerLeads.filter(l => l.id !== id) } })
-    const { error } = await sb.from('tracker_leads').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('tracker_leads').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ trackerLeads: prev }); throw error }
   },
 }))

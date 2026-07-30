@@ -36,9 +36,13 @@ export async function GET() {
       .maybeSingle()
 
     if (!data?.value) return NextResponse.json({ goals: null })
-    const goals = JSON.parse(data.value)
+    let goals: unknown
+    try { goals = JSON.parse(data.value) } catch {
+      console.error('track/member-goals JSON.parse error: corrupted meta value')
+      return NextResponse.json({ goals: null, error: 'internal_error' }, { status: 500 })
+    }
     return NextResponse.json({ goals })
   } catch (e: any) {
-    console.error('track/member-goals error:', e); return NextResponse.json({ goals: null, error: 'internal_error' })
+    console.error('track/member-goals error:', e); return NextResponse.json({ goals: null, error: 'internal_error' }, { status: 500 })
   }
 }

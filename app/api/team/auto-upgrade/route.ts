@@ -45,10 +45,11 @@ export async function POST(req: Request) {
 
     const upgraded = newLevel !== currentLevel
     if (upgraded) {
-      await sbAdmin
+      const { error: upErr } = await sbAdmin
         .from('team_members')
         .update({ level: newLevel, updated_at: new Date().toISOString() })
         .eq('user_id', user.id)
+      if (upErr) throw upErr
     }
 
     return NextResponse.json({ level: newLevel, upgraded })

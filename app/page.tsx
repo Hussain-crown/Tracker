@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { useStore } from '@/lib/stores'
+import { useStore, useHabitStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
@@ -100,11 +100,20 @@ export default function TrackPage(){
     return()=>document.removeEventListener('visibilitychange',onVisible)
   },[userId,loadAll])
 
+  // Supabase Realtime — live habit updates without page refresh.
+  // NOTE: Supabase Realtime must be enabled on the project for these subscriptions to work.
+  useEffect(()=>{
+    if(!userId)return
+    const unsub=useHabitStore.getState().subscribeRealtime(userId)
+    return()=>{ unsub() }
+  },[userId])
+
   useEffect(()=>{
     if(!userId)return
     loadAll()
-    supabase.from('team_members').select('*').eq('user_id',userId).single()
-      .then(({data}:any)=>{
+    supabase.from('team_members').select('*').eq('user_id',userId).maybeSingle()
+      .then(({data,error}:any)=>{
+        if(error){console.error('team_members fetch error:',error);return}
         if(data){
           setMember(data);setNeedsProfile(false)
           if((data.level||1)>=2)setTab('habits')
@@ -145,6 +154,7 @@ export default function TrackPage(){
     const next=[...seenMilestones,...hit.map(m=>m.days)]
     setSeenMilestones(next)
     supabase.from('team_members').update({seen_milestones:JSON.stringify(next),updated_at:now()}).eq('user_id',userId)
+      .then(({error})=>{ if(error) console.error('milestone sync failed',error) })
   },[streak,member]) // eslint-disable-line
 
   async function saveProfile(){
@@ -157,11 +167,12 @@ export default function TrackPage(){
       const partnerName=name.trim()||d.partner?.name||(userEmail?.split('@')[0]||'Member')
       const {data:existing}=await supabase.from('team_members').select('user_id').eq('ibo_number',ibo.trim()).maybeSingle()
       if(existing&&existing.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);return}
-      await supabase.from('team_members').upsert({
+      const {error:upsertErr}=await supabase.from('team_members').upsert({
         user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
         email:userEmail||'',role:'member',referred_by:'',first_login:true,
         status:'pending',baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
       })
+      if(upsertErr)throw upsertErr
       const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
       setMember(data);setNeedsProfile(false);setShowOnboard(true)
     }catch{setErr('Could not verify IBO. Please try again.')}

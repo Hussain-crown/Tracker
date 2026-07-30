@@ -1,6 +1,7 @@
 'use client'
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -51,6 +52,7 @@ export default function Analytics(){
   const actMaxTotal=useMemo(()=>Math.max(...actData.map(d=>d.total),1),[actData])
 
   return(
+    <ErrorBoundary label="Analytics">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:48}}>
       <div style={{marginBottom:16}}>
         <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:4}}>Analytics</div>
@@ -244,5 +246,6 @@ export default function Analytics(){
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   )
 }

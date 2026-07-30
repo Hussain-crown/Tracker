@@ -4,6 +4,7 @@ import { useStore } from '@/lib/stores'
 import { uid, now } from '@/lib/utils'
 import type { HabitEntry } from '@/lib/stores'
 import Analytics from './Analytics'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -145,7 +146,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     }
     getMeta('core_goals_v4').then(v=>{
       if(v)try{const g=JSON.parse(v);setCoreGoals(g);setCoreForm({goalField:g.goalField??'mg1',goal:String(g.goalMonthly??3),deadline:g.deadline,overrides:{}})}catch{}
-      else getMeta('core_goals_v3').then(old=>{if(old)try{const g=JSON.parse(old);const ng={goalField:'mg1' as FieldKey,goalMonthly:g.goalMonthly??3,deadline:g.deadline,overrides:g.overrides??{}};setCoreGoals(ng)}catch{}})
+      else getMeta('core_goals_v3').then(old=>{if(old)try{const g=JSON.parse(old);const ng={goalField:'mg1' as FieldKey,goalMonthly:g.goalMonthly??3,deadline:g.deadline,overrides:g.overrides??{}};setCoreGoals(ng);setCoreForm({goalField:ng.goalField,goal:String(ng.goalMonthly),deadline:ng.deadline,overrides:{}})}catch{}})
     })
   },[goalOverride]) // eslint-disable-line
   useEffect(()=>{
@@ -208,8 +209,9 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
         const q=getOfflineQueue().filter((e:any)=>e.date!==date)
         q.push({id:ex?.id??uid(),user_id:userId,date,...f,created_at:ex?.created_at??now(),updated_at:now()})
         setOfflineQueue(q)
+      }finally{
+        setSaving(false)
       }
-      setSaving(false)
     },800)
   },[userId,habits,saveHabit])
 
@@ -225,16 +227,20 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   async function saveCoreGoals(){
     const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
     Object.entries(coreForm.overrides).forEach(([k,v])=>{const n=parseInt(v as string,10)||0;if(n>0)(g.overrides as any)[k]=n})
-    setCoreGoals(g);await setMeta('core_goals_v4',JSON.stringify(g));setEditCore(false)
+    setCoreGoals(g)
+    try{await setMeta('core_goals_v4',JSON.stringify(g))}finally{setEditCore(false)}
   }
   async function saveBaseline(skip=false){
     setOnboardingSaving(true)
     const totals:Record<string,number>={}
     if(!skip)Object.entries(onboardingForm).forEach(([k,v])=>{const n=parseInt(v,10)||0;if(n>0)totals[k]=n})
-    await setMeta('historical_baseline',JSON.stringify(totals))
-    setBaselineTotals(totals)
-    setShowOnboarding(false)
-    setOnboardingSaving(false)
+    try{
+      await setMeta('historical_baseline',JSON.stringify(totals))
+      setBaselineTotals(totals)
+      setShowOnboarding(false)
+    }catch(e){console.error('saveBaseline failed:',e)}finally{
+      setOnboardingSaving(false)
+    }
   }
   // ── DATA ─────────────────────────────────────────────
   const allDates=useMemo(()=>Object.keys(habits).sort(),[habits])
@@ -295,6 +301,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const currMo=new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7)
 
   return(
+    <ErrorBoundary label="Habits">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:48}}>
 
       {/* Header */}
@@ -712,5 +719,6 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
         </div>
       )}
     </div>
+    </ErrorBoundary>
   )
 }

@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useStore } from '@/lib/stores'
 import type { Partner } from '@/lib/stores/types'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='#C8A24A';const GREEN='#4CAF7D';const RED='#E05555'
 const STAGE_ORDER=['Prospect','IBO','Q','Silver','Gold','Platinum','Diamond']
@@ -27,6 +28,7 @@ export default function Organisation(){
   const activating=useMemo(()=>active.filter(p=>!p.activation_done&&p.stage!=='Prospect'),[active])
 
   return(
+    <ErrorBoundary label="Organisation">
     <div style={{paddingBottom:80}}>
       {/* Stats strip */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:16}}>
@@ -120,5 +122,6 @@ export default function Organisation(){
         </div>
       )}
     </div>
+    </ErrorBoundary>
   )
 }

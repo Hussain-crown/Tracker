@@ -22,7 +22,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Level 3 required' }, { status: 403 })
     }
 
-    const body = await req.json()
+    let body: any
+    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
     const { action, candidateId } = body
     if (!candidateId) return NextResponse.json({ error: 'missing candidateId' }, { status: 400 })
 
@@ -37,6 +38,9 @@ export async function POST(req: Request) {
     let notes: any = {}
     const raw = candidate.interview_notes
     try { notes = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw ?? {}) } catch {}
+    if (notes._sponsor_ibo == null) {
+      return NextResponse.json({ error: 'unassigned_candidate' }, { status: 403 })
+    }
     if (notes._sponsor_ibo !== member.ibo_number) {
       return NextResponse.json({ error: 'not your candidate' }, { status: 403 })
     }
@@ -45,7 +49,7 @@ export async function POST(req: Request) {
 
     if (action === 'log_contact') {
       const { outcome, notes: logNotes, nextDate, objection } = body
-      await sbAdmin.from('contact_logs').insert({
+      const { error: logErr } = await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
         user_id: user.id,
         entity_type: 'candidate',
@@ -58,6 +62,7 @@ export async function POST(req: Request) {
         event_type: 'contact',
         created_at: now,
       })
+      if (logErr) { console.error('log_contact insert failed:', logErr); return NextResponse.json({ error: 'log_failed' }, { status: 500 }) }
       await sbAdmin.from('candidates').update({ updated_at: now }).eq('id', candidateId)
       return NextResponse.json({ ok: true })
     }
@@ -71,11 +76,12 @@ export async function POST(req: Request) {
       history.push({ stage: candidate.stage as string, date: now.slice(0, 10) })
       const newNotes = JSON.stringify({ ...notes, _stage_history: history })
 
-      await sbAdmin.from('candidates').update({
+      const { error: stageErr } = await sbAdmin.from('candidates').update({
         stage: nextStage,
         interview_notes: newNotes,
         updated_at: now,
       }).eq('id', candidateId)
+      if (stageErr) { console.error('advance_stage update failed:', stageErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
 
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
@@ -93,10 +99,11 @@ export async function POST(req: Request) {
 
     if (action === 'dq') {
       const { reason } = body
-      await sbAdmin.from('candidates').update({
+      const { error: dqErr } = await sbAdmin.from('candidates').update({
         status: 'disqualified',
         updated_at: now,
       }).eq('id', candidateId)
+      if (dqErr) { console.error('dq update failed:', dqErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
 
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),

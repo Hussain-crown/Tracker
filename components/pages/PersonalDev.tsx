@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { uid, now, today } from '@/lib/utils'
 import type { Resource } from '@/lib/stores'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const CATS = ['Leadership','Mindset','Business','Skills','Health','Other']
 const TYPES = ['Book','Podcast','Course','Video','Article','Other']
@@ -75,8 +76,8 @@ export default function PersonalDev(){
     getMeta('pd_action_checkins').then(v=>{ if(v)try{setActionCheckins(JSON.parse(v))}catch{} })
   },[]) // eslint-disable-line
 
-  async function saveGoals(next:Goal[]){ setGoals(next); try{await setMeta('pd_goals',JSON.stringify(next))}catch(e){console.error('saveGoals failed:',e)} }
-  async function saveNotes(next:Note[]){ setNotes(next); try{await setMeta('pd_notes',JSON.stringify(next))}catch(e){console.error('saveNotes failed:',e)} }
+  async function saveGoals(next:Goal[]){ const prev=goals; setGoals(next); try{await setMeta('pd_goals',JSON.stringify(next))}catch(e){console.error('saveGoals failed:',e);setGoals(prev)} }
+  async function saveNotes(next:Note[]){ const prev=notes; setNotes(next); try{await setMeta('pd_notes',JSON.stringify(next))}catch(e){console.error('saveNotes failed:',e);setNotes(prev)} }
 
   // ── GROWTH (based on goal action checkins) ──────────────
   const growth = useMemo(()=>{
@@ -154,10 +155,11 @@ export default function PersonalDev(){
   }
 
   // ── NOTE SAVE ───────────────────────────────────────────
-  function saveNote(){
+  async function saveNote(){
     if(!nForm.text.trim())return
     const n:Note={id:uid(),title:nForm.title.trim(),text:nForm.text.trim(),created_at:now()}
-    saveNotes([n,...notes]); setNModal(false); setNForm({title:'',text:''})
+    await saveNotes([n,...notes])
+    setNModal(false); setNForm({title:'',text:''})
   }
 
   // ── DERIVED ─────────────────────────────────────────────
@@ -186,6 +188,7 @@ export default function PersonalDev(){
   ]
 
   return(
+    <ErrorBoundary label="PersonalDev">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:60}}>
 
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
@@ -567,11 +570,12 @@ export default function PersonalDev(){
             </div>
             <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16}}>
               <button onClick={()=>setNModal(false)} style={{padding:'9px 18px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-              <button onClick={saveNote} style={{padding:'9px 20px',borderRadius:'var(--r)',border:'none',background:'linear-gradient(135deg,var(--gold),var(--gold3))',color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save</button>
+              <button onClick={()=>saveNote().catch(console.error)} style={{padding:'9px 20px',borderRadius:'var(--r)',border:'none',background:'linear-gradient(135deg,var(--gold),var(--gold3))',color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save</button>
             </div>
           </div>
         </div>
       )}
     </div>
+    </ErrorBoundary>
   )
 }

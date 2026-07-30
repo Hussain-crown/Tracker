@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import type { Candidate, ContactLog } from '@/lib/stores/types'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)';const ORANGE='var(--orange)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
@@ -92,6 +93,7 @@ export default function TeamCandidates({level}:{level:number}){
   if(loading)return<div style={{padding:'48px',textAlign:'center',color:'var(--text4)',fontSize:12}}>Loading team candidates…</div>
 
   return(
+    <ErrorBoundary label="TeamCandidates">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
       <div style={{marginBottom:16}}>
         <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:4}}>Level 4</div>
@@ -189,5 +191,6 @@ export default function TeamCandidates({level}:{level:number}){
         <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text4)',fontSize:12}}>No candidates match "{search}"</div>
       )}
     </div>
+    </ErrorBoundary>
   )
 }

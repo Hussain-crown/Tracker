@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { uid, now } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -43,13 +44,15 @@ export default function Resources(){
   async function save(){
     if(!form.title.trim())return
     const resource={id:edit?.id??uid(),title:form.title.trim(),type:form.type,category:form.category,author:form.author.trim(),url:form.url.trim(),description:form.description.trim(),created_at:edit?.created_at??now()}
-    await authFetch('/api/shared-resources',{method:'POST',body:JSON.stringify({resource})})
+    const res=await authFetch('/api/shared-resources',{method:'POST',body:JSON.stringify({resource})})
+    if(!res.ok)return
     setModal(false)
     load()
   }
 
   async function del(id:string){
-    await authFetch('/api/shared-resources',{method:'DELETE',body:JSON.stringify({id})})
+    const res=await authFetch('/api/shared-resources',{method:'DELETE',body:JSON.stringify({id})})
+    if(!res.ok)return
     setResources(p=>p.filter(r=>r.id!==id))
   }
 
@@ -57,6 +60,7 @@ export default function Resources(){
   const byType=useMemo(()=>{const m:Record<string,number>={};resources.forEach(r=>{m[r.type]=(m[r.type]||0)+1});return m},[resources])
 
   return(
+    <ErrorBoundary label="Resources">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:48}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:16}}>
         <div>
@@ -162,5 +166,6 @@ export default function Resources(){
         </div>
       )}
     </div>
+    </ErrorBoundary>
   )
 }

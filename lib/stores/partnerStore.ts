@@ -24,7 +24,7 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
     try {
       const { data } = await sb.from('partners').select('*').eq('user_id', userId).order('created_at', { ascending: true })
       set({ partners: (data ?? []) as Partner[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertPartner: async (p) => {
@@ -37,7 +37,8 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
   deletePartner: async (id) => {
     let prev: Partner[] = []
     set(s => { prev = s.partners; return { partners: s.partners.filter(p => p.id !== id) } })
-    const { error } = await sb.from('partners').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('partners').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ partners: prev }); throw error }
   },
 
@@ -45,19 +46,21 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
     try {
       const { data } = await sb.from('partner_notes').select('*').eq('partner_id', partnerId).order('created_at', { ascending: false })
       if (data) set(s => ({ partnerNotes: { ...s.partnerNotes, [partnerId]: data as PartnerNote[] } }))
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   addPartnerNote: async (n) => {
-    set(s => ({ partnerNotes: { ...s.partnerNotes, [n.partner_id]: [n, ...(s.partnerNotes[n.partner_id] ?? [])] } }))
+    let prev: PartnerNote[] = []
+    set(s => { prev = s.partnerNotes[n.partner_id] ?? []; return { partnerNotes: { ...s.partnerNotes, [n.partner_id]: [n, ...prev] } } })
     const { error } = await sb.from('partner_notes').insert(n as unknown as Record<string, unknown>)
-    if (error) throw error
+    if (error) { set(s => ({ partnerNotes: { ...s.partnerNotes, [n.partner_id]: prev } })); throw error }
   },
 
   deletePartnerNote: async (id, partnerId) => {
     let prevNotes: PartnerNote[] = []
     set(s => { prevNotes = s.partnerNotes[partnerId] ?? []; return { partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes.filter(n => n.id !== id) } } })
-    const { error } = await sb.from('partner_notes').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('partner_notes').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set(s => ({ partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes } })); throw error }
   },
 }))

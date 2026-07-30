@@ -77,7 +77,7 @@ export const useUIStore = create<UIStore>((set) => ({
       const now = new Date().toISOString()
       const { error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value, updated_at: now })
       if (iErr) {
-        if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) } catch {}
+        if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) } catch (e) { console.error(e) }
         throw iErr
       }
     }
@@ -90,7 +90,7 @@ export const useUIStore = create<UIStore>((set) => ({
     try {
       const { data } = await sb.from('resources').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ resources: (data ?? []) as Resource[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertResource: async (r) => {
@@ -103,7 +103,8 @@ export const useUIStore = create<UIStore>((set) => ({
   deleteResource: async (id) => {
     let prev: Resource[] = []
     set(s => { prev = s.resources; return { resources: s.resources.filter(r => r.id !== id) } })
-    const { error } = await sb.from('resources').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('resources').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ resources: prev }); throw error }
   },
 
@@ -114,7 +115,7 @@ export const useUIStore = create<UIStore>((set) => ({
     try {
       const { data } = await sb.from('audios').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ audios: (data ?? []) as Audio[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertAudio: async (a) => {
@@ -127,7 +128,8 @@ export const useUIStore = create<UIStore>((set) => ({
   deleteAudio: async (id) => {
     let prev: Audio[] = []
     set(s => { prev = s.audios; return { audios: s.audios.filter(a => a.id !== id) } })
-    const { error } = await sb.from('audios').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('audios').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ audios: prev }); throw error }
   },
 
@@ -138,7 +140,7 @@ export const useUIStore = create<UIStore>((set) => ({
     try {
       const { data } = await sb.from('tasks').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ tasks: (data ?? []) as Task[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertTask: async (t) => {
@@ -151,7 +153,8 @@ export const useUIStore = create<UIStore>((set) => ({
   deleteTask: async (id) => {
     let prev: Task[] = []
     set(s => { prev = s.tasks; return { tasks: s.tasks.filter(t => t.id !== id) } })
-    const { error } = await sb.from('tasks').delete().eq('id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const { error } = await sb.from('tasks').delete().eq('id', id).eq('user_id', user?.id ?? '')
     if (error) { set({ tasks: prev }); throw error }
   },
 }))

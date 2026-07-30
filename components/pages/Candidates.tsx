@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { buildPreCallBrief } from '@/lib/aiText'
 import type { Candidate, ContactLog } from '@/lib/stores/types'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 // ── STAGES ────────────────────────────────────────────────
 const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer Questions','Offer Call'] as const
@@ -146,15 +147,16 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [logForm,setLogForm]       = useState({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})
   const [dqReason,setDqReason]     = useState('')
   const [actionLoading,setActionLoading] = useState(false)
+  const [loadErr,setLoadErr]           = useState('')
 
   useEffect(()=>{
     async function load(){
-      setLoading(true)
+      setLoading(true); setLoadErr('')
       try{
         const {data:{session}}=await supabase.auth.getSession()
         const token=session?.access_token||''
         const resp=await fetch('/api/team/my-candidates',{headers:{Authorization:`Bearer ${token}`}})
-        if(!resp.ok)return
+        if(!resp.ok){ setLoadErr(`Failed to load candidates (${resp.status})`); return }
         const {candidates:data,logs}=await resp.json()
         setCandidates((data||[]) as Candidate[])
         setAllLogs((logs||[]) as ContactLog[])
@@ -171,6 +173,7 @@ export default function Candidates({level=1}:{level?:number}={}){
       headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},
       body:JSON.stringify({action,candidateId,...payload})
     })
+    if(!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.json()
   }
 
@@ -272,6 +275,7 @@ export default function Candidates({level=1}:{level?:number}={}){
   if(loading)return<div style={{padding:'48px',textAlign:'center',color:'var(--text4)',fontSize:12}}>Loading candidates…</div>
 
   return(
+    <ErrorBoundary label="Candidates">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:80}}>
 
       {/* Tabs */}
@@ -687,5 +691,6 @@ export default function Candidates({level=1}:{level?:number}={}){
         </div>
       )}
     </div>
+    </ErrorBoundary>
   )
 }

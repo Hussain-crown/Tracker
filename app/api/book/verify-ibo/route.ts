@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,20 +22,21 @@ async function getAdminId(): Promise<string|null> {
   return t?.[0]?.user_id ?? null
 }
 
-// Your own IBO number — always gets access as admin
-const ADMIN_IBO = '7013656028'
-
 export async function GET(req: Request) {
+  if (isRateLimited(getClientIp(req), 20, 60_000))
+    return NextResponse.json({ valid: false, error: 'Too many requests' }, { status: 429 })
+
   const { searchParams } = new URL(req.url)
   const ibo = (searchParams.get('ibo') || '').trim()
   if (!ibo) return NextResponse.json({ valid: false, error: 'No IBO provided' })
+  if (!/^\d{4,12}$/.test(ibo)) return NextResponse.json({ valid: false, error: 'Invalid IBO format' })
 
   try {
     const adminId = await getAdminId()
     if (!adminId) return NextResponse.json({ valid: false, error: 'Not configured' })
 
     // ── CHECK 1: Admin's own IBO — always grant access ──
-    const adminIbo = process.env.ADMIN_IBO || ADMIN_IBO
+    const adminIbo = (process.env.ADMIN_IBO || '').trim()
     if (ibo === adminIbo) {
       // Get admin's display name
       const { data: nameMeta } = await getSb().from('meta')

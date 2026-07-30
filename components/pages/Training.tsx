@@ -1,11 +1,13 @@
 'use client'
 import React from 'react'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='var(--gold)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'24px',marginBottom:10,textAlign:'center'}
 
 export default function Training(){
   return(
+    <ErrorBoundary label="Training">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:48}}>
       <div style={{marginBottom:20}}>
         <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:4}}>Level 1</div>
@@ -28,5 +30,6 @@ export default function Training(){
         </div>
       </div>
     </div>
+    </ErrorBoundary>
   )
 }

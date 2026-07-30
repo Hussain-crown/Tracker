@@ -36,11 +36,15 @@ export async function GET(req: Request) {
 
     if (reportIbos.length === 0) return NextResponse.json({ candidates: [], logs: [], memberMap })
 
+    const adminId = process.env.ADMIN_USER_ID || ''
+    if (!adminId) return NextResponse.json({ error: 'configuration_error' }, { status: 500 })
+
     // Fetch candidates for all direct reports in parallel
     const candidateResults = await Promise.all(
       reportIbos.map(ibo =>
         sbAdmin.from('candidates').select('*')
           .filter('interview_notes->>_sponsor_ibo', 'eq', ibo)
+          .eq('user_id', adminId)
           .order('created_at', { ascending: false })
       )
     )

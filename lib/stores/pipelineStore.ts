@@ -23,7 +23,7 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     try {
       const { data } = await sb.from('leads').select('*').eq('user_id', userId).order('created_at', { ascending: false })
       set({ leads: (data ?? []) as Lead[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 
   upsertLead: async (l) => {
@@ -36,9 +36,11 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   deleteLead: async (id) => {
     // DB delete first — if it fails the item stays in both DB and UI (consistent);
     // optimistic-first would remove from UI but leave it in DB (inconsistent on reload).
-    const { error: logsErr } = await sb.from('contact_logs').delete().eq('entity_id', id)
+    const { data: { user } } = await sb.auth.getUser()
+    const userId = user?.id ?? ''
+    const { error: logsErr } = await sb.from('contact_logs').delete().eq('entity_id', id).eq('user_id', userId)
     if (logsErr) throw logsErr
-    const { error: leadErr } = await sb.from('leads').delete().eq('id', id)
+    const { error: leadErr } = await sb.from('leads').delete().eq('id', id).eq('user_id', userId)
     if (leadErr) throw leadErr
     set(s => ({
       leads: s.leads.filter(l => l.id !== id),
@@ -62,6 +64,6 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       if (entityId) q = (q as any).eq('entity_id', entityId)
       const { data } = await q
       if (data) set({ contactLogs: data as ContactLog[] })
-    } catch {}
+    } catch (e) { console.error(e) }
   },
 }))
