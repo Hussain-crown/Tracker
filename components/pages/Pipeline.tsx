@@ -496,7 +496,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       const basePhone=(base.phone||'').replace(/\D/g,'')
       if(basePhone&&myLeads.some(l=>(l.phone||'').replace(/\D/g,'')===basePhone)){skipped++;done++;setCsvProgress({done,total:rows.length,skipped});continue}
       const l:Lead={...base,id:uid(),user_id:userId,score:hxl(base.hunger??5,base.looking??5),created_at:now(),updated_at:now()}
-      await upsertLead(l)
+      try{await upsertLead(l)}catch(e:any){console.error('importCSV upsertLead failed:',e?.message);skipped++}
       done++;setCsvProgress({done,total:rows.length,skipped})
     }
     setTimeout(()=>{setCsvModal(null);setCsvProgress(null)},1500)

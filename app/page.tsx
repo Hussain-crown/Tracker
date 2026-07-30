@@ -9,6 +9,7 @@ import Training from '@/components/pages/Training'
 import Resources from '@/components/pages/Resources'
 import PersonalDev from '@/components/pages/PersonalDev'
 import { now } from '@/lib/utils'
+import { authFetch } from '@/lib/authFetch'
 
 const GOLD='#C8A24A'
 
@@ -119,7 +120,7 @@ export default function TrackPage(){
           if((data.level||1)>=2)setTab('habits')
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
           if(data.first_login&&data.status!=='pending')setShowOnboard(true)
-          fetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
+          authFetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
             if(d.goals)setAdminGoals(d.goals)
           }).catch(()=>{})
           // Check for level auto-upgrade after member loads
