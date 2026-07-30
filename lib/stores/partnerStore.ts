@@ -38,7 +38,8 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
     let prev: Partner[] = []
     set(s => { prev = s.partners; return { partners: s.partners.filter(p => p.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('partners').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ partners: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('partners').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ partners: prev }); throw error }
   },
 
@@ -60,7 +61,8 @@ export const usePartnerStore = create<PartnerStore>((set, get) => ({
     let prevNotes: PartnerNote[] = []
     set(s => { prevNotes = s.partnerNotes[partnerId] ?? []; return { partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes.filter(n => n.id !== id) } } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('partner_notes').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set(s => ({ partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes } })); throw new Error('not_authenticated') }
+    const { error } = await sb.from('partner_notes').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set(s => ({ partnerNotes: { ...s.partnerNotes, [partnerId]: prevNotes } })); throw error }
   },
 }))

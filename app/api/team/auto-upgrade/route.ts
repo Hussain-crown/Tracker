@@ -32,12 +32,14 @@ export async function POST(req: Request) {
     } else if (currentLevel === 2) {
       // L2 → L3: 3+ launched candidates
       const iboNumber = member.ibo_number || ''
-      if (iboNumber) {
+      const adminId = process.env.ADMIN_USER_ID || ''
+      if (iboNumber && adminId) {
         const { data: launched } = await sbAdmin
           .from('candidates')
           .select('id')
           .filter('interview_notes->>_sponsor_ibo', 'eq', iboNumber)
           .eq('status', 'launched')
+          .eq('user_id', adminId)
         if ((launched?.length || 0) >= 3) newLevel = 3
       }
     }

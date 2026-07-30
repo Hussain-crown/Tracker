@@ -160,7 +160,7 @@ export default function Candidates({level=1}:{level?:number}={}){
         const {candidates:data,logs}=await resp.json()
         setCandidates((data||[]) as Candidate[])
         setAllLogs((logs||[]) as ContactLog[])
-      }finally{setLoading(false)}
+      }catch(e){setLoadErr('Failed to load candidates')}finally{setLoading(false)}
     }
     load()
   },[refreshKey])

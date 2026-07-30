@@ -37,7 +37,8 @@ export const useTrackerLeadsStore = create<TrackerLeadsStore>((set) => ({
     let prev: Lead[] = []
     set(s => { prev = s.trackerLeads; return { trackerLeads: s.trackerLeads.filter(l => l.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('tracker_leads').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ trackerLeads: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('tracker_leads').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ trackerLeads: prev }); throw error }
   },
 }))

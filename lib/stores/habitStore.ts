@@ -69,7 +69,8 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
     let prev: Win[] = []
     set(s => { prev = s.wins; return { wins: s.wins.filter(w => w.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('wins').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ wins: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('wins').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ wins: prev }); throw error }
   },
 
