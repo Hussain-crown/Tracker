@@ -38,7 +38,8 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
     let prev: Candidate[] = []
     set(s => { prev = s.candidates; return { candidates: s.candidates.filter(c => c.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('candidates').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ candidates: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('candidates').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ candidates: prev }); throw error }
   },
 

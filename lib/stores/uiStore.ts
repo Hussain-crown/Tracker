@@ -104,7 +104,8 @@ export const useUIStore = create<UIStore>((set) => ({
     let prev: Resource[] = []
     set(s => { prev = s.resources; return { resources: s.resources.filter(r => r.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('resources').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ resources: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('resources').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ resources: prev }); throw error }
   },
 
@@ -129,7 +130,8 @@ export const useUIStore = create<UIStore>((set) => ({
     let prev: Audio[] = []
     set(s => { prev = s.audios; return { audios: s.audios.filter(a => a.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('audios').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ audios: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('audios').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ audios: prev }); throw error }
   },
 
@@ -154,7 +156,8 @@ export const useUIStore = create<UIStore>((set) => ({
     let prev: Task[] = []
     set(s => { prev = s.tasks; return { tasks: s.tasks.filter(t => t.id !== id) } })
     const { data: { user } } = await sb.auth.getUser()
-    const { error } = await sb.from('tasks').delete().eq('id', id).eq('user_id', user?.id ?? '')
+    if (!user?.id) { set({ tasks: prev }); throw new Error('not_authenticated') }
+    const { error } = await sb.from('tasks').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ tasks: prev }); throw error }
   },
 }))

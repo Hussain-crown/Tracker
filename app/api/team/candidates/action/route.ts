@@ -27,10 +27,12 @@ export async function POST(req: Request) {
     const { action, candidateId } = body
     if (!candidateId) return NextResponse.json({ error: 'missing candidateId' }, { status: 400 })
 
+    const adminId = process.env.ADMIN_USER_ID || ''
     const { data: candidate } = await sbAdmin
       .from('candidates')
       .select('id, name, stage, interview_notes, status')
       .eq('id', candidateId)
+      .eq('user_id', adminId)
       .maybeSingle()
 
     if (!candidate) return NextResponse.json({ error: 'not found' }, { status: 404 })

@@ -64,7 +64,8 @@ export async function DELETE(req: Request) {
     const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
     if (!requester || !adminEmail || requester.email !== adminEmail)
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    const body = await req.json()
+    let body: any
+    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
     if (!body.id || typeof body.id !== 'string') return NextResponse.json({ error: 'id required' }, { status: 400 })
     const adminId = await resolveAdminId()
     const { error } = await sb.from('team_resources').delete().eq('id', body.id).eq('admin_id', adminId)

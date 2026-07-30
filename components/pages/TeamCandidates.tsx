@@ -57,7 +57,7 @@ export default function TeamCandidates({level}:{level:number}){
         setCandidates(d.candidates||[])
         setLogs(d.logs||[])
         setMemberMap(d.memberMap||{})
-      }finally{setLoading(false)}
+      }catch(e){console.error('TeamCandidates load error:',e)}finally{setLoading(false)}
     }
     load()
   },[level])

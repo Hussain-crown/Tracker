@@ -100,7 +100,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   // Level 2 (entry tier) hides interruptions/convo/contact entirely from the UI.
   // Level >= 3 gets full field set.
   const FIELDS = useMemo(
-    () => level>=3 ? ALL_FIELDS : ALL_FIELDS.filter(f=>!LEVEL1_HIDDEN.includes(f.key)),
+    () => level>=2 ? ALL_FIELDS : ALL_FIELDS.filter(f=>!LEVEL1_HIDDEN.includes(f.key)),
     [level]
   )
 
@@ -228,7 +228,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
     Object.entries(coreForm.overrides).forEach(([k,v])=>{const n=parseInt(v as string,10)||0;if(n>0)(g.overrides as any)[k]=n})
     setCoreGoals(g)
-    try{await setMeta('core_goals_v4',JSON.stringify(g))}finally{setEditCore(false)}
+    try{await setMeta('core_goals_v4',JSON.stringify(g));setEditCore(false)}catch(e:any){console.error('saveCoreGoals failed:',e)}
   }
   async function saveBaseline(skip=false){
     setOnboardingSaving(true)
