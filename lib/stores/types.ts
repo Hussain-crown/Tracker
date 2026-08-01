@@ -21,6 +21,7 @@ export interface Lead {
 export interface Candidate {
   id: string; user_id: string; name: string; email: string; phone: string
   stage: string; source: string; interview_notes: string; status: string
+  sponsor_ibo?: string; booker_ibo?: string
   hxl_score?: number; hunger?: number; looking?: number
   relationship?: string; age_range?: string; life_stage?: string
   primary_driver?: string; pain_point?: string
@@ -35,6 +36,7 @@ export interface ContactLog {
   notes: string; fathom_link: string
   next_action: string; next_date: string
   created_at: string
+  objection?: string
 }
 
 export interface Partner {
