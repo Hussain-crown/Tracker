@@ -58,7 +58,7 @@ export async function GET(req: Request) {
       .select('id, name, ibo_number')
       .eq('user_id', adminId)
       .eq('ibo_number', ibo)
-      .eq('archived', false)
+      .not('archived', 'is', true)
       .limit(1)
 
     if (!partners?.length) {

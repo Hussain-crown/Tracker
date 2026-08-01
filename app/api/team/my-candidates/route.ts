@@ -37,7 +37,7 @@ export async function GET(req: Request) {
         .from('contact_logs')
         .select('id,entity_id,entity_name,outcome,notes,next_action,next_date,created_at,event_type,fathom_link,objection')
         .in('entity_id', ids)
-        .eq('user_id', adminId)
+        .eq('entity_type', 'candidate')
         .order('created_at', { ascending: false })
       logs = data || []
     }

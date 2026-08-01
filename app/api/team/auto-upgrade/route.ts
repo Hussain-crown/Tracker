@@ -27,7 +27,7 @@ export async function POST(req: Request) {
         .from('leads')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .eq('archived', false)
+        .not('archived', 'is', true)
       if ((count || 0) >= 100) newLevel = 2
     } else if (currentLevel === 2) {
       // L2 → L3: 3+ launched candidates
