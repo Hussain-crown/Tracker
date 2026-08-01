@@ -28,12 +28,14 @@ export async function GET() {
     }
     if (!adminId) return NextResponse.json({ goals: null })
 
-    // Read core_goals_v4 from admin's meta
-    const { data } = await sb.from('meta')
+    // Read core_goals_v4 from admin's meta — order+limit(1) tolerates duplicate rows
+    const { data: rows } = await sb.from('meta')
       .select('value')
       .eq('user_id', adminId)
       .eq('key', 'core_goals_v4')
-      .maybeSingle()
+      .order('updated_at', { ascending: false })
+      .limit(1)
+    const data = rows?.[0] ?? null
 
     if (!data?.value) return NextResponse.json({ goals: null })
     let goals: unknown
