@@ -254,7 +254,7 @@ export default function TrackPage(){
   )
 
   return(
-    <div style={{minHeight:'100vh',background:'#0d0d12',fontFamily:"'Sora',system-ui,sans-serif"}}>
+    <div style={{minHeight:'100vh',background:'#0d0d12',fontFamily:"'Sora',system-ui,sans-serif",paddingTop:'env(safe-area-inset-top)',paddingLeft:'env(safe-area-inset-left)',paddingRight:'env(safe-area-inset-right)',boxSizing:'border-box' as const}}>
 
       {/* ── SYSTEM BANNERS ──────────────────────────────────── */}
       {isOffline&&(
