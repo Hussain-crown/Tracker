@@ -10,6 +10,7 @@ import Resources from '@/components/pages/Resources'
 import PersonalDev from '@/components/pages/PersonalDev'
 import { now } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
+import { usePushSubscription } from '@/lib/usePush'
 
 const GOLD='#C8A24A'
 
@@ -100,6 +101,8 @@ export default function TrackPage(){
     document.addEventListener('visibilitychange',onVisible)
     return()=>document.removeEventListener('visibilitychange',onVisible)
   },[userId,loadAll])
+
+  usePushSubscription(userId)
 
   // Supabase Realtime — live habit updates without page refresh.
   // NOTE: Supabase Realtime must be enabled on the project for these subscriptions to work.
@@ -388,7 +391,7 @@ export default function TrackPage(){
 
         {tab==='training'&&<Training/>}
         {tab==='resources'&&<Resources/>}
-        {tab==='personaldev'&&<PersonalDev/>}
+        {tab==='personaldev'&&<PersonalDev adminGoals={adminGoals}/>}
 
       </div>
 

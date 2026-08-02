@@ -41,9 +41,20 @@ interface Goal {
 }
 interface Note { id:string; title:string; text:string; created_at:string }
 
-type Tab='vision'|'reading'|'notes'
+type Tab='vision'|'reading'|'notes'|'corerun'
 
-export default function PersonalDev(){
+const CORE_RUN_METRICS: {key:string;label:string;desc:string}[] = [
+  {key:'convo',       label:'Convos',      desc:'New conversations started'},
+  {key:'mpa',         label:'MPAs',        desc:'Major Plan of Action presentations'},
+  {key:'contact',     label:'Contacts',    desc:'Existing contacts followed up'},
+  {key:'pre_filter',  label:'Pre-Filters', desc:'Pre-filter interviews done'},
+  {key:'mg1',         label:'MG1s',        desc:'MG1 interviews booked/done'},
+  {key:'catch_up',    label:'Catch-Ups',   desc:'Catch-up meetings done'},
+  {key:'dtm',         label:'DTMs',        desc:'DTMs / events invited to'},
+  {key:'launch',      label:'Launches',    desc:'Business launches done'},
+]
+
+export default function PersonalDev({adminGoals}:{adminGoals?:any}){
   const { resources, userId, upsertResource, deleteResource,
           loadResources, habits, getMeta, setMeta } = useStore()
 
@@ -66,6 +77,8 @@ export default function PersonalDev(){
   const [nForm,setNForm]     = useState({title:'',text:''})
   const [nSearch,setNSearch] = useState('')
 
+  const [coreRunGoals,setCoreRunGoals] = useState<Record<string,number>>({})
+
   // action checkins: { [date]: { [stepId]: boolean } }
   const [actionCheckins,setActionCheckins] = useState<Record<string,Record<string,boolean>>>({})
 
@@ -74,7 +87,14 @@ export default function PersonalDev(){
     getMeta('pd_goals').then(v=>{ if(v)try{setGoals(JSON.parse(v))}catch{} })
     getMeta('pd_notes').then(v=>{ if(v)try{setNotes(JSON.parse(v))}catch{} })
     getMeta('pd_action_checkins').then(v=>{ if(v)try{setActionCheckins(JSON.parse(v))}catch{} })
+    getMeta('member_core_goals').then(v=>{ if(v)try{setCoreRunGoals(JSON.parse(v))}catch{} })
   },[]) // eslint-disable-line
+
+  async function saveCoreRunGoals(next:Record<string,number>){
+    setCoreRunGoals(next)
+    try{ await setMeta('member_core_goals',JSON.stringify(next)) }
+    catch(e){ console.error('saveCoreRunGoals failed:',e) }
+  }
 
   async function saveGoals(next:Goal[]){ const prev=goals; setGoals(next); try{await setMeta('pd_goals',JSON.stringify(next))}catch(e){console.error('saveGoals failed:',e);setGoals(prev)} }
   async function saveNotes(next:Note[]){ const prev=notes; setNotes(next); try{await setMeta('pd_notes',JSON.stringify(next))}catch(e){console.error('saveNotes failed:',e);setNotes(prev)} }
@@ -182,21 +202,24 @@ export default function PersonalDev(){
   const statusColor=(s:string)=>s==='done'?GREEN:s==='reading'?GOLD:'var(--text3)'
 
   const TABS=[
-    {id:'vision'  as const, label:'🎯 Vision'},
-    {id:'reading' as const, label:'📚 Reading'},
-    {id:'notes'   as const, label:'📝 Notes'},
+    {id:'vision'   as const, label:'🎯 Vision'},
+    {id:'corerun'  as const, label:'⚡ Core Run'},
+    {id:'reading'  as const, label:'📚 Reading'},
+    {id:'notes'    as const, label:'📝 Notes'},
   ]
 
   return(
     <ErrorBoundary label="PersonalDev">
     <div style={{animation:'fade-in 0.3s ease',paddingBottom:60}}>
 
-      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
-        <button onClick={()=>{tab==='reading'?openResAdd():tab==='notes'?setNModal(true):openGoalAdd()}}
-          style={{padding:'8px 16px',borderRadius:'var(--r)',border:'none',background:'linear-gradient(135deg,var(--gold3),var(--gold))',color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
-          + Add {tab==='reading'?'Resource':tab==='notes'?'Note':'Goal'}
-        </button>
-      </div>
+      {tab!=='corerun'&&(
+        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
+          <button onClick={()=>{tab==='reading'?openResAdd():tab==='notes'?setNModal(true):openGoalAdd()}}
+            style={{padding:'8px 16px',borderRadius:'var(--r)',border:'none',background:'linear-gradient(135deg,var(--gold3),var(--gold))',color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
+            + Add {tab==='reading'?'Resource':tab==='notes'?'Note':'Goal'}
+          </button>
+        </div>
+      )}
 
       <div style={{display:'flex',gap:3,marginBottom:16,background:'var(--s1)',borderRadius:'var(--r2)',padding:4,border:'1px solid var(--br)',overflowX:'auto' as const}}>
         {TABS.map(t=>{
@@ -327,6 +350,45 @@ export default function PersonalDev(){
               )
             })
           }
+        </div>
+      )}
+
+      {/* ═══ CORE RUN TAB ═════════════════════════════════ */}
+      {tab==='corerun'&&(
+        <div>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px',marginBottom:14}}>
+            <div style={SL}>Daily Activity Goals — Set Your Targets</div>
+            <div style={{fontSize:10,color:'var(--text4)',marginBottom:12,lineHeight:1.6}}>
+              Set your personal daily targets for each habit metric. Your upline's targets are shown as a reference guide.
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {CORE_RUN_METRICS.map(m=>{
+                const myVal = coreRunGoals[m.key] ?? 0
+                const adminVal = adminGoals?.[m.key] ?? null
+                return(
+                  <div key={m.key} style={{background:'var(--s0)',border:'1px solid var(--br)',borderRadius:'var(--r)',padding:'12px'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:GOLD,letterSpacing:'1px',textTransform:'uppercase' as const,marginBottom:2}}>{m.label}</div>
+                    <div style={{fontSize:9,color:'var(--text4)',marginBottom:8}}>{m.desc}</div>
+                    {adminVal!==null&&(
+                      <div style={{fontSize:9,color:'var(--text3)',marginBottom:6}}>Target: <span style={{color:GOLD,fontWeight:700}}>{adminVal}/day</span></div>
+                    )}
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <button
+                        onClick={()=>saveCoreRunGoals({...coreRunGoals,[m.key]:Math.max(0,(coreRunGoals[m.key]??0)-1)})}
+                        style={{width:28,height:28,borderRadius:'var(--r)',border:'1px solid var(--br2)',background:'var(--s2)',color:'var(--text)',cursor:'pointer',fontSize:16,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>−</button>
+                      <div style={{flex:1,textAlign:'center' as const,fontSize:20,fontWeight:800,color:myVal>0?GOLD:'var(--text4)',fontFamily:"'Sora',sans-serif"}}>{myVal}</div>
+                      <button
+                        onClick={()=>saveCoreRunGoals({...coreRunGoals,[m.key]:(coreRunGoals[m.key]??0)+1})}
+                        style={{width:28,height:28,borderRadius:'var(--r)',border:'1px solid var(--br2)',background:'var(--s2)',color:'var(--text)',cursor:'pointer',fontSize:16,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>+</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <div style={{background:'rgba(200,162,74,0.05)',border:'1px solid rgba(200,162,74,0.15)',borderRadius:'var(--r2)',padding:'12px 14px',fontSize:10,color:'var(--text3)',lineHeight:1.6}}>
+            These targets appear on your Habits tab to guide your daily activity. They are personal to you and not visible to others.
+          </div>
         </div>
       )}
 
