@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { getSbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,13 +19,12 @@ export async function GET(req: Request) {
     const iboNumber = member?.ibo_number || ''
     if (!iboNumber) return NextResponse.json({ candidates: [], logs: [], iboNumber: '' })
 
-    const adminId = process.env.ADMIN_USER_ID || ''
-    if (!adminId) return NextResponse.json({ error: 'configuration_error', candidates: [], logs: [], iboNumber }, { status: 500 })
+    const adminId = await resolveAdminId()
 
     const { data: candidates } = await sbAdmin
       .from('candidates')
       .select('*')
-      .filter('interview_notes->>_sponsor_ibo', 'eq', iboNumber)
+      .eq('sponsor_ibo', iboNumber)
       .eq('user_id', adminId)
       .order('created_at', { ascending: false })
 

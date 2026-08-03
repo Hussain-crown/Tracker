@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase as sb } from '@/lib/supabase/client'
+import { authFetch } from '@/lib/authFetch'
 import type { Candidate, ContactLog } from './types'
 
 interface CandidateStore {
@@ -14,12 +15,11 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
   candidates: [],
 
   loadCandidates: async () => {
-    const { data: { user } } = await sb.auth.getUser()
-    const userId = user?.id ?? ''
-    if (!userId) return
     try {
-      const { data } = await sb.from('candidates').select('*').eq('user_id', userId).order('created_at', { ascending: false })
-      set({ candidates: (data ?? []) as Candidate[] })
+      const res = await authFetch('/api/team/my-candidates')
+      if (!res.ok) return
+      const d = await res.json()
+      set({ candidates: (d.candidates ?? []) as Candidate[] })
     } catch (e) { console.error(e) }
   },
 
