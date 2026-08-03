@@ -33,14 +33,22 @@ export async function resolveAdminId(fallback = ''): Promise<string> {
   if (envId) return envId
   if (fallback) return fallback
   const adminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
-  if (!adminEmail) return ''
-  let page = 1
-  while (page <= 20) {
-    const { data } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
-    const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
-    if (found) return found.id
-    if ((data?.users || []).length < 50) break
-    page++
+  if (adminEmail) {
+    let page = 1
+    while (page <= 20) {
+      const { data } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
+      const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
+      if (found) return found.id
+      if ((data?.users || []).length < 50) break
+      page++
+    }
   }
-  return ''
+  // Final fallback: look up the admin via the meta table (same approach as book routes)
+  const { data: metaRow } = await sbAdmin
+    .from('meta')
+    .select('user_id')
+    .in('key', ['booking_zoom_link', 'booking_display_name', 'booking_admin_email'])
+    .order('updated_at', { ascending: false })
+    .limit(1)
+  return metaRow?.[0]?.user_id ?? ''
 }
