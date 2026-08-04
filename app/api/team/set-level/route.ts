@@ -15,8 +15,8 @@ export async function POST(req: Request) {
     try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
     const userId = body?.userId
     const level = Number(body.level)
-    if (!userId || typeof userId !== 'string' || !Number.isFinite(level) || !Number.isInteger(level) || level < 1 || level > 4) {
-      return NextResponse.json({ error: 'userId (string) and level (1-4) required' }, { status: 400 })
+    if (!userId || typeof userId !== 'string' || !Number.isFinite(level) || !Number.isInteger(level) || level < 1 || level > 2) {
+      return NextResponse.json({ error: 'userId (string) and level (1-2) required' }, { status: 400 })
     }
 
     const { data: existing } = await sb.from('team_members').select('user_id').eq('user_id', userId).maybeSingle()

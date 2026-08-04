@@ -7,7 +7,6 @@ import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
 import Training from '@/components/pages/Training'
 import Resources from '@/components/pages/Resources'
-import PersonalDev from '@/components/pages/PersonalDev'
 import { now } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
 import { usePushSubscription } from '@/lib/usePush'
@@ -24,12 +23,11 @@ const MILESTONES=[
   {days:90, emoji:'💎', msg:"90 days. This is who you are now."},
 ]
 
-type NavId='pipeline'|'candidates'|'habits'|'training'|'resources'|'personaldev'
+type NavId='pipeline'|'candidates'|'habits'|'training'|'resources'
 const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
   {id:'habits',      icon:'◎',  label:'Habits',        minLevel:2},
   {id:'pipeline',    icon:'◆',  label:'Prospects',     minLevel:1},
   {id:'candidates',  icon:'◇',  label:'Candidates',    minLevel:2},
-  {id:'personaldev', icon:'🌱', label:'Personal Dev',  minLevel:1},
   {id:'training',    icon:'📚', label:'Training',      minLevel:1},
   {id:'resources',   icon:'📖', label:'Resources',     minLevel:2},
 ]
@@ -391,7 +389,6 @@ export default function TrackPage(){
 
         {tab==='training'&&<Training/>}
         {tab==='resources'&&<Resources/>}
-        {tab==='personaldev'&&<PersonalDev adminGoals={adminGoals}/>}
 
       </div>
 

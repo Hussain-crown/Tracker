@@ -121,9 +121,9 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,
       {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
-        {level>=3&&onLog&&<button onClick={e=>{e.stopPropagation();onLog(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Log</button>}
-        {level>=3&&onAdvance&&STAGE_CFG[normaliseStage(c.stage)].next&&<button onClick={e=>{e.stopPropagation();onAdvance(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Advance →</button>}
-        {level>=3&&onDq&&<button onClick={e=>{e.stopPropagation();onDq(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}40`,background:`${RED}10`,color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>DQ</button>}
+        {level>=2&&onLog&&<button onClick={e=>{e.stopPropagation();onLog(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Log</button>}
+        {level>=2&&onAdvance&&STAGE_CFG[normaliseStage(c.stage)].next&&<button onClick={e=>{e.stopPropagation();onAdvance(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Advance →</button>}
+        {level>=2&&onDq&&<button onClick={e=>{e.stopPropagation();onDq(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}40`,background:`${RED}10`,color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>DQ</button>}
       </div>
     </div>
   )

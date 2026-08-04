@@ -545,9 +545,9 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
           {/* Level badge */}
           {(()=>{
-            const lvName=level>=3?'Active':level>=2?'Entry Tier':'Training'
-            const lvColor=level>=3?GREEN:level>=2?GOLD:TEAL
-            const lvNext=level===1?'100 active prospects → Level 2':level===2?'3 launched partners → Level 3':'Maximum level'
+            const lvName=level>=2?'Active':'Training'
+            const lvColor=level>=2?GREEN:TEAL
+            const lvNext=level===1?'100 active prospects → Level 2':'Maximum level'
             return(
               <div style={{marginBottom:12,padding:'10px 14px',background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r)'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
