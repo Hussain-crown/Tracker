@@ -18,8 +18,8 @@ export async function POST(req: Request) {
       .eq('user_id', user.id)
       .maybeSingle() as { data: { level: number; ibo_number: string } | null }
 
-    if (!member || (member.level || 1) < 3) {
-      return NextResponse.json({ error: 'Level 3 required' }, { status: 403 })
+    if (!member || (member.level || 1) < 2) {
+      return NextResponse.json({ error: 'Level 2 required' }, { status: 403 })
     }
 
     let body: any
@@ -116,6 +116,39 @@ export async function POST(req: Request) {
         outcome: 'Negative',
         notes: reason || 'Disqualified',
         event_type: 'disqualified',
+        created_at: now,
+      })
+      return NextResponse.json({ ok: true })
+    }
+
+    if (action === 'update_notes') {
+      const { notes: newNotes } = body
+      const merged = JSON.stringify({ ...notes, __notes: typeof newNotes === 'string' ? newNotes : '' })
+      const { error: notesErr } = await sbAdmin.from('candidates').update({ interview_notes: merged, updated_at: now }).eq('id', candidateId)
+      if (notesErr) { console.error('update_notes failed:', notesErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
+      return NextResponse.json({ ok: true })
+    }
+
+    if (action === 'launch') {
+      if (candidate.status !== 'active') return NextResponse.json({ error: 'candidate not active' }, { status: 400 })
+      const stageHistory = notes._stage_history || []
+      stageHistory.push({ stage: candidate.stage as string, date: now.slice(0, 10) })
+      const merged = JSON.stringify({ ...notes, _launched_at: now.slice(0, 10), _stage_history: stageHistory, _next_meeting: null })
+      const { error: launchErr } = await sbAdmin.from('candidates').update({
+        status: 'launched',
+        interview_notes: merged,
+        updated_at: now,
+      }).eq('id', candidateId)
+      if (launchErr) { console.error('launch update failed:', launchErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
+      await sbAdmin.from('contact_logs').insert({
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        entity_type: 'candidate',
+        entity_id: candidateId,
+        entity_name: (candidate as any).name || candidateId,
+        outcome: 'Positive',
+        notes: 'Launched as team member',
+        event_type: 'launched',
         created_at: now,
       })
       return NextResponse.json({ ok: true })

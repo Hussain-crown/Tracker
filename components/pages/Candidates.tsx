@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { buildPreCallBrief } from '@/lib/aiText'
 import type { Candidate, ContactLog } from '@/lib/stores/types'
@@ -52,6 +52,15 @@ function healthScore(c:Candidate, lastContact:string):number{
 }
 function healthColor(s:number){return s>=70?GREEN:s>=45?GOLD:RED}
 
+function nextBestAction(c:Candidate,daysInStage:number,lastOutcome?:string):{label:string;urgent:boolean}{
+  const stage=normaliseStage(c.stage)
+  const FU=FU_STAGES.includes(stage)
+  if(daysInStage>=21&&FU)return{label:'⚠ Stalling — close or DQ',urgent:true}
+  if(lastOutcome==='No Show')return{label:'↻ No-show — rebook needed',urgent:true}
+  if(FU&&daysInStage>=14)return{label:`📞 Follow up now — ${daysInStage}d`,urgent:true}
+  return{label:`→ ${STAGE_CFG[stage].nextAction}`,urgent:false}
+}
+
 const TZ='Australia/Brisbane'
 function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
 function fmtTime(iso:string){return new Date(iso).toLocaleTimeString('en-AU',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:TZ})}
@@ -71,9 +80,10 @@ interface CardProps{
   onLog?:(c:Candidate)=>void
   onAdvance?:(c:Candidate)=>void
   onDq?:(c:Candidate)=>void
+  onLaunch?:(c:Candidate)=>void
   isDupe?:boolean
 }
-function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,onAdvance,onDq,isDupe}:CardProps){
+function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,onAdvance,onDq,onLaunch,isDupe}:CardProps){
   const todayStr=new Date().toISOString().slice(0,10)
   const stage=normaliseStage(c.stage)
   const cfg=STAGE_CFG[stage]
@@ -114,15 +124,18 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,
           <div style={{fontSize:8,color:'var(--text4)'}}>health</div>
         </div>
       </div>
-      <div style={{fontSize:11,color:'var(--text3)',marginBottom:8,fontWeight:600}}>→ {cfg.nextAction}</div>
-      {nextMeeting&&<div style={{fontSize:10,color:GOLD,marginBottom:6,padding:'2px 8px',background:'rgba(200,162,74,0.1)',borderRadius:'var(--r)',display:'inline-block'}}>📅 {nextMeeting.type} booked · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</div>}
+      {(()=>{const nba=nextBestAction(c,daysInStage,lastLog?.outcome);return<div style={{marginBottom:8,padding:'5px 10px',borderRadius:'var(--r)',background:nba.urgent?'rgba(224,85,85,0.07)':'var(--s2)',border:`1px solid ${nba.urgent?RED+'30':'var(--br)'}`,display:'inline-block'}}><span style={{fontSize:11,fontWeight:700,color:nba.urgent?RED:'var(--text2)'}}>{nba.label}</span></div>})()}
+      {nextMeeting&&<div style={{fontSize:10,color:GOLD,marginBottom:6,padding:'2px 8px',background:'rgba(200,162,74,0.1)',borderRadius:'var(--r)',display:'inline-block',marginLeft:6}}>📅 {nextMeeting.type} booked · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</div>}
       {objection&&objection!=='None'&&<div style={{fontSize:10,color:RED,marginBottom:6,padding:'2px 8px',background:'rgba(224,85,85,0.08)',borderRadius:'var(--r)',display:'inline-block'}}>Objection: {objection}</div>}
       {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,70)}{c.pain_point.length>70?'…':''}"</div>}
       {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
         {level>=2&&onLog&&<button onClick={e=>{e.stopPropagation();onLog(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Log</button>}
-        {level>=2&&onAdvance&&STAGE_CFG[normaliseStage(c.stage)].next&&<button onClick={e=>{e.stopPropagation();onAdvance(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Advance →</button>}
+        {level>=2&&stage==='Offer Call'&&onLaunch
+          ?<button onClick={e=>{e.stopPropagation();onLaunch(c)}} style={{padding:'7px 14px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},#3da872)`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>🚀 Launch</button>
+          :level>=2&&onAdvance&&STAGE_CFG[stage].next&&<button onClick={e=>{e.stopPropagation();onAdvance(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Advance →</button>
+        }
         {level>=2&&onDq&&<button onClick={e=>{e.stopPropagation();onDq(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}40`,background:`${RED}10`,color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>DQ</button>}
       </div>
     </div>
@@ -148,6 +161,10 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [dqReason,setDqReason]     = useState('')
   const [actionLoading,setActionLoading] = useState(false)
   const [loadErr,setLoadErr]           = useState('')
+  const [notesValue,setNotesValue]     = useState('')
+  const [notesSaving,setNotesSaving]   = useState(false)
+  const [launchConfirm,setLaunchConfirm] = useState<Candidate|null>(null)
+  const notesTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
 
   useEffect(()=>{
     async function load(){
@@ -164,6 +181,23 @@ export default function Candidates({level=1}:{level?:number}={}){
     }
     load()
   },[refreshKey])
+
+  useEffect(()=>{
+    if(notesTimerRef.current){clearTimeout(notesTimerRef.current);notesTimerRef.current=null}
+    setNotesValue(detail?getNotes(detail):'')
+  },[detail?.id]) // eslint-disable-line
+
+  function handleNotesChange(val:string){
+    setNotesValue(val)
+    if(notesTimerRef.current)clearTimeout(notesTimerRef.current)
+    notesTimerRef.current=setTimeout(async()=>{
+      if(!detail)return
+      setNotesSaving(true)
+      try{await callAction('update_notes',detail.id,{notes:val})}catch{}
+      setNotesSaving(false)
+      notesTimerRef.current=null
+    },1200)
+  }
 
   async function callAction(action:string,candidateId:string,payload:Record<string,unknown>){
     const {data:{session}}=await supabase.auth.getSession()
@@ -270,7 +304,7 @@ export default function Candidates({level=1}:{level?:number}={}){
     setBriefLoading(false)
   }
 
-  const cardProps={contactLogs:allLogs,scores,onView:openView,level,onLog:setLogModal,onAdvance:setAdvanceModal,onDq:setDqModal}
+  const cardProps={contactLogs:allLogs,scores,onView:openView,level,onLog:setLogModal,onAdvance:setAdvanceModal,onDq:setDqModal,onLaunch:setLaunchConfirm}
 
   if(loading)return<div style={{padding:'48px',textAlign:'center',color:'var(--text4)',fontSize:12}}>Loading candidates…</div>
 
@@ -610,8 +644,11 @@ export default function Candidates({level=1}:{level?:number}={}){
                     ))}
                   </div>
                   {detail.pain_point&&<div style={{marginBottom:12,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}><div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div><div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{detail.pain_point}"</div></div>}
-                  <div style={SL}>Notes</div>
-                  <textarea value={getNotes(detail)} readOnly rows={5} placeholder="No notes yet" style={{...INP,resize:'vertical',fontSize:12,cursor:'default'}}/>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
+                    <div style={SL}>Notes</div>
+                    {notesSaving&&<span style={{fontSize:9,color:'var(--text4)'}}>Saving…</span>}
+                  </div>
+                  <textarea value={notesValue} onChange={e=>handleNotesChange(e.target.value)} rows={5} placeholder="Add notes…" style={{...INP,resize:'vertical',fontSize:12}}/>
                 </div>
               )}
 
@@ -630,7 +667,6 @@ export default function Candidates({level=1}:{level?:number}={}){
                           <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
                         </div>
                         {log.notes&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.5}}>{log.notes}</div>}
-                        {log.fathom_link&&<a href={log.fathom_link} target="_blank" rel="noopener noreferrer" style={{fontSize:10,color:'#8B5CF6',textDecoration:'none',marginTop:2,display:'block'}}>▶ Fathom recording</a>}
                         {log.next_action&&<div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>Next: {log.next_action}{log.next_date?` · ${fmtDate(log.next_date)}`:''}</div>}
                       </div>
                     ))
@@ -690,6 +726,26 @@ export default function Candidates({level=1}:{level?:number}={}){
           </div>
         </div>
       )}
+      {/* ── LAUNCH CONFIRM MODAL ── */}
+      {launchConfirm&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setLaunchConfirm(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>🚀 Launch Candidate</div>
+            <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{launchConfirm.name}</div>
+            <div style={{fontSize:13,color:'var(--text2)',marginBottom:24,lineHeight:1.6}}>This marks <strong>{launchConfirm.name}</strong> as a launched team member. This cannot be undone.</div>
+            <div style={{display:'flex',gap:8}}>
+              <button disabled={actionLoading} onClick={async()=>{
+                setActionLoading(true)
+                try{const r=await callAction('launch',launchConfirm.id,{});if(r?.error)throw new Error(r.error);setLaunchConfirm(null);setRefreshKey(k=>k+1)}catch(e:any){alert('Launch failed: '+(e?.message||'Unknown error'))}finally{setActionLoading(false)}
+              }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},#3da872)`,color:'#fff',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
+                {actionLoading?'Launching…':'🚀 Confirm Launch'}
+              </button>
+              <button onClick={()=>setLaunchConfirm(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
     </ErrorBoundary>
   )
