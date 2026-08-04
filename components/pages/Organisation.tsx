@@ -14,8 +14,10 @@ export default function Organisation(){
   const {partners,loadPartners}=useStore()
   const [search,setSearch]=useState('')
   const [detail,setDetail]=useState<Partner|null>(null)
+  const [loading,setLoading]=useState(true)
 
-  useEffect(()=>{loadPartners()},[])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(()=>{loadPartners().finally(()=>setLoading(false))},[])
 
   const active=useMemo(()=>partners.filter(p=>!p.archived),[partners])
   const filtered=useMemo(()=>{
@@ -56,7 +58,10 @@ export default function Organisation(){
         style={{width:'100%',boxSizing:'border-box' as const,background:'#13131a',border:'1px solid #1f1f28',borderRadius:8,padding:'9px 12px',color:'#ddd',fontSize:13,fontFamily:'inherit',outline:'none',marginBottom:12}}/>
 
       {/* Partner list */}
-      {filtered.length===0&&(
+      {loading&&(
+        <div style={{textAlign:'center' as const,color:'#555',fontSize:13,paddingTop:40}}>Loading…</div>
+      )}
+      {!loading&&filtered.length===0&&(
         <div style={{textAlign:'center' as const,color:'#555',fontSize:13,paddingTop:40}}>No partners yet</div>
       )}
       {filtered.map(p=>{

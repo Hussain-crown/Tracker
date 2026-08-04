@@ -12,11 +12,15 @@ export async function POST(req: Request) {
 
     const sbAdmin = getSbAdmin()
 
-    const { data: member } = await sbAdmin
+    const { data: member, error: memberErr } = await sbAdmin
       .from('team_members')
       .select('level, ibo_number')
       .eq('user_id', user.id)
-      .maybeSingle() as { data: { level: number; ibo_number: string } | null }
+      .maybeSingle()
+    if (memberErr) {
+      console.error('team_members fetch failed:', memberErr)
+      return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+    }
 
     if (!member || (member.level || 1) < 2) {
       return NextResponse.json({ error: 'Level 2 required' }, { status: 403 })
@@ -28,24 +32,28 @@ export async function POST(req: Request) {
     if (!candidateId) return NextResponse.json({ error: 'missing candidateId' }, { status: 400 })
 
     const adminId = process.env.ADMIN_USER_ID || ''
-    const { data: candidate } = await sbAdmin
+    if (!adminId) return NextResponse.json({ error: 'configuration_error' }, { status: 500 })
+    const { data: candidate, error: candidateErr } = await sbAdmin
       .from('candidates')
-      .select('id, name, stage, interview_notes, status')
+      .select('id, name, stage, interview_notes, status, sponsor_ibo')
       .eq('id', candidateId)
       .eq('user_id', adminId)
       .maybeSingle()
-
+    if (candidateErr) {
+      console.error('candidate fetch failed:', candidateErr)
+      return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+    }
     if (!candidate) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!candidate.sponsor_ibo) {
+      return NextResponse.json({ error: 'unassigned_candidate' }, { status: 403 })
+    }
+    if (candidate.sponsor_ibo !== member.ibo_number) {
+      return NextResponse.json({ error: 'not your candidate' }, { status: 403 })
+    }
 
     let notes: any = {}
     const raw = candidate.interview_notes
     try { notes = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw ?? {}) } catch {}
-    if (notes._sponsor_ibo == null) {
-      return NextResponse.json({ error: 'unassigned_candidate' }, { status: 403 })
-    }
-    if (notes._sponsor_ibo !== member.ibo_number) {
-      return NextResponse.json({ error: 'not your candidate' }, { status: 403 })
-    }
 
     const now = new Date().toISOString()
 
@@ -70,7 +78,13 @@ export async function POST(req: Request) {
     }
 
     if (action === 'advance_stage') {
-      const idx = STAGES.indexOf(candidate.stage as string)
+      const STAGE_ALIASES: Record<string,string> = {
+        'PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1',
+        'MG2 Booked':'MG2','MG2 Completed':'MG2','Follow-Up':'FU1',
+        'Offer':'Offer Call','Review':'Offer Call',
+      }
+      const effectiveStage = STAGE_ALIASES[candidate.stage as string] ?? (candidate.stage as string)
+      const idx = STAGES.indexOf(effectiveStage)
       const nextStage = idx >= 0 && idx < STAGES.length - 1 ? STAGES[idx + 1] : null
       if (!nextStage) return NextResponse.json({ error: 'already at final stage' }, { status: 400 })
 

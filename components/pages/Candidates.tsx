@@ -163,6 +163,7 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [loadErr,setLoadErr]           = useState('')
   const [notesValue,setNotesValue]     = useState('')
   const [notesSaving,setNotesSaving]   = useState(false)
+  const [notesSaveErr,setNotesSaveErr] = useState('')
   const [launchConfirm,setLaunchConfirm] = useState<Candidate|null>(null)
   const notesTimerRef = useRef<ReturnType<typeof setTimeout>|null>(null)
 
@@ -185,7 +186,12 @@ export default function Candidates({level=1}:{level?:number}={}){
   useEffect(()=>{
     if(notesTimerRef.current){clearTimeout(notesTimerRef.current);notesTimerRef.current=null}
     setNotesValue(detail?getNotes(detail):'')
+    return ()=>{ if(notesTimerRef.current)clearTimeout(notesTimerRef.current) }
   },[detail?.id]) // eslint-disable-line
+
+  useEffect(()=>{
+    if(detail){const fresh=candidates.find(c=>c.id===detail.id);if(fresh)setDetail(fresh)}
+  },[candidates]) // eslint-disable-line
 
   function handleNotesChange(val:string){
     setNotesValue(val)
@@ -193,7 +199,8 @@ export default function Candidates({level=1}:{level?:number}={}){
     notesTimerRef.current=setTimeout(async()=>{
       if(!detail)return
       setNotesSaving(true)
-      try{await callAction('update_notes',detail.id,{notes:val})}catch{}
+      setNotesSaveErr('')
+      try{await callAction('update_notes',detail.id,{notes:val})}catch{setNotesSaveErr('Notes failed to save — please try again')}
       setNotesSaving(false)
       notesTimerRef.current=null
     },1200)
@@ -307,6 +314,8 @@ export default function Candidates({level=1}:{level?:number}={}){
   const cardProps={contactLogs:allLogs,scores,onView:openView,level,onLog:setLogModal,onAdvance:setAdvanceModal,onDq:setDqModal,onLaunch:setLaunchConfirm}
 
   if(loading)return<div style={{padding:'48px',textAlign:'center',color:'var(--text4)',fontSize:12}}>Loading candidates…</div>
+
+  if(loadErr)return<div style={{padding:'48px',textAlign:'center',color:RED}}>{loadErr}</div>
 
   return(
     <ErrorBoundary label="Candidates">
@@ -649,6 +658,7 @@ export default function Candidates({level=1}:{level?:number}={}){
                     {notesSaving&&<span style={{fontSize:9,color:'var(--text4)'}}>Saving…</span>}
                   </div>
                   <textarea value={notesValue} onChange={e=>handleNotesChange(e.target.value)} rows={5} placeholder="Add notes…" style={{...INP,resize:'vertical',fontSize:12}}/>
+                  {notesSaveErr&&<div style={{fontSize:10,color:'var(--red,#e05)',marginTop:3}}>{notesSaveErr}</div>}
                 </div>
               )}
 

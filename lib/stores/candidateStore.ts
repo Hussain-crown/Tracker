@@ -5,6 +5,8 @@ import type { Candidate, ContactLog } from './types'
 
 interface CandidateStore {
   candidates: Candidate[]
+  isError: boolean
+  errorMessage: string | null
   loadCandidates: () => Promise<void>
   upsertCandidate: (c: Candidate) => Promise<void>
   deleteCandidate: (id: string) => Promise<void>
@@ -13,14 +15,23 @@ interface CandidateStore {
 
 export const useCandidateStore = create<CandidateStore>((set) => ({
   candidates: [],
+  isError: false,
+  errorMessage: null,
 
   loadCandidates: async () => {
     try {
       const res = await authFetch('/api/team/my-candidates')
-      if (!res.ok) return
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error || res.statusText)
+      }
       const d = await res.json()
-      set({ candidates: (d.candidates ?? []) as Candidate[] })
-    } catch (e) { console.error(e) }
+      set({ candidates: (d.candidates ?? []) as Candidate[], isError: false, errorMessage: null })
+    } catch (e) {
+      console.error(e)
+      set({ isError: true, errorMessage: e instanceof Error ? e.message : String(e) })
+      throw e
+    }
   },
 
   upsertCandidate: async (c) => {
@@ -30,8 +41,8 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
       const idx = s.candidates.findIndex(x => x.id === c.id)
       return { candidates: idx >= 0 ? s.candidates.map(x => x.id === c.id ? c : x) : [c, ...s.candidates] }
     })
-    const { error } = await sb.from('candidates').upsert(c as unknown as Record<string, unknown>, { onConflict: 'id' })
-    if (error) { set({ candidates: prev }); throw error }
+    const res = await authFetch('/api/team/candidates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
+    if (!res.ok) { set({ candidates: prev }); throw new Error(await res.text()) }
   },
 
   deleteCandidate: async (id) => {

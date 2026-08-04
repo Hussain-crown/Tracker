@@ -331,7 +331,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     let list=filter==='archived'?archived:active.filter(l=>filter==='all'||l.stage===filter)
     if(search)list=list.filter(l=>l.name.toLowerCase().includes(search.toLowerCase())||l.phone?.includes(search)||l.instagram?.includes(search))
     return [...list].sort((a,b)=>{
-      if(sortBy==='overdue')return(isOverdue(b)?1:0)-(isOverdue(a)?1:0)||daysSince(a.next_action_date||a.updated_at)-daysSince(b.next_action_date||b.updated_at)
+      if(sortBy==='overdue')return(isOverdue(b)?1:0)-(isOverdue(a)?1:0)||daysSince(b.next_action_date||b.updated_at)-daysSince(a.next_action_date||a.updated_at)
       if(sortBy==='score')return hxl(b.hunger,b.looking)-hxl(a.hunger,a.looking)
       if(sortBy==='stale')return daysSince(b.updated_at)-daysSince(a.updated_at)
       return b.created_at.localeCompare(a.created_at)
@@ -433,7 +433,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   async function convertToCandidate(){
     const l=bookPFModal;if(!l||!userId)return
     const ok=await safeWrite(async()=>{
-      await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({_sponsor_ibo:iboNumber}),status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
+      await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({}),status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
       await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline to Candidate — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
       await deleteLead(l.id)
     },'Conversion failed')

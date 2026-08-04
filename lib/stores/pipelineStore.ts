@@ -63,7 +63,13 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
       let q = sb.from('contact_logs').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(1000)
       if (entityId) q = (q as any).eq('entity_id', entityId)
       const { data } = await q
-      if (data) set({ contactLogs: data as ContactLog[] })
+      if (data) {
+        if (entityId) {
+          set(s => ({ contactLogs: [...data as ContactLog[], ...s.contactLogs.filter(l => l.entity_id !== entityId)] }))
+        } else {
+          set({ contactLogs: data as ContactLog[] })
+        }
+      }
     } catch (e) { console.error(e) }
   },
 }))

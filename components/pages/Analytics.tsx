@@ -15,7 +15,9 @@ const BDFIELDS=[
 
 function brisbaneToday(){return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
 
-export default function Analytics(){
+const LEVEL1_HIDDEN = ['interruptions','convo','contact'] as const
+
+export default function Analytics({level=1}:{level?:number}={}){
   const {habits,getMeta,loadHabits}=useStore()
   const todayStr=brisbaneToday()
   const [baselineTotals,setBaselineTotals]=useState<Record<string,number>>({})
@@ -23,8 +25,8 @@ export default function Analytics(){
 
   useEffect(()=>{loadHabits()},[]) // eslint-disable-line
   useEffect(()=>{
-    getMeta('historical_baseline').then(b=>{if(b)try{setBaselineTotals(JSON.parse(b))}catch{}})
-    getMeta('checklist_'+todayStr).then(v=>{if(v)try{setChecklist(JSON.parse(v))}catch{}})
+    getMeta('historical_baseline').then(b=>{if(b)try{setBaselineTotals(JSON.parse(b))}catch{}}).catch(e=>console.error('getMeta historical_baseline',e))
+    getMeta('checklist_'+todayStr).then(v=>{if(v)try{setChecklist(JSON.parse(v))}catch{}}).catch(e=>console.error('getMeta checklist',e))
   },[]) // eslint-disable-line
 
   const allDates=useMemo(()=>Object.keys(habits).sort(),[habits])
@@ -50,6 +52,7 @@ export default function Analytics(){
     })
   },[habits])
   const actMaxTotal=useMemo(()=>Math.max(...actData.map(d=>d.total),1),[actData])
+  const visibleBDFIELDS = level >= 2 ? BDFIELDS : BDFIELDS.filter(f => !(LEVEL1_HIDDEN as readonly string[]).includes(f.k))
 
   return(
     <ErrorBoundary label="Analytics">
@@ -92,16 +95,16 @@ export default function Analytics(){
         <div style={{fontSize:10,color:'var(--text4)',marginBottom:14}}>Where are you losing people at each stage</div>
         {(()=>{
           const steps=[
-            {l:'Interruptions',  v:allTimeTotals.interruptions??0, c:RED},
-            {l:'Conversations',  v:allTimeTotals.convo??0,         c:GOLD},
-            {l:'MPAs done',      v:allTimeTotals.mpa??0,           c:BLUE},
-            {l:'Contacts made',  v:allTimeTotals.contact??0,       c:'#5B9BD5'},
-            {l:'Catch Ups',      v:allTimeTotals.catch_up??0,      c:PURPLE},
-            {l:'DTMs',           v:allTimeTotals.dtm??0,           c:TEAL},
-            {l:'Pre-Filters',    v:allTimeTotals.pre_filter??0,    c:'#E8913A'},
-            {l:'MG1s run',       v:allTimeTotals.mg1??0,           c:GREEN},
-            {l:'Launches',       v:allTimeTotals.launch??0,        c:GOLD},
-          ]
+            {k:'interruptions', l:'Interruptions',  v:allTimeTotals.interruptions??0, c:RED},
+            {k:'convo',         l:'Conversations',  v:allTimeTotals.convo??0,         c:GOLD},
+            {k:'mpa',           l:'MPAs done',      v:allTimeTotals.mpa??0,           c:BLUE},
+            {k:'contact',       l:'Contacts made',  v:allTimeTotals.contact??0,       c:'#5B9BD5'},
+            {k:'catch_up',      l:'Catch Ups',      v:allTimeTotals.catch_up??0,      c:PURPLE},
+            {k:'dtm',           l:'DTMs',           v:allTimeTotals.dtm??0,           c:TEAL},
+            {k:'pre_filter',    l:'Pre-Filters',    v:allTimeTotals.pre_filter??0,    c:'#E8913A'},
+            {k:'mg1',           l:'MG1s run',       v:allTimeTotals.mg1??0,           c:GREEN},
+            {k:'launch',        l:'Launches',       v:allTimeTotals.launch??0,        c:GOLD},
+          ].filter(s => level >= 2 || !(LEVEL1_HIDDEN as readonly string[]).includes(s.k))
           const maxVal=Math.max(...steps.map(s=>s.v),1)
           const flowSteps=steps.slice(1)
           let bigDrop={l:'',drop:0}
@@ -152,7 +155,7 @@ export default function Analytics(){
                   const totalH=Math.max(3,(m.total/actMaxTotal)*86)
                   return(
                     <div key={i} title={m.mo+': '+m.total+' total'} style={{flex:1,height:totalH,display:'flex',flexDirection:'column',justifyContent:'flex-end',borderRadius:'2px 2px 0 0',overflow:'hidden',outline:m.mo===currMo?'2px solid var(--gold)':'none',outlineOffset:1}}>
-                      {BDFIELDS.map(f=>{
+                      {visibleBDFIELDS.map(f=>{
                         const val=(m as any)[f.k]??0
                         const bh=m.total>0?(val/m.total)*totalH:0
                         if(bh<=0.5)return null
@@ -170,7 +173,7 @@ export default function Analytics(){
                 ))}
               </div>
               <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:14}}>
-                {BDFIELDS.map(f=>(
+                {visibleBDFIELDS.map(f=>(
                   <div key={f.k} style={{display:'flex',alignItems:'center',gap:4}}>
                     <div style={{width:8,height:8,borderRadius:2,background:f.c,flexShrink:0}}/>
                     <span style={{fontSize:9,color:'var(--text3)',fontWeight:600}}>{f.l}</span>
@@ -180,10 +183,10 @@ export default function Analytics(){
               <div style={{overflowX:'auto'}}>
                 <div style={{display:'flex',borderBottom:'2px solid var(--br)',paddingBottom:4,marginBottom:2}}>
                   <div style={{width:52,flexShrink:0,fontSize:9,color:'var(--text4)',fontWeight:600}}>Month</div>
-                  {BDFIELDS.map(f=>(
+                  {visibleBDFIELDS.map(f=>(
                     <div key={f.k} style={{flex:1,textAlign:'center',fontSize:9,color:f.c,fontWeight:700,minWidth:32}}>{f.l}</div>
                   ))}
-                  <div style={{width:28,textAlign:'center',fontSize:9,color:'var(--text4)',fontWeight:600}}>Int</div>
+                  {level >= 2 && <div style={{width:28,textAlign:'center',fontSize:9,color:'var(--text4)',fontWeight:600}}>Int</div>}
                   <div style={{width:32,textAlign:'center',fontSize:9,color:'var(--text4)',fontWeight:600}}>Tot</div>
                 </div>
                 {[...actData].reverse().map(m=>{
@@ -191,7 +194,7 @@ export default function Analytics(){
                   return(
                     <div key={m.mo} style={{display:'flex',borderBottom:'1px solid var(--br)',padding:'4px 0',background:isCurr?'rgba(200,162,74,0.04)':'transparent'}}>
                       <div style={{width:52,flexShrink:0,fontFamily:"'JetBrains Mono',monospace",fontSize:10,color:isCurr?GOLD:'var(--text3)',fontWeight:isCurr?700:400}}>{m.mo.slice(2)}</div>
-                      {BDFIELDS.map(f=>{
+                      {visibleBDFIELDS.map(f=>{
                         const v=(m as any)[f.k]??0
                         return(
                           <div key={f.k} style={{flex:1,textAlign:'center',minWidth:32}}>
@@ -199,9 +202,9 @@ export default function Analytics(){
                           </div>
                         )
                       })}
-                      <div style={{width:28,textAlign:'center'}}>
+                      {level >= 2 && <div style={{width:28,textAlign:'center'}}>
                         <span className="mono" style={{fontSize:10,color:(m as any).interruptions>0?RED:'var(--text4)'}}>{(m as any).interruptions||'·'}</span>
-                      </div>
+                      </div>}
                       <div style={{width:32,textAlign:'center'}}>
                         <span className="mono" style={{fontSize:11,fontWeight:700,color:m.total>0?'var(--text2)':'var(--text4)'}}>{m.total||'·'}</span>
                       </div>
@@ -218,30 +221,37 @@ export default function Analytics(){
       <div style={CARD}>
         <div style={SL}>Monthly History — All Time</div>
         <div style={{overflowX:'auto'}}>
-          <div style={{display:'flex',borderBottom:'2px solid var(--br)',paddingBottom:4,marginBottom:2}}>
-            {['Month','Convos','MG1','MPA','DTM','Contacts'].map(h=>(
-              <div key={h} style={{flex:1,minWidth:40,fontSize:9,color:'var(--text4)',fontWeight:600,padding:'2px 4px'}}>{h}</div>
-            ))}
-          </div>
           {(()=>{
-            const months:string[]=[];const d=new Date();d.setDate(1)
-            for(let i=0;i<24;i++){months.unshift(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7));d.setMonth(d.getMonth()-1)}
-            return months.map(mo=>{
-              const days=Object.keys(habits).filter((d:string)=>d.startsWith(mo))
-              if(days.length===0)return null
-              const totals={convo:0,mg1:0,mpa:0,dtm:0,contact:0}
-              days.forEach(d=>{const h=(habits as any)[d] as any;if(h){totals.convo+=h.convo??0;totals.mg1+=h.mg1??0;totals.mpa+=h.mpa??0;totals.dtm+=h.dtm??0;totals.contact+=(h as any).contact??0}})
-              const isCurrent=mo===currMo
-              return(
-                <div key={mo} style={{display:'flex',borderBottom:'1px solid var(--br)',background:isCurrent?'rgba(200,162,74,0.04)':'transparent',padding:'5px 0'}}>
-                  {[mo,totals.convo,totals.mg1,totals.mpa,totals.dtm,totals.contact].map((v,i)=>(
-                    <div key={i} style={{flex:1,minWidth:40,padding:'0 4px'}}>
-                      <span className="mono" style={{fontSize:10,fontWeight:isCurrent?700:400,color:isCurrent&&i===0?GOLD:i===0?'var(--text3)':typeof v==='number'&&v>0?([GOLD,GREEN,BLUE,TEAL,'#5B9BD5'][i-1]??GOLD):'var(--text4)'}}>{v||'·'}</span>
-                    </div>
-                  ))}
-                </div>
-              )
-            })
+            const histHeaders = level >= 2 ? ['Month','Convos','MG1','MPA','DTM','Contacts'] : ['Month','MG1','MPA','DTM']
+            const histColors = level >= 2 ? [GOLD,GREEN,BLUE,TEAL,'#5B9BD5'] : [GREEN,BLUE,TEAL]
+            return(<>
+            <div style={{display:'flex',borderBottom:'2px solid var(--br)',paddingBottom:4,marginBottom:2}}>
+              {histHeaders.map(h=>(
+                <div key={h} style={{flex:1,minWidth:40,fontSize:9,color:'var(--text4)',fontWeight:600,padding:'2px 4px'}}>{h}</div>
+              ))}
+            </div>
+            {(()=>{
+              const months:string[]=[];const d=new Date();d.setDate(1)
+              for(let i=0;i<24;i++){months.unshift(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}).slice(0,7));d.setMonth(d.getMonth()-1)}
+              return months.map(mo=>{
+                const days=Object.keys(habits).filter((d:string)=>d.startsWith(mo))
+                if(days.length===0)return null
+                const totals={convo:0,mg1:0,mpa:0,dtm:0,contact:0}
+                days.forEach(d=>{const h=(habits as any)[d] as any;if(h){totals.convo+=h.convo??0;totals.mg1+=h.mg1??0;totals.mpa+=h.mpa??0;totals.dtm+=h.dtm??0;totals.contact+=(h as any).contact??0}})
+                const isCurrent=mo===currMo
+                const rowVals = level >= 2 ? [mo,totals.convo,totals.mg1,totals.mpa,totals.dtm,totals.contact] : [mo,totals.mg1,totals.mpa,totals.dtm]
+                return(
+                  <div key={mo} style={{display:'flex',borderBottom:'1px solid var(--br)',background:isCurrent?'rgba(200,162,74,0.04)':'transparent',padding:'5px 0'}}>
+                    {rowVals.map((v,i)=>(
+                      <div key={i} style={{flex:1,minWidth:40,padding:'0 4px'}}>
+                        <span className="mono" style={{fontSize:10,fontWeight:isCurrent?700:400,color:isCurrent&&i===0?GOLD:i===0?'var(--text3)':typeof v==='number'&&v>0?(histColors[i-1]??GOLD):'var(--text4)'}}>{v||'·'}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })
+            })()}
+            </>)
           })()}
         </div>
       </div>

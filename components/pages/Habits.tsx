@@ -97,8 +97,8 @@ function deriveTargets(goals:CoreGoals):Partial<Record<FieldKey,number>>{
 export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
   const {userId,habits,loadHabits,saveHabit,getMeta,setMeta,resources,loadResources}=useStore()
   const todayStr=brisbaneToday()
-  // Level 2 (entry tier) hides interruptions/convo/contact entirely from the UI.
-  // Level >= 3 gets full field set.
+  // Level 1 (Training): interruptions/convo/contact hidden — these are noise at this stage.
+  // Level 2+ (Active): full field set is shown.
   const FIELDS = useMemo(
     () => level>=2 ? ALL_FIELDS : ALL_FIELDS.filter(f=>!LEVEL1_HIDDEN.includes(f.key)),
     [level]
@@ -122,21 +122,21 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
   useEffect(()=>{
     loadHabits();loadResources()
-    getMeta('pd_goals').then(v=>{if(v)try{setPdGoals(JSON.parse(v))}catch{}})
-    getMeta('pd_action_checkins').then(v=>{if(v)try{setActionCheckins(JSON.parse(v))}catch{}})
+    getMeta('pd_goals').then(v=>{if(v)try{setPdGoals(JSON.parse(v))}catch{}}).catch(e=>console.error('getMeta pd_goals',e))
+    getMeta('pd_action_checkins').then(v=>{if(v)try{setActionCheckins(JSON.parse(v))}catch{}}).catch(e=>console.error('getMeta pd_action_checkins',e))
   },[]) // eslint-disable-line
   useEffect(()=>{
     if(!userId)return
     getMeta('historical_baseline').then(b=>{
       if(b){try{setBaselineTotals(JSON.parse(b))}catch{}}
       else setShowOnboarding(true)
-    })
+    }).catch(e=>console.error('getMeta historical_baseline',e))
   },[userId]) // eslint-disable-line
   useEffect(()=>{
     if(!selDate)return
     getMeta('checklist_'+selDate).then(v=>{
       if(v){try{setChecklist(JSON.parse(v))}catch{}} else setChecklist({reading:false,audio:false})
-    })
+    }).catch(e=>console.error('getMeta checklist',e))
   },[selDate]) // eslint-disable-line
   useEffect(()=>{
     if(goalOverride){
@@ -146,8 +146,8 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     }
     getMeta('core_goals_v4').then(v=>{
       if(v)try{const g=JSON.parse(v);setCoreGoals(g);setCoreForm({goalField:g.goalField??'mg1',goal:String(g.goalMonthly??3),deadline:g.deadline,overrides:{}})}catch{}
-      else getMeta('core_goals_v3').then(old=>{if(old)try{const g=JSON.parse(old);const ng={goalField:'mg1' as FieldKey,goalMonthly:g.goalMonthly??3,deadline:g.deadline,overrides:g.overrides??{}};setCoreGoals(ng);setCoreForm({goalField:ng.goalField,goal:String(ng.goalMonthly),deadline:ng.deadline,overrides:{}})}catch{}})
-    })
+      else getMeta('core_goals_v3').then(old=>{if(old)try{const g=JSON.parse(old);const ng={goalField:'mg1' as FieldKey,goalMonthly:g.goalMonthly??3,deadline:g.deadline,overrides:g.overrides??{}};setCoreGoals(ng);setCoreForm({goalField:ng.goalField,goal:String(ng.goalMonthly),deadline:ng.deadline,overrides:{}})}catch{}}).catch(e=>console.error('getMeta core_goals_v3',e))
+    }).catch(e=>console.error('getMeta core_goals_v4',e))
   },[goalOverride]) // eslint-disable-line
   useEffect(()=>{
     const h=habits[selDate] as HabitEntry|undefined
@@ -216,13 +216,15 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   },[userId,habits,saveHabit])
 
   async function saveChecklist(key:'reading'|'audio',val:boolean){
+    const prev=checklist
     const next={...checklist,[key]:val};setChecklist(next)
-    try{await setMeta('checklist_'+selDate,JSON.stringify(next))}catch(e){console.error('saveChecklist error:',e)}
+    try{await setMeta('checklist_'+selDate,JSON.stringify(next))}catch(e){setChecklist(prev);console.error('saveChecklist error:',e)}
   }
   async function saveActionCheckin(stepId:string,val:boolean){
+    const prev=actionCheckins
     const next={...actionCheckins,[selDate]:{...(actionCheckins[selDate]||{}),[stepId]:val}}
     setActionCheckins(next)
-    try{await setMeta('pd_action_checkins',JSON.stringify(next))}catch(e){console.error('saveActionCheckin error:',e)}
+    try{await setMeta('pd_action_checkins',JSON.stringify(next))}catch(e){setActionCheckins(prev);console.error('saveActionCheckin error:',e)}
   }
   async function saveCoreGoals(){
     const g:CoreGoals={goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline||defaultDeadline(),overrides:{}}
@@ -621,7 +623,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
 
       {/* ── ANALYTICS TAB ────────────────────────────── */}
-      {tab==='analytics'&&<Analytics/>}
+      {tab==='analytics'&&<Analytics level={level}/>}
 
       {/* ── HISTORICAL BASELINE ONBOARDING ─────────────── */}
       {showOnboarding&&(

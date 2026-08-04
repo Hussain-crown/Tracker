@@ -16,8 +16,8 @@ export async function GET(req: Request) {
       .eq('user_id', user.id)
       .maybeSingle() as { data: { level: number; ibo_number: string; name: string } | null }
 
-    if (!member || (member.level || 1) < 4) {
-      return NextResponse.json({ error: 'Level 4 required' }, { status: 403 })
+    if (!member || (member.level || 1) < 2) {
+      return NextResponse.json({ error: 'Level 2 required' }, { status: 403 })
     }
 
     const myIbo = member.ibo_number || ''
@@ -39,16 +39,11 @@ export async function GET(req: Request) {
     const adminId = process.env.ADMIN_USER_ID || ''
     if (!adminId) return NextResponse.json({ error: 'configuration_error' }, { status: 500 })
 
-    // Fetch candidates for all direct reports in parallel
-    const candidateResults = await Promise.all(
-      reportIbos.map(ibo =>
-        sbAdmin.from('candidates').select('*')
-          .filter('interview_notes->>_sponsor_ibo', 'eq', ibo)
-          .eq('user_id', adminId)
-          .order('created_at', { ascending: false })
-      )
-    )
-    const allCandidates: any[] = candidateResults.flatMap(r => r.data || [])
+    const { data: allCandidatesData } = await sbAdmin.from('candidates').select('*')
+      .in('sponsor_ibo', reportIbos)
+      .eq('user_id', adminId)
+      .order('created_at', { ascending: false })
+    const allCandidates: any[] = allCandidatesData || []
 
     const ids = allCandidates.map((c: any) => c.id)
     let logs: any[] = []

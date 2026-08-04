@@ -52,10 +52,10 @@ export const useUIStore = create<UIStore>((set) => ({
   setUserId: (id, email) => set({ userId: id, userEmail: email }),
 
   getMeta: async (key) => {
-    const { data: { user } } = await sb.auth.getUser()
-    const userId = user?.id ?? ''
-    if (!userId) return null
     try {
+      const { data: { user } } = await sb.auth.getUser()
+      const userId = user?.id ?? ''
+      if (!userId) return null
       const { data } = await sb.from('meta').select('value').eq('user_id', userId).eq('key', key)
       return data?.[0]?.value ?? null
     } catch { return null }
