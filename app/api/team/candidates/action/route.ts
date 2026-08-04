@@ -22,7 +22,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'internal_error' }, { status: 500 })
     }
 
-    if (!member || (member.level || 1) < 2) {
+    if (!member || (Number(member.level) || 1) < 2) {
       return NextResponse.json({ error: 'Level 2 required' }, { status: 403 })
     }
 
