@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { getSbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const { action, candidateId } = body
     if (!candidateId) return NextResponse.json({ error: 'missing candidateId' }, { status: 400 })
 
-    const adminId = process.env.ADMIN_USER_ID || ''
+    const adminId = await resolveAdminId()
     if (!adminId) return NextResponse.json({ error: 'configuration_error' }, { status: 500 })
     const { data: candidate, error: candidateErr } = await sbAdmin
       .from('candidates')

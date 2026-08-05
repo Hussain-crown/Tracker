@@ -229,6 +229,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs(); loadHabits() },[]) // eslint-disable-line
 
   async function safeWrite(fn:()=>Promise<void>, errMsg='Save failed'): Promise<boolean>{
+    setBanner(null)
     try{ await fn(); return true }
     catch(e:any){ setBanner({type:'error',msg:errMsg+': '+(e?.message||'unknown error')}); return false }
   }
@@ -368,8 +369,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const reEngageLeads  = useMemo(()=>archived.filter(l=>(l.archived_reason||'')===('Wrong timing')&&daysSince(l.updated_at)>=90),[archived])
 
   function leadLogs(id:string){return contactLogs.filter(c=>c.entity_id===id).sort((a,b)=>b.created_at.localeCompare(a.created_at))}
-  function openAdd(){setEd(null);setForm(blankLead());setErr('');setOpen(true)}
-  function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setOpen(true)}
+  function openAdd(){setEd(null);setForm(blankLead());setErr('');setBanner(null);setOpen(true)}
+  function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setBanner(null);setOpen(true)}
 
   async function saveLead(force=false){
     if(!form.name?.trim()||!userId)return setErr('Name required')
@@ -382,7 +383,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     setErr('')
     const score=hxl(form.hunger??5,form.looking??5)
     const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'Contact',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
-    await safeWrite(async()=>{
+    const ok=await safeWrite(async()=>{
       await upsertLead(l)
       if(!ed){
         await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
@@ -391,7 +392,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         for(let i=0;i<=idx;i++){const h=stageHabits[STAGES[i]];if(h)await autoLogHabit(h)}
       }
     },'Save lead failed')
-    setOpen(false)
+    if(ok)setOpen(false)
   }
 
   async function archiveLead(l:Lead,reason=''){
