@@ -45,6 +45,7 @@ export interface Partner {
   group_size: number; sponsoring: number; gpv_goal?: number; notes?: string
   last_contact: string; next_call: string
   activation_done: string; archived: boolean; parent_id: string
+  autoship_done?: boolean; gpv_synced_at?: string
   created_at: string; updated_at: string
 }
 
