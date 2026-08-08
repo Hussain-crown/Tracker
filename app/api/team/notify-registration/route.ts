@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sbAdmin } from '@/lib/supabase/admin'
+import { sbAdmin, verifyUser } from '@/lib/supabase/admin'
 import { notifyAdminError } from '@/lib/notify'
 import { sendPushToUser } from '@/lib/push'
 
@@ -11,7 +11,8 @@ async function getAdminUserId(): Promise<string> {
   if (!adminEmail) return ''
   let page = 1
   while (page <= 10) {
-    const { data } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
+    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
+    if (error) { console.error('listUsers error:', error.message); break }
     const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
     if (found) return found.id
     if ((data?.users || []).length < 50) break
@@ -21,13 +22,16 @@ async function getAdminUserId(): Promise<string> {
 }
 
 // POST — called fire-and-forget after a member registers; notifies admin via email + push.
-// No auth required — the handler validates the member exists and is pending before sending.
+// Requires the caller to be authenticated as the registering member.
 export async function POST(req: Request) {
   try {
     let body: any
     try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
     const { userId } = body || {}
     if (!userId || typeof userId !== 'string') return NextResponse.json({ ok: true })
+
+    const caller = await verifyUser(req)
+    if (!caller || caller.id !== userId) return NextResponse.json({ ok: true })
 
     // Verify the member actually exists and is pending — never notify for fabricated ids
     const { data: member } = await sbAdmin.from('team_members')
