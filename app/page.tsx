@@ -93,7 +93,7 @@ export default function TrackPage(){
     const onVisible=()=>{
       if(document.hidden)return
       const n=Date.now()
-      if(n-lastRefetch>60_000){lastRefetch=n;loadAll()}
+      if(n-lastRefetch>60_000){lastRefetch=n;loadAll().catch(()=>{})}
     }
     document.addEventListener('visibilitychange',onVisible)
     return()=>document.removeEventListener('visibilitychange',onVisible)
@@ -111,7 +111,7 @@ export default function TrackPage(){
 
   useEffect(()=>{
     if(!userId)return
-    loadAll()
+    loadAll().catch(()=>{})
     supabase.from('team_members').select('*').eq('user_id',userId).maybeSingle()
       .then(({data,error}:any)=>{
         if(error){console.error('team_members fetch error:',error);return}
@@ -166,19 +166,29 @@ export default function TrackPage(){
       const d=await res.json()
       if(!d.valid){setErr("That IBO isn't in our system — contact Hussain.");setBusy(false);return}
       const partnerName=name.trim()||d.partner?.name||(userEmail?.split('@')[0]||'Member')
-      const {data:existing}=await supabase.from('team_members').select('user_id').eq('ibo_number',ibo.trim()).maybeSingle()
-      if(existing&&existing.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);return}
-      const {error:upsertErr}=await supabase.from('team_members').upsert({
-        user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
-        email:userEmail||'',role:'member',referred_by:'',first_login:true,
-        status:'pending',baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
-      })
+      const {data:iboOwner}=await supabase.from('team_members').select('user_id').eq('ibo_number',ibo.trim()).maybeSingle()
+      if(iboOwner&&iboOwner.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);return}
+      const {data:myRow}=await supabase.from('team_members').select('user_id,status,level').eq('user_id',userId).maybeSingle()
+      let upsertErr: any=null
+      if(myRow){
+        const {error:updErr}=await supabase.from('team_members').update({
+          name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),email:userEmail||'',updated_at:now(),
+        }).eq('user_id',userId)
+        upsertErr=updErr
+      }else{
+        const {error:insErr}=await supabase.from('team_members').upsert({
+          user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
+          email:userEmail||'',role:'member',referred_by:'',first_login:true,
+          status:'pending',baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
+        })
+        upsertErr=insErr
+      }
       if(upsertErr)throw upsertErr
       const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
       setMember(data);setNeedsProfile(false)
       if(data?.first_login===true&&data?.status!=='pending')setShowOnboard(true)
-      // Notify admin — fire and forget, never block the UX
-      authFetch('/api/team/notify-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId})}).catch(()=>{})
+      // Notify admin — fire and forget, only on true new registrations
+      if(!myRow) authFetch('/api/team/notify-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId})}).catch(()=>{})
     }catch{setErr('Could not verify IBO. Please try again.')}
     setBusy(false)
   }
