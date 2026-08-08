@@ -176,6 +176,8 @@ export default function TrackPage(){
       if(upsertErr)throw upsertErr
       const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
       setMember(data);setNeedsProfile(false);setShowOnboard(true)
+      // Notify admin — fire and forget, never block the UX
+      fetch('/api/team/notify-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId})}).catch(()=>{})
     }catch{setErr('Could not verify IBO. Please try again.')}
     setBusy(false)
   }
