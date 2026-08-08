@@ -5,7 +5,8 @@ export async function authFetch(url: string, opts: RequestInit = {}): Promise<Re
   // Force refresh if token is within 60 s of expiry so verifyUser never gets a stale JWT
   if (session?.expires_at && session.expires_at * 1000 < Date.now() + 60000) {
     const { data, error: refreshError } = await supabase.auth.refreshSession()
-    if (!refreshError && data.session) session = data.session
+    if (refreshError || !data.session) throw new Error(`Token refresh failed: ${refreshError?.message ?? 'no session'}`)
+    session = data.session
   }
   const token = session?.access_token ?? ''
   return fetch(url, {
