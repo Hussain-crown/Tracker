@@ -1,25 +1,9 @@
 import { NextResponse } from 'next/server'
-import { sbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { sbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 import { notifyAdminError } from '@/lib/notify'
 import { sendPushToUser } from '@/lib/push'
 
 export const dynamic = 'force-dynamic'
-
-async function getAdminUserId(): Promise<string> {
-  if (process.env.ADMIN_USER_ID) return process.env.ADMIN_USER_ID
-  const adminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
-  if (!adminEmail) return ''
-  let page = 1
-  while (page <= 10) {
-    const { data, error } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
-    if (error) { console.error('listUsers error:', error.message); break }
-    const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
-    if (found) return found.id
-    if ((data?.users || []).length < 50) break
-    page++
-  }
-  return ''
-}
 
 // POST — called fire-and-forget after a member registers; notifies admin via email + push.
 // Requires the caller to be authenticated as the registering member.
@@ -53,7 +37,7 @@ export async function POST(req: Request) {
     await notifyAdminError(subject, bodyText).catch(e => console.error('notify-registration email error:', e))
 
     // Push notification to admin (best-effort)
-    const adminId = await getAdminUserId()
+    const adminId = await resolveAdminId()
     if (adminId) {
       await sendPushToUser(adminId, '👤 New member waiting', `${memberName} · IBO ${memberIbo} is pending approval`)
         .catch(e => console.error('notify-registration push error:', e))
