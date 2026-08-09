@@ -58,7 +58,7 @@ export async function POST(req: Request) {
     const now = new Date().toISOString()
 
     if (action === 'log_contact') {
-      const { outcome, notes: logNotes, nextDate, objection } = body
+      const { outcome, notes: logNotes, nextDate, objection, next_action, fathom_link } = body
       const { error: logErr } = await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
         user_id: user.id,
@@ -69,6 +69,8 @@ export async function POST(req: Request) {
         notes: logNotes || '',
         next_date: nextDate || null,
         objection: objection || null,
+        next_action: next_action || null,
+        fathom_link: fathom_link || '',
         event_type: 'contact',
         created_at: now,
       })

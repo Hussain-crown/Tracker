@@ -54,6 +54,7 @@ export async function GET(req: Request) {
         .in('entity_id', ids)
         .eq('entity_type', 'candidate')
         .order('created_at', { ascending: false })
+        .limit(1000)
       logs = data || []
     }
 

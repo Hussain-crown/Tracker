@@ -7,8 +7,11 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: Request) {
   try {
     const requester = await verifyUser(req)
-    const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
-    if (!requester || !adminEmail || requester.email !== adminEmail)
+    const adminEmail = (process.env.ADMIN_EMAIL || process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
+    const isAdmin = process.env.ADMIN_USER_ID
+      ? requester?.id === process.env.ADMIN_USER_ID
+      : (!!adminEmail && (requester?.email || '').toLowerCase() === adminEmail)
+    if (!isAdmin)
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
     let body: any

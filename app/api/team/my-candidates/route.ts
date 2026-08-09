@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     if (!iboNumber) return NextResponse.json({ candidates: [], logs: [], iboNumber: '' })
 
     const adminId = await resolveAdminId()
+    if (!adminId) return NextResponse.json({ candidates: [], logs: [], iboNumber })
 
     const { data: candidates } = await sbAdmin
       .from('candidates')
