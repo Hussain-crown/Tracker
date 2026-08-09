@@ -43,6 +43,7 @@ export default function TrackPage(){
   const {userId,userEmail,setUser,loadAll,habits}=useStore()
   const [ready,setReady]             = useState(false)
   const [member,setMember]           = useState<any>(null)
+  const [memberLoaded,setMemberLoaded] = useState(false)
   const [needsProfile,setNeedsProfile] = useState(false)
   const [ibo,setIbo]                 = useState('')
   const [name,setName]               = useState('')
@@ -117,6 +118,7 @@ export default function TrackPage(){
         if(data){
           setMember(data);setNeedsProfile(false)
           if((data.level||1)>=2)setTab('habits')
+          setMemberLoaded(true)
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
           if(data.first_login&&data.status!=='pending')setShowOnboard(true)
           authFetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
@@ -131,7 +133,7 @@ export default function TrackPage(){
               .then(d=>{if(d.upgraded)setMember((prev:any)=>prev?{...prev,level:d.level}:prev)})
               .catch(()=>{})
           })
-        }else{setNeedsProfile(true)}
+        }else{setNeedsProfile(true);setMemberLoaded(true)}
       })
   },[userId]) // eslint-disable-line
 
@@ -232,6 +234,15 @@ export default function TrackPage(){
         {busy?'Redirecting…':'Continue with Google'}
       </button>
       <div style={{fontSize:11,color:'#444',textAlign:'center',marginTop:16}}>You'll need your IBO number after signing in.</div>
+    </Shell>
+  )
+
+  if(!memberLoaded)return(
+    <Shell>
+      <div style={{color:'#555',textAlign:'center',padding:40,fontSize:14}}>
+        <div style={{fontSize:28,marginBottom:12}}>⏳</div>
+        Loading…
+      </div>
     </Shell>
   )
 
