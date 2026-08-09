@@ -5,9 +5,16 @@ import type { Partner } from '@/lib/stores/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 const GOLD='#C8A24A';const GREEN='#4CAF7D';const RED='#E05555'
-const STAGE_ORDER=['Prospect','IBO','Q','Silver','Gold','Platinum','Diamond']
+const ACT_CALLS=['Launch','Budget Call','Autoship','MPA Training','30 Day Review']
 
-function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime())/86400000):999}
+function daysSince(d:string){
+  if(!d)return 999
+  const t=new Date(d).getTime()
+  return isNaN(t)?999:Math.floor((Date.now()-t)/86400000)
+}
+function getActivationDone(p:Partner):string[]{
+  try{const v=JSON.parse(p.activation_done||'[]');return Array.isArray(v)?v:[]}catch{return[]}
+}
 function fmtDate(d:string){if(!d)return'—';return new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'Australia/Brisbane'})}
 
 export default function Organisation(){
@@ -27,7 +34,7 @@ export default function Organisation(){
 
   const totalGPV=useMemo(()=>active.reduce((s,p)=>s+(p.gpv||0),0),[active])
   const totalGroup=useMemo(()=>active.reduce((s,p)=>s+(p.group_size||0),0),[active])
-  const activating=useMemo(()=>active.filter(p=>!p.activation_done&&p.stage!=='Prospect'),[active])
+  const activating=useMemo(()=>active.filter(p=>getActivationDone(p).length<ACT_CALLS.length&&p.stage!=='Prospect'),[active])
 
   return(
     <ErrorBoundary label="Organisation">
