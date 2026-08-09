@@ -6,6 +6,7 @@ import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
 import Training from '@/components/pages/Training'
+import Organisation from '@/components/pages/Organisation'
 
 import { now } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
@@ -23,12 +24,13 @@ const MILESTONES=[
   {days:90, emoji:'💎', msg:"90 days. This is who you are now."},
 ]
 
-type NavId='pipeline'|'candidates'|'habits'|'training'
+type NavId='pipeline'|'candidates'|'habits'|'training'|'organisation'
 const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
-  {id:'habits',     icon:'◎',  label:'Habits',    minLevel:2},
-  {id:'pipeline',   icon:'◆',  label:'Prospects', minLevel:1},
-  {id:'candidates', icon:'◇',  label:'Candidates',minLevel:2},
-  {id:'training',   icon:'📚', label:'Training',  minLevel:1},
+  {id:'habits',       icon:'◎',  label:'Habits',       minLevel:2},
+  {id:'pipeline',     icon:'◆',  label:'Prospects',    minLevel:1},
+  {id:'candidates',   icon:'◇',  label:'Candidates',   minLevel:2},
+  {id:'organisation', icon:'⬡',  label:'Organisation', minLevel:3},
+  {id:'training',     icon:'📚', label:'Training',     minLevel:1},
 ]
 function buildNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel)}
 
@@ -400,6 +402,8 @@ export default function TrackPage(){
         {tab==='candidates'&&<Candidates level={member?.level||1}/>}
 
         {tab==='training'&&<Training/>}
+
+        {tab==='organisation'&&<Organisation/>}
 
       </div>
 

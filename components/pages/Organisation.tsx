@@ -72,7 +72,8 @@ export default function Organisation(){
         <div style={{textAlign:'center' as const,color:'#555',fontSize:13,paddingTop:40}}>No partners yet</div>
       )}
       {filtered.map(p=>{
-        const overdue=p.next_call&&daysSince(p.next_call)>0
+        const nextCallMs=p.next_call?new Date(p.next_call).getTime():NaN
+        const overdue=!isNaN(nextCallMs)&&nextCallMs<Date.now()
         return(
           <div key={p.id} onClick={()=>setDetail(p)}
             style={{background:'#13131a',border:'1px solid #1f1f28',borderRadius:10,padding:'14px',marginBottom:8,cursor:'pointer'}}>
