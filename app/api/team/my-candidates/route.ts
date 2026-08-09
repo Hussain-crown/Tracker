@@ -28,6 +28,7 @@ export async function GET(req: Request) {
       .eq('sponsor_ibo', iboNumber)
       .eq('user_id', adminId)
       .order('created_at', { ascending: false })
+      .limit(500)
 
     const ids = (candidates || []).map((c: any) => c.id)
 

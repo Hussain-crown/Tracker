@@ -43,6 +43,7 @@ export async function GET(req: Request) {
       .in('sponsor_ibo', reportIbos)
       .eq('user_id', adminId)
       .order('created_at', { ascending: false })
+      .limit(1000)
     const allCandidates: any[] = allCandidatesData || []
 
     const ids = allCandidates.map((c: any) => c.id)
