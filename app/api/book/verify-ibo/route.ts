@@ -36,8 +36,12 @@ export async function GET(req: Request) {
     if (!adminId) return NextResponse.json({ valid: false, error: 'Not configured' })
 
     // ── CHECK 1: Admin's own IBO — always grant access ──
-    const adminIbo = (process.env.ADMIN_IBO || '').trim()
-    if (ibo === adminIbo) {
+    // Priority: ADMIN_IBO env var → NEXT_PUBLIC_ADMIN_IBO env var → meta key (set via Booking settings)
+    const { data: iboMeta } = await getSb().from('meta')
+      .select('value, updated_at').eq('user_id', adminId).eq('key', 'booking_admin_ibo')
+      .order('updated_at', { ascending: false }).limit(1)
+    const adminIbo = (process.env.ADMIN_IBO || process.env.NEXT_PUBLIC_ADMIN_IBO || iboMeta?.[0]?.value || '').trim()
+    if (adminIbo && ibo === adminIbo) {
       // Get admin's display name
       const { data: nameMeta } = await getSb().from('meta')
         .select('value, updated_at').eq('user_id', adminId).eq('key', 'booking_display_name')
