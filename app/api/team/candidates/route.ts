@@ -23,10 +23,10 @@ export async function POST(req: Request) {
 
     const adminId = await resolveAdminId()
 
-    // Explicit whitelist — team members must not overwrite protected fields (user_id, created_at, etc.)
+    // Explicit whitelist — team members must not overwrite protected fields (user_id, created_at, sponsor_ibo, etc.)
     const ALLOWED = new Set([
       'id','name','email','phone','stage','source','interview_notes','status',
-      'sponsor_ibo','booker_ibo','hxl_score','hunger','looking',
+      'booker_ibo','hxl_score','hunger','looking',
       'relationship','age_range','life_stage','primary_driver','pain_point',
       'next_action','next_action_date',
     ])
@@ -35,6 +35,13 @@ export async function POST(req: Request) {
       for (const key of Object.keys(body as object)) {
         if (ALLOWED.has(key)) payload[key] = (body as any)[key]
       }
+    }
+
+    // Ownership check: team member may only edit candidates they sponsor
+    if (payload.id) {
+      const { data: existing } = await sbAdmin.from('candidates').select('sponsor_ibo').eq('id', payload.id).maybeSingle()
+      if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      if (existing.sponsor_ibo !== member.ibo_number) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
 
     const { error } = await sbAdmin.from('candidates').upsert(payload, { onConflict: 'id' })
