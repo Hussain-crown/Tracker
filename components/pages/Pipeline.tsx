@@ -226,7 +226,12 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [csvModal,setCsvModal]         = useState<{headers:string[];rows:string[][];mapping:Record<number,keyof Lead|''>}|null>(null)
   const [csvProgress,setCsvProgress]   = useState<{done:number;total:number;skipped:number}|null>(null)
 
-  useEffect(()=>{ loadLeads(); loadCandidates(); loadContactLogs(); loadHabits() },[]) // eslint-disable-line
+  useEffect(()=>{
+    loadLeads().catch(e=>console.error('loadLeads failed:',e))
+    loadCandidates().catch(e=>console.error('loadCandidates failed:',e))
+    loadContactLogs().catch(e=>console.error('loadContactLogs failed:',e))
+    loadHabits().catch(e=>console.error('loadHabits failed:',e))
+  },[]) // eslint-disable-line
 
   async function safeWrite(fn:()=>Promise<void>, errMsg='Save failed'): Promise<boolean>{
     setBanner(null)

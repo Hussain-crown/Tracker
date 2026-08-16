@@ -69,10 +69,12 @@ export function useStore() {
     addMoodEntry: habit.addMoodEntry,
 
     loadAll: async () => {
+      const sw = (p: Promise<void>, name: string) => p.catch(e => console.error(`${name} failed:`, e))
       await Promise.all([
-        habit.loadHabits(),
-        ui.loadResources(), pipeline.loadLeads(), pipeline.loadContactLogs(),
-        candidate.loadCandidates(), partner.loadPartners(),
+        sw(habit.loadHabits(), 'loadHabits'),
+        sw(ui.loadResources(), 'loadResources'), sw(pipeline.loadLeads(), 'loadLeads'),
+        sw(pipeline.loadContactLogs(), 'loadContactLogs'),
+        sw(candidate.loadCandidates(), 'loadCandidates'), sw(partner.loadPartners(), 'loadPartners'),
       ])
     },
   }

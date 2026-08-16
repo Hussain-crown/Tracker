@@ -22,6 +22,7 @@ export async function POST(req: Request) {
     try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
 
     const adminId = await resolveAdminId()
+    if (!adminId) return NextResponse.json({ error: 'admin_not_configured' }, { status: 500 })
 
     // Explicit whitelist — team members must not overwrite protected fields (user_id, created_at, sponsor_ibo, etc.)
     const ALLOWED = new Set([
@@ -37,9 +38,9 @@ export async function POST(req: Request) {
       }
     }
 
-    // Ownership check: team member may only edit candidates they sponsor
+    // Ownership check: team member may only edit candidates they sponsor (scoped to admin tenant)
     if (payload.id) {
-      const { data: existing } = await sbAdmin.from('candidates').select('sponsor_ibo').eq('id', payload.id).maybeSingle()
+      const { data: existing } = await sbAdmin.from('candidates').select('sponsor_ibo').eq('id', payload.id).eq('user_id', adminId).maybeSingle()
       if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
       if (existing.sponsor_ibo !== member.ibo_number) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     }
