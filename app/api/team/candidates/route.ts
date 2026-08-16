@@ -43,6 +43,9 @@ export async function POST(req: Request) {
       const { data: existing } = await sbAdmin.from('candidates').select('sponsor_ibo').eq('id', payload.id).eq('user_id', adminId).maybeSingle()
       if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
       if (existing.sponsor_ibo !== member.ibo_number) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    } else {
+      // New candidate — stamp sponsor_ibo so subsequent ownership checks pass
+      payload.sponsor_ibo = member.ibo_number
     }
 
     const { error } = await sbAdmin.from('candidates').upsert(payload, { onConflict: 'id' })
