@@ -42,7 +42,8 @@ export async function POST(req: Request) {
     if (payload.id) {
       const { data: existing } = await sbAdmin.from('candidates').select('sponsor_ibo').eq('id', payload.id).eq('user_id', adminId).maybeSingle()
       if (!existing) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-      if (existing.sponsor_ibo !== member.ibo_number) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+      // null sponsor_ibo = unassigned candidate; any team member may edit it (the unassigned tab surfaces these rows)
+      if (existing.sponsor_ibo !== null && existing.sponsor_ibo !== member.ibo_number) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     } else {
       // New candidate — stamp sponsor_ibo so subsequent ownership checks pass
       payload.sponsor_ibo = member.ibo_number
