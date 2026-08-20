@@ -74,22 +74,10 @@ export interface WeeklyReview {
   created_at: string; updated_at?: string
 }
 
-export interface AIInsight {
-  id: string; user_id: string; type: string; content: string
-  generated_at: string; read: boolean; created_at?: string
-  entity_type?: string | null; entity_id?: string | null
-}
-
 export interface MoodEntry {
   id: string; user_id: string; text: string; ai_response: string
   sentiment: 'positive' | 'neutral' | 'low' | 'struggling' | 'fired-up'
   energy: number; tags: string; created_at: string
-}
-
-export interface Statement {
-  id: string; user_id: string; month: string
-  ppv: number; bv: number; pct: number; bonus: number
-  created_at: string; updated_at: string
 }
 
 export interface Resource {
@@ -111,17 +99,3 @@ export interface Task {
   entity_type?: string | null; entity_id?: string | null
 }
 
-export interface ROICost {
-  id: string; user_id: string; date: string; label: string
-  amount: number; category: string; created_at: string
-}
-
-export interface GPVEntry {
-  id: string; user_id: string; month: string; gpv: number
-  bonus_pct: number; created_at: string; updated_at: string
-}
-
-export interface MetaEntry {
-  id?: string; user_id: string; key: string; value: string
-  created_at?: string; updated_at?: string
-}
