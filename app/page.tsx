@@ -138,10 +138,15 @@ export default function TrackPage(){
   },[userId]) // eslint-disable-line
 
   const streak=useMemo(()=>{
+    const isActive=(h:any)=>!!h&&(h.convo>0||h.mg1>0||h.mpa>0||h.contact>0||h.catch_up>0||h.dtm>0||h.pre_filter>0||h.launch>0)
+    // Start counting from today if it's already active; otherwise start from yesterday
+    // so the streak doesn't drop to 0 the instant a new day begins, before anything's
+    // been logged yet — it should only break once a full day passes with no activity.
+    const todayActive=isActive((habits as any)[daysAgo(0)])
+    const start=todayActive?0:1
     let s=0
-    for(let i=0;i<90;i++){
-      const h=(habits as any)[daysAgo(i)]
-      if(h&&(h.convo>0||h.mg1>0||h.mpa>0||h.contact>0||h.catch_up>0||h.dtm>0||h.pre_filter>0||h.launch>0))s++
+    for(let i=start;i<90;i++){
+      if(isActive((habits as any)[daysAgo(i)]))s++
       else break
     }
     return s
