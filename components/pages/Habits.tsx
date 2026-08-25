@@ -277,8 +277,14 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const checklistBonus=useMemo(()=>(checklist.reading?3:0)+(checklist.audio?3:0),[checklist])
   const todayScore=useMemo(()=>calcScore(form,checklistBonus),[form,calcScore,checklistBonus])
   const streak=useMemo(()=>{
-    let s=0;const d=new Date()
-    while(s<1825){const ds=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});const h=habits[ds] as HabitEntry|undefined;const any=h&&FIELDS.some(f=>((h as any)[f.key]??0)>0);if(!any)break;s++;d.setDate(d.getDate()-1)}
+    const isActive=(ds:string)=>{const h=habits[ds] as HabitEntry|undefined;return !!h&&FIELDS.some(f=>((h as any)[f.key]??0)>0)}
+    const d=new Date()
+    const todayDs=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
+    // If today has no activity yet, start counting from yesterday instead of
+    // reading the streak as broken before the day is even over.
+    if(!isActive(todayDs))d.setDate(d.getDate()-1)
+    let s=0
+    while(s<1825){const ds=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});if(!isActive(ds))break;s++;d.setDate(d.getDate()-1)}
     return s
   },[habits,FIELDS])
   const consistency=useMemo(()=>{
