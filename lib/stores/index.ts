@@ -7,14 +7,12 @@ export { useUIStore }           from './uiStore'
 export { usePipelineStore }     from './pipelineStore'
 export { useCandidateStore }    from './candidateStore'
 export { usePartnerStore }      from './partnerStore'
-export { useTrackerLeadsStore } from './trackerLeadsStore'
 
 import { useHabitStore }        from './habitStore'
 import { useUIStore }           from './uiStore'
 import { usePipelineStore }     from './pipelineStore'
 import { useCandidateStore }    from './candidateStore'
 import { usePartnerStore }      from './partnerStore'
-import { useTrackerLeadsStore } from './trackerLeadsStore'
 
 export function useStore() {
   const habit        = useHabitStore()
@@ -22,7 +20,6 @@ export function useStore() {
   const pipeline     = usePipelineStore()
   const candidate    = useCandidateStore()
   const partner      = usePartnerStore()
-  const trackerPipe  = useTrackerLeadsStore()
 
   return {
     // UI / Auth
@@ -40,12 +37,6 @@ export function useStore() {
     contactLogs: pipeline.contactLogs,
     addContactLog: pipeline.addContactLog,
     loadContactLogs: pipeline.loadContactLogs,
-
-    // Tracker Pipeline (member's own private leads — tracker_leads table)
-    trackerLeads: trackerPipe.trackerLeads,
-    loadTrackerLeads: trackerPipe.loadTrackerLeads,
-    upsertTrackerLead: trackerPipe.upsertTrackerLead,
-    deleteTrackerLead: trackerPipe.deleteTrackerLead,
 
     // Candidates
     candidates: candidate.candidates, loadCandidates: candidate.loadCandidates,
