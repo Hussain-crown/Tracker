@@ -65,7 +65,25 @@ export async function GET(req: Request) {
       .not('archived', 'is', true)
       .limit(1)
 
+    // ── CHECK 3: Team members table (fallback) ──
+    // Members who registered via the tracker (not added to `partners`) live only in
+    // team_members. Without this check, verify-ibo can never recognise their IBO on
+    // login/re-verification, permanently locking them out with "not recognised."
     if (!partners?.length) {
+      const { data: members } = await getSb()
+        .from('team_members')
+        .select('id, name, ibo_number')
+        .eq('user_id', adminId)
+        .eq('ibo_number', ibo)
+        .eq('status', 'active')
+        .limit(1)
+      if (members?.length) {
+        const m = members[0]
+        return NextResponse.json({
+          valid: true,
+          partner: { id: m.id, name: m.name, ibo_number: m.ibo_number }
+        })
+      }
       return NextResponse.json({ valid: false, error: 'IBO number not recognised. Contact your upline.' })
     }
 
