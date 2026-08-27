@@ -168,33 +168,38 @@ export default function TrackPage(){
     if(!ibo.trim()||!userId){setErr('IBO number required');return}
     setBusy(true);setErr('')
     try{
-      const res=await fetch(`/api/book/verify-ibo?ibo=${encodeURIComponent(ibo.trim())}`)
-      const d=await res.json()
-      if(!d.valid){setErr("That IBO isn't in our system — contact Hussain.");setBusy(false);return}
-      const partnerName=name.trim()||d.partner?.name||(userEmail?.split('@')[0]||'Member')
-      const {data:iboOwner}=await supabase.from('team_members').select('user_id').eq('ibo_number',ibo.trim()).maybeSingle()
-      if(iboOwner&&iboOwner.user_id!==userId){setErr('This IBO is already linked to another account.');setBusy(false);return}
-      const {data:myRow}=await supabase.from('team_members').select('user_id,status,level').eq('user_id',userId).maybeSingle()
-      let upsertErr: any=null
-      if(myRow){
-        const {error:updErr}=await supabase.from('team_members').update({
-          name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),email:userEmail||'',updated_at:now(),
-        }).eq('user_id',userId)
-        upsertErr=updErr
-      }else{
-        const {error:insErr}=await supabase.from('team_members').upsert({
-          user_id:userId,name:partnerName,ibo_number:ibo.trim(),leg:ibo.trim(),
-          email:userEmail||'',role:'member',referred_by:'',first_login:true,
-          status:'pending',baseline_set:true,seen_milestones:'[]',created_at:now(),updated_at:now(),
-        })
-        upsertErr=insErr
+      const verifyRes=await fetch(`/api/book/verify-ibo?ibo=${encodeURIComponent(ibo.trim())}`)
+      const verifyData=await verifyRes.json()
+      if(!verifyData.valid){setErr("That IBO isn't in our system — contact Hussain.");setBusy(false);return}
+      const partnerName=name.trim()||verifyData.partner?.name||(userEmail?.split('@')[0]||'Member')
+
+      // Registration runs server-side (service role) rather than as direct client
+      // Supabase calls — RLS only lets a user see their OWN team_members row, so a
+      // client-side "is this IBO already claimed?" check can never see a conflict
+      // on someone else's row. An IBO must map to exactly one account: if it's
+      // already claimed under a different auth id (email change, different device
+      // signed into a different Google account, etc.), the server re-links that
+      // existing record to this session instead of creating a second, disconnected one.
+      const regRes=await authFetch('/api/team/register',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ibo:ibo.trim(),name:partnerName}),
+      })
+      const regData=await regRes.json()
+      if(!regRes.ok){
+        if(regData.error==='account_linked_to_other_ibo'){
+          setErr(`Your account is already linked to IBO ${regData.currentIbo}. Contact Hussain if this needs to change.`)
+        }else{
+          setErr('Could not verify IBO. Please try again.')
+        }
+        setBusy(false);return
       }
-      if(upsertErr)throw upsertErr
-      const {data}=await supabase.from('team_members').select('*').eq('user_id',userId).single()
+
+      const data=regData.member
       setMember(data);setNeedsProfile(false)
       if(data?.first_login===true&&data?.status!=='pending')setShowOnboard(true)
       // Notify admin — fire and forget, only on true new registrations
-      if(!myRow) authFetch('/api/team/notify-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId})}).catch(()=>{})
+      if(regData.isNew) authFetch('/api/team/notify-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId})}).catch(()=>{})
     }catch{setErr('Could not verify IBO. Please try again.')}
     setBusy(false)
   }

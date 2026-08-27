@@ -1,0 +1,105 @@
+export const dynamic = 'force-dynamic'
+
+import { NextResponse } from 'next/server'
+import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { isRateLimited, getClientIp } from '@/lib/ratelimit'
+
+// Registers or re-links a team member by IBO number, server-side with the
+// service-role client — the client-side equivalent of this (a direct
+// `supabase.from('team_members').select(...).eq('ibo_number', ibo)` from the
+// browser) is silently blind under RLS, since team_members_own_select only
+// allows a user to see their OWN row. That meant the "is this IBO already
+// linked to another account?" check could never actually see a conflict,
+// and a member re-registering under a new Google account (email change, new
+// device signed into a different account, etc.) would get a second,
+// disconnected team_members row instead of being reconnected to their real
+// one — an IBO must map to exactly one account.
+export async function POST(req: Request) {
+  if (isRateLimited(getClientIp(req), 10, 60_000))
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+
+  const user = await verifyUser(req)
+  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+
+  let body: any
+  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+  const ibo = String(body?.ibo || '').trim()
+  const name = String(body?.name || '').trim().slice(0, 200)
+  if (!/^\d{4,12}$/.test(ibo)) return NextResponse.json({ error: 'invalid_ibo' }, { status: 400 })
+
+  const sb = getSbAdmin()
+  const now = new Date().toISOString()
+
+  try {
+    // Does the caller already have a row, and is it for a different IBO?
+    const { data: myRow, error: myRowErr } = await sb.from('team_members')
+      .select('user_id, ibo_number, status, level').eq('user_id', user.id).maybeSingle()
+    if (myRowErr) return NextResponse.json({ error: 'db_error' }, { status: 500 })
+
+    if (myRow && myRow.ibo_number !== ibo) {
+      return NextResponse.json({ error: 'account_linked_to_other_ibo', currentIbo: myRow.ibo_number }, { status: 409 })
+    }
+
+    // Does any row already exist for this IBO (possibly under a different account)?
+    const { data: existing, error: existingErr } = await sb.from('team_members')
+      .select('user_id, name, ibo_number, status, level').eq('ibo_number', ibo).maybeSingle()
+    if (existingErr) return NextResponse.json({ error: 'db_error' }, { status: 500 })
+
+    if (existing && existing.user_id !== user.id) {
+      // One IBO, one account — re-point the existing record to the caller's
+      // current auth id instead of creating a duplicate. Preserves their
+      // approval status/level/history; only the auth link changes.
+      const { data: updated, error: updErr } = await sb.from('team_members')
+        .update({
+          user_id: user.id,
+          name: name || existing.name,
+          email: user.email || '',
+          updated_at: now,
+        })
+        .eq('ibo_number', ibo)
+        .select('*')
+        .maybeSingle()
+      if (updErr) {
+        console.error('team/register re-link failed:', updErr.message)
+        return NextResponse.json({ error: 'relink_failed' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true, member: updated, relinked: true })
+    }
+
+    if (existing && existing.user_id === user.id) {
+      // Already the caller's own row — update display fields only, never status/level.
+      const { data: updated, error: updErr } = await sb.from('team_members')
+        .update({ name: name || existing.name, email: user.email || '', updated_at: now })
+        .eq('user_id', user.id)
+        .select('*')
+        .maybeSingle()
+      if (updErr) return NextResponse.json({ error: 'update_failed' }, { status: 500 })
+      return NextResponse.json({ ok: true, member: updated, relinked: false })
+    }
+
+    // Brand new — no row for this IBO or this user at all.
+    const { data: inserted, error: insErr } = await sb.from('team_members').insert({
+      user_id: user.id,
+      name: name || (user.email ? user.email.split('@')[0] : 'Member'),
+      ibo_number: ibo,
+      leg: ibo,
+      email: user.email || '',
+      role: 'member',
+      referred_by: '',
+      first_login: true,
+      status: 'pending',
+      baseline_set: true,
+      seen_milestones: '[]',
+      created_at: now,
+      updated_at: now,
+    }).select('*').maybeSingle()
+    if (insErr) {
+      console.error('team/register insert failed:', insErr.message)
+      return NextResponse.json({ error: 'insert_failed' }, { status: 500 })
+    }
+    return NextResponse.json({ ok: true, member: inserted, relinked: false, isNew: true })
+  } catch (e: any) {
+    console.error('team/register error:', e)
+    return NextResponse.json({ error: 'internal_error' }, { status: 500 })
+  }
+}
