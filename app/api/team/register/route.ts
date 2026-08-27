@@ -1,8 +1,10 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { getSbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
+import { notifyAdminError } from '@/lib/notify'
+import { sendPushToUser } from '@/lib/push'
 
 // Registers or re-links a team member by IBO number, server-side with the
 // service-role client — the client-side equivalent of this (a direct
@@ -63,6 +65,25 @@ export async function POST(req: Request) {
         console.error('team/register re-link failed:', updErr.message)
         return NextResponse.json({ error: 'relink_failed' }, { status: 500 })
       }
+
+      // A re-link changes who controls an existing account — this must never happen
+      // silently. Alert the admin every time, the same way a brand-new registration
+      // does, so an unexpected account transfer (wrong person, guessed IBO, a member
+      // relinking under a Google account that isn't actually theirs) gets noticed
+      // instead of going unnoticed indefinitely.
+      const subject = `Team tracker account re-linked — ${updated?.name || name || ibo}`
+      const bodyText = [
+        `IBO ${ibo} (${updated?.name || name}) was just re-linked to a different login.`,
+        `Previous account: ${existing.user_id}`,
+        `New account: ${user.id}${user.email ? ' (' + user.email + ')' : ''}`,
+        '',
+        "If this wasn't expected, check Team Tracker in the admin OS.",
+      ].join('\n')
+      notifyAdminError(subject, bodyText).catch(e => console.error('team/register relink email error:', e))
+      resolveAdminId().then(adminId => {
+        if (adminId) sendPushToUser(adminId, '🔄 Account re-linked', `${updated?.name || name} (IBO ${ibo}) switched accounts`).catch(() => {})
+      }).catch(() => {})
+
       return NextResponse.json({ ok: true, member: updated, relinked: true })
     }
 
