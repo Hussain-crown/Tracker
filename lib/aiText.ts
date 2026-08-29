@@ -46,49 +46,6 @@ export function buildPreCallBrief(input: PreCallBriefInput): string {
   return sentences.slice(0, 5).join(' ')
 }
 
-export type HabitCoachInput = {
-  todayScore: number
-  mg1Today: number
-  convoToday: number
-  mg1Goal: number
-  monthMg1: number
-  monthConvo: number
-  targetMg1: number
-  targetConvo: number
-  daysLeftInMonth: number
-  sevenDayAvgMg1: number
-  sevenDayAvgConvo: number
-  streak: number
-  consistency: number
-}
-
-export function buildHabitCoach(ctx: HabitCoachInput): string {
-  const { todayScore, mg1Today, convoToday, mg1Goal, monthMg1, monthConvo, targetMg1, targetConvo, daysLeftInMonth, sevenDayAvgMg1, streak, consistency } = ctx
-  const sentences: string[] = []
-
-  if (todayScore >= 80) sentences.push(`Strong day — score of ${todayScore}, ${mg1Today} MG1${mg1Today === 1 ? '' : 's'} and ${convoToday} convos logged.`)
-  else if (todayScore >= 50) sentences.push(`Average day — score of ${todayScore}. ${mg1Today === 0 ? 'No MG1s landed today.' : `${mg1Today} MG1${mg1Today === 1 ? '' : 's'} logged.`}`)
-  else sentences.push(`Off day — score of ${todayScore}, well below your usual output.`)
-
-  const mg1Pace = monthMg1 / Math.max(targetMg1, 1)
-  const daysIntoMonth = 30 - daysLeftInMonth
-  const expectedPace = daysIntoMonth / 30
-  if (mg1Pace < expectedPace - 0.1) sentences.push(`You're behind pace on MG1s — ${monthMg1}/${targetMg1} this month with ${daysLeftInMonth} days left, need to pick up the rate.`)
-  else if (mg1Pace >= expectedPace) sentences.push(`On or ahead of pace for MG1s — ${monthMg1}/${targetMg1} this month.`)
-
-  if (consistency < 40) sentences.push(`Consistency is low (${consistency}) — that's binge-and-crash, not a sustainable rhythm.`)
-  else if (streak >= 5) sentences.push(`${streak}-day streak — the consistency is working, don't break it now.`)
-
-  const action = mg1Today === 0
-    ? 'Tomorrow: lock in at least one MG1 before anything else.'
-    : sevenDayAvgMg1 < targetMg1 / 30
-    ? 'Tomorrow: push convos earlier in the day so MG1s have room to land.'
-    : 'Tomorrow: keep the same routine, it is producing results.'
-  sentences.push(action)
-
-  return sentences.join(' ')
-}
-
 // Suggests how many days to wait before the next follow-up based on how the
 // last contact went, relative to the entity's normal contact cadence.
 export function suggestFollowUpDays(outcome: string, baseCadenceDays = 7): { days: number; rationale: string } {
