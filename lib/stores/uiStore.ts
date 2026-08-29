@@ -65,20 +65,22 @@ export const useUIStore = create<UIStore>((set) => ({
     const { data: { user } } = await sb.auth.getUser()
     const userId = user?.id ?? ''
     if (!userId) return
-    const { error: uErr } = await sb.from('meta').upsert(
+    const { data: uRows, error: uErr } = await sb.from('meta').upsert(
       { user_id: userId, key, value, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,key' }
-    )
-    if (uErr) {
+    ).select('id')
+    // RLS or an expired session can let the write resolve with 0 rows affected — treat that like an error so the fallback path below runs.
+    const uBlocked = !uErr && !uRows?.length
+    if (uErr || uBlocked) {
       // Fallback: read old value, delete, insert — restore on insert failure
       const { data: existing } = await sb.from('meta').select('value').eq('user_id', userId).eq('key', key).limit(1)
       const oldValue = existing?.[0]?.value
       await sb.from('meta').delete().eq('user_id', userId).eq('key', key)
       const now = new Date().toISOString()
-      const { error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value, updated_at: now })
-      if (iErr) {
+      const { data: iRows, error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value, updated_at: now }).select('id')
+      if (iErr || !iRows?.length) {
         if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) } catch (e) { console.error(e) }
-        throw iErr
+        throw iErr ?? new Error('Setting save was silently blocked. Session may have expired — please refresh.')
       }
     }
   },
@@ -96,8 +98,10 @@ export const useUIStore = create<UIStore>((set) => ({
   upsertResource: async (r) => {
     let prev: Resource[] = []
     set(s => { prev = s.resources; const idx = s.resources.findIndex(x => x.id === r.id); return { resources: idx >= 0 ? s.resources.map(x => x.id === r.id ? r : x) : [r, ...s.resources] } })
-    const { error } = await sb.from('resources').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' })
+    const { data: rows, error } = await sb.from('resources').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
     if (error) { set({ resources: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ resources: prev }); throw new Error('Resource save was silently blocked. Session may have expired — please refresh.') }
   },
 
   deleteResource: async (id) => {
@@ -122,8 +126,10 @@ export const useUIStore = create<UIStore>((set) => ({
   upsertAudio: async (a) => {
     let prev: Audio[] = []
     set(s => { prev = s.audios; const idx = s.audios.findIndex(x => x.id === a.id); return { audios: idx >= 0 ? s.audios.map(x => x.id === a.id ? a : x) : [a, ...s.audios] } })
-    const { error } = await sb.from('audios').upsert(a as unknown as Record<string, unknown>, { onConflict: 'id' })
+    const { data: rows, error } = await sb.from('audios').upsert(a as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
     if (error) { set({ audios: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ audios: prev }); throw new Error('Audio save was silently blocked. Session may have expired — please refresh.') }
   },
 
   deleteAudio: async (id) => {
@@ -148,8 +154,10 @@ export const useUIStore = create<UIStore>((set) => ({
   upsertTask: async (t) => {
     let prev: Task[] = []
     set(s => { prev = s.tasks; const idx = s.tasks.findIndex(x => x.id === t.id); return { tasks: idx >= 0 ? s.tasks.map(x => x.id === t.id ? t : x) : [t, ...s.tasks] } })
-    const { error } = await sb.from('tasks').upsert(t as unknown as Record<string, unknown>, { onConflict: 'id' })
+    const { data: rows, error } = await sb.from('tasks').upsert(t as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
     if (error) { set({ tasks: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ tasks: prev }); throw new Error('Task save was silently blocked. Session may have expired — please refresh.') }
   },
 
   deleteTask: async (id) => {

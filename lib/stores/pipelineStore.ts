@@ -29,8 +29,10 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   upsertLead: async (l) => {
     let prev: Lead[] = []
     set(s => { prev = s.leads; const idx = s.leads.findIndex(x => x.id === l.id); return { leads: idx >= 0 ? s.leads.map(x => x.id === l.id ? l : x) : [l, ...s.leads] } })
-    const { error } = await sb.from('leads').upsert(l as unknown as Record<string, unknown>, { onConflict: 'id' })
+    const { data: rows, error } = await sb.from('leads').upsert(l as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
     if (error) { set({ leads: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ leads: prev }); throw new Error('Lead save was silently blocked. Session may have expired — please refresh.') }
   },
 
   deleteLead: async (id) => {
@@ -51,8 +53,10 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
   addContactLog: async (log) => {
     let prev: ContactLog[] = []
     set(s => { prev = s.contactLogs; return { contactLogs: [log, ...s.contactLogs] } })
-    const { error } = await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>)
+    const { data: rows, error } = await sb.from('contact_logs').insert(log as unknown as Record<string, unknown>).select('id')
     if (error) { set({ contactLogs: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ contactLogs: prev }); throw new Error('Contact log save was silently blocked. Session may have expired — please refresh.') }
   },
 
   loadContactLogs: async (entityId?) => {

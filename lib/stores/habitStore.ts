@@ -41,11 +41,11 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
   saveHabit: async (e) => {
     const prevEntry = get().habits[e.date]
     set(s => ({ habits: { ...s.habits, [e.date]: e } }))
-    const { error } = await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'user_id,date' })
-    if (error) {
-      set(s => { const h = { ...s.habits }; if (prevEntry === undefined) { delete h[e.date] } else { h[e.date] = prevEntry }; return { habits: h } })
-      throw error
-    }
+    const { data: rows, error } = await sb.from('habits').upsert(e as unknown as Record<string, unknown>, { onConflict: 'user_id,date' }).select('id')
+    const rollback = () => set(s => { const h = { ...s.habits }; if (prevEntry === undefined) { delete h[e.date] } else { h[e.date] = prevEntry }; return { habits: h } })
+    if (error) { rollback(); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { rollback(); throw new Error('Habit save was silently blocked. Session may have expired — please refresh.') }
   },
 
   loadWins: async () => {
@@ -61,8 +61,10 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
   upsertWin: async (w) => {
     let prev: Win[] = []
     set(s => { prev = s.wins; const idx = s.wins.findIndex(x => x.id === w.id); return { wins: idx >= 0 ? s.wins.map(x => x.id === w.id ? w : x) : [w, ...s.wins] } })
-    const { error } = await sb.from('wins').upsert(w as unknown as Record<string, unknown>, { onConflict: 'id' })
+    const { data: rows, error } = await sb.from('wins').upsert(w as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
     if (error) { set({ wins: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ wins: prev }); throw new Error('Win save was silently blocked. Session may have expired — please refresh.') }
   },
 
   deleteWin: async (id) => {
@@ -87,8 +89,10 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
   upsertWeeklyReview: async (r) => {
     let prev: WeeklyReview[] = []
     set(s => { prev = s.weeklyReviews; const idx = s.weeklyReviews.findIndex(x => x.id === r.id); return { weeklyReviews: idx >= 0 ? s.weeklyReviews.map(x => x.id === r.id ? r : x) : [r, ...s.weeklyReviews] } })
-    const { error } = await sb.from('weekly_reviews').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' })
+    const { data: rows, error } = await sb.from('weekly_reviews').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
     if (error) { set({ weeklyReviews: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ weeklyReviews: prev }); throw new Error('Weekly review save was silently blocked. Session may have expired — please refresh.') }
   },
 
   loadMoodEntries: async () => {
@@ -104,8 +108,10 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
   addMoodEntry: async (m) => {
     let prev: MoodEntry[] = []
     set(s => { prev = s.moodEntries; return { moodEntries: [m, ...s.moodEntries] } })
-    const { error } = await sb.from('mood_entries').insert(m as unknown as Record<string, unknown>)
+    const { data: rows, error } = await sb.from('mood_entries').insert(m as unknown as Record<string, unknown>).select('id')
     if (error) { set({ moodEntries: prev }); throw error }
+    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
+    if (!rows?.length) { set({ moodEntries: prev }); throw new Error('Mood entry save was silently blocked. Session may have expired — please refresh.') }
   },
 
   subscribeRealtime: (userId) => {
