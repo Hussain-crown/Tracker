@@ -382,7 +382,9 @@ export default function Candidates({level=1}:{level?:number}={}){
             if(lh.length===0)return null
             const avgDays=Math.round(lh.reduce((sum,c)=>{
               const hist=getStageHistory(c)
-              return sum+daysSince(hist[0]?.date??c.created_at.slice(0,10))-daysSince(getLaunchedAt(c)||c.updated_at.slice(0,10))
+              const firstDate=hist[0]?.date??c.created_at.slice(0,10)
+              const launchDate=getLaunchedAt(c)||c.updated_at.slice(0,10)
+              return sum+Math.max(0,daysSince(firstDate)-daysSince(launchDate))
             },0)/lh.length)
             return(
               <div style={{...CARD,marginBottom:12}}>
