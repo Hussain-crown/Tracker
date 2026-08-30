@@ -70,10 +70,14 @@ export async function GET(req: Request) {
     // team_members. Without this check, verify-ibo can never recognise their IBO on
     // login/re-verification, permanently locking them out with "not recognised."
     if (!partners?.length) {
+      // NOTE: team_members.user_id is each MEMBER's own auth id (not the admin's) —
+      // this is a single-tenant system with one admin owning the whole team, so no
+      // admin-scoping filter belongs here. Filtering by adminId (as a since-fixed
+      // bug once did) can never match a real member row and always falls through
+      // to "not recognised", even for a genuinely active member.
       const { data: members } = await getSb()
         .from('team_members')
         .select('id, name, ibo_number')
-        .eq('user_id', adminId)
         .eq('ibo_number', ibo)
         .eq('status', 'active')
         .limit(1)
