@@ -14,7 +14,7 @@ function getSb() {
 async function getAdminId(): Promise<string|null> {
   if(process.env.ADMIN_USER_ID) return process.env.ADMIN_USER_ID
   const { data } = await getSb().from('meta').select('user_id').in('key',[
-    'booking_availability','booking_rules','booking_zoom_link',
+    'booking_availability','booking_rules',
     'booking_display_name','booking_admin_email','booking_custom_type'
   ]).order('updated_at',{ascending:false}).limit(1)
   if(data?.[0]?.user_id) return data[0].user_id

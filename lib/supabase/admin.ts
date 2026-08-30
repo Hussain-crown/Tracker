@@ -47,7 +47,7 @@ export async function resolveAdminId(fallback = ''): Promise<string> {
   const { data: metaRow } = await sbAdmin
     .from('meta')
     .select('user_id')
-    .in('key', ['booking_zoom_link', 'booking_display_name', 'booking_admin_email'])
+    .in('key', ['booking_display_name', 'booking_admin_email'])
     .order('updated_at', { ascending: false })
     .limit(1)
   return metaRow?.[0]?.user_id ?? ''

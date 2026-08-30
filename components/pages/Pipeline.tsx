@@ -22,7 +22,7 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
 
 const SOURCES    = ['Instagram','Facebook','TikTok','LinkedIn','YouTube','Cold Approach','Referral','Event','University','Gym','Work','Church / Community','Online Ad','Other']
 const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
-const NEXT_ACTS  = ['Call','WhatsApp','MPA','Catch-Up','DTM','Send Info','Other']
+const NEXT_ACTS  = ['Call','MPA','Catch-Up','DTM','Send Info','Other']
 const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
 const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only']
 const AGE_RANGES = ['Under 25','25-35','35-45','45+']
@@ -48,7 +48,6 @@ function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime
 function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<new Date().toISOString().slice(0,10))}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
-function waLink(l:Lead){const n=(l.phone||l.contact||'').replace(/\D/g,'');return n?`https://wa.me/${n.startsWith('0')?'61'+n.slice(1):n}`:null}
 function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',score:0}}
 
 function parseCSV(text:string){
@@ -101,7 +100,6 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
   const days=daysSince(l.updated_at)
   const isDTM=l.stage==='DTM'
   const isCandidate=candidates.some(c=>c.name===l.name)
-  const wa=waLink(l)
   const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
   // Days in current stage (from last stage-change log or created_at)
@@ -178,7 +176,6 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
           style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
           ✓ Log
         </button>
-        {wa&&<a href={wa} target="_blank" rel="noopener noreferrer" style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid rgba(37,211,102,0.3)',background:'rgba(37,211,102,0.08)',color:'#25D366',textDecoration:'none',fontSize:11,fontWeight:600}}>WA</a>}
         {STAGE_CFG[l.stage as Stage]?.next&&(
           <button onClick={()=>advanceStage(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
             → {STAGE_CFG[l.stage as Stage]?.next}
