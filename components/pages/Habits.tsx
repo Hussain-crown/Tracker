@@ -278,7 +278,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const checklistBonus=useMemo(()=>(checklist.reading?3:0)+(checklist.audio?3:0),[checklist])
   const todayScore=useMemo(()=>calcScore(form,checklistBonus),[form,calcScore,checklistBonus])
   const streak=useMemo(()=>{
-    const isActive=(ds:string)=>{const h=habits[ds] as HabitEntry|undefined;return !!h&&FIELDS.some(f=>((h as any)[f.key]??0)>0)}
+    const isActive=(ds:string)=>{const h=habits[ds] as HabitEntry|undefined;return !!h&&FIELDS.some(f=>f.key!=='interruptions'&&((h as any)[f.key]??0)>0)}
     const d=new Date()
     const todayDs=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
     // If today has no activity yet, start counting from yesterday instead of
@@ -290,7 +290,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   },[habits,FIELDS])
   const consistency=useMemo(()=>{
     const last30:string[]=[];for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
-    return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>(h as any)[f.key]>0)}).length/30*100)
+    return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>f.key!=='interruptions'&&(h as any)[f.key]>0)}).length/30*100)
   },[habits,FIELDS])
   const conv=useMemo(()=>({
     mg1Rate:allTimeTotals.convo>0?Math.round((allTimeTotals.mg1??0)/allTimeTotals.convo*100):0,
