@@ -57,7 +57,8 @@ const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br
 const INPL:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box'}
 
 interface CoreGoals { goalField:FieldKey; goalMonthly:number; deadline:string; overrides:Partial<Record<FieldKey,number>> }
-const defaultDeadline=()=>new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
+function brisbaneYearMonth(){const [y,m]=brisbaneToday().split('-').map(Number);return {y,m}}
+const defaultDeadline=()=>{const {y,m}=brisbaneYearMonth();return new Date(y,m,0).toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
 const EMPTY_CORE:CoreGoals={goalField:'mg1',goalMonthly:3,deadline:defaultDeadline(),overrides:{}}
 
 function deriveTargets(goals:CoreGoals):Partial<Record<FieldKey,number>>{
@@ -362,8 +363,9 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
         <div>
           {/* Monthly pace strip — shows ONLY the chosen Core Run goal field */}
           {coreGoals.goalMonthly>0&&(()=>{
-            const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate()
-            const dayOfMonth=new Date().getDate()
+            const {y:_bY,m:_bM}=brisbaneYearMonth()
+            const daysInMonth=new Date(_bY,_bM,0).getDate()
+            const dayOfMonth=Number(brisbaneToday().split('-')[2])
             const daysRemaining=daysInMonth-dayOfMonth
             const goalField=coreGoals.goalField  // the ONE field they chose e.g. 'mpa', 'mg1'
             const goalLabel=FIELDS.find(f=>f.key===goalField)?.label??goalField
@@ -540,7 +542,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
 
           {/* New month notice */}
           {(()=>{
-            const day=new Date().getDate()
+            const day=Number(brisbaneToday().split('-')[2])
             const thisMonthDays=Object.keys(habits).filter((d:string)=>d.startsWith(currMo))
             if(day>5||thisMonthDays.length>0)return null
             return(
@@ -699,7 +701,8 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
             </div>
             {parseInt(coreForm.goal,10)>0&&(()=>{
               const preview=deriveTargets({goalField:coreForm.goalField,goalMonthly:parseInt(coreForm.goal,10)||3,deadline:coreForm.deadline,overrides:{}})
-              const daysInMonth=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate()
+              const {y:_pbY,m:_pbM}=brisbaneYearMonth()
+              const daysInMonth=new Date(_pbY,_pbM,0).getDate()
               return(
                 <div style={{padding:'12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:20}}>
                   <div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Preview — daily targets:</div>

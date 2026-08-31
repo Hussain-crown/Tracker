@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase/client'
 import { buildPreCallBrief } from '@/lib/aiText'
 import type { Candidate, ContactLog } from '@/lib/stores/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { today } from '@/lib/utils'
 
 // ── STAGES ────────────────────────────────────────────────
 const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer Questions','Offer Call'] as const
@@ -84,7 +85,7 @@ interface CardProps{
   isDupe?:boolean
 }
 function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,onAdvance,onDq,onLaunch,isDupe}:CardProps){
-  const todayStr=new Date().toISOString().slice(0,10)
+  const todayStr=today()
   const stage=normaliseStage(c.stage)
   const cfg=STAGE_CFG[stage]
   const score=scores[c.id]??0
@@ -218,7 +219,7 @@ export default function Candidates({level=1}:{level?:number}={}){
     return res.json()
   }
 
-  const todayStr=new Date().toISOString().slice(0,10)
+  const todayStr=today()
 
   const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
   const archived = useMemo(()=>candidates.filter(c=>c.status==='disqualified'),[candidates])

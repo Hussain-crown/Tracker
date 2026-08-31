@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import type { HabitEntry } from '@/lib/stores/types'
-import { uid, now } from '@/lib/utils'
+import { uid, now, today } from '@/lib/utils'
 import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -46,7 +46,7 @@ function healthScore(l:Lead, lastContactDate:string):number{
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
 function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime())/86400000):999}
 function isStale(l:Lead){return daysSince(l.updated_at)>=7}
-function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<new Date().toISOString().slice(0,10))}
+function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<today())}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
 function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',score:0}}
 
@@ -64,8 +64,8 @@ const CSV_FIELD_MAP:Record<string,keyof Lead>={
   contact:'contact','contact method':'contact',
 }
 
-function todayStr(){return new Date().toISOString().slice(0,10)}
-function daysFromNow(n:number){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)}
+function todayStr(){return today()}
+function daysFromNow(n:number){const d=new Date();d.setDate(d.getDate()+n);return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
 
 // ── STYLES ─────────────────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
@@ -846,7 +846,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                   <button key={o} onClick={()=>{
                     const sugg=suggestFollowUpDays(o,7)
                     const d=new Date();d.setDate(d.getDate()+sugg.days)
-                    setContactLog(p=>({...p,outcome:o,nextAction:ACTION_BY_OUTCOME[o]||p.nextAction,nextDate:d.toISOString().slice(0,10),rationale:sugg.rationale}))
+                    setContactLog(p=>({...p,outcome:o,nextAction:ACTION_BY_OUTCOME[o]||p.nextAction,nextDate:d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}),rationale:sugg.rationale}))
                   }}
                     style={{padding:'6px 12px',borderRadius:'var(--r)',border:`1px solid ${contactLog.outcome===o?GOLD:'var(--br)'}`,background:contactLog.outcome===o?'rgba(200,162,74,0.15)':'var(--s2)',color:contactLog.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:contactLog.outcome===o?700:400}}>
                     {o}
