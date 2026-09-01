@@ -55,6 +55,19 @@ export async function POST(req: Request) {
     const raw = candidate.interview_notes
     try { notes = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw ?? {}) } catch {}
 
+    // interview_notes is a single shared JSON column — another request (a
+    // concurrent team-member action, or the fathom-sync cron writing AI
+    // score/sentiment) can update it between this read and our write below.
+    // Re-fetch immediately before merging so a stage-advance/notes-update/
+    // launch doesn't blindly clobber whatever landed in between.
+    async function freshNotes(): Promise<any> {
+      const { data: fresh } = await sbAdmin.from('candidates').select('interview_notes').eq('id', candidateId).maybeSingle()
+      try {
+        const r = fresh?.interview_notes
+        return typeof r === 'string' ? JSON.parse(r || '{}') : (r ?? {})
+      } catch { return notes }
+    }
+
     const now = new Date().toISOString()
 
     if (action === 'log_contact') {
@@ -90,9 +103,10 @@ export async function POST(req: Request) {
       const nextStage = idx >= 0 && idx < STAGES.length - 1 ? STAGES[idx + 1] : null
       if (!nextStage) return NextResponse.json({ error: 'already at final stage' }, { status: 400 })
 
-      const history = notes._stage_history || []
+      const currentNotes = await freshNotes()
+      const history = currentNotes._stage_history || []
       history.push({ stage: candidate.stage as string, date: now.slice(0, 10) })
-      const newNotes = JSON.stringify({ ...notes, _stage_history: history })
+      const newNotes = JSON.stringify({ ...currentNotes, _stage_history: history })
 
       const { error: stageErr } = await sbAdmin.from('candidates').update({
         stage: nextStage,
@@ -139,7 +153,8 @@ export async function POST(req: Request) {
 
     if (action === 'update_notes') {
       const { notes: newNotes } = body
-      const merged = JSON.stringify({ ...notes, __notes: typeof newNotes === 'string' ? newNotes : '' })
+      const currentNotes = await freshNotes()
+      const merged = JSON.stringify({ ...currentNotes, __notes: typeof newNotes === 'string' ? newNotes : '' })
       const { error: notesErr } = await sbAdmin.from('candidates').update({ interview_notes: merged, updated_at: now }).eq('id', candidateId)
       if (notesErr) { console.error('update_notes failed:', notesErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
       return NextResponse.json({ ok: true })
@@ -147,9 +162,10 @@ export async function POST(req: Request) {
 
     if (action === 'launch') {
       if (candidate.status !== 'active') return NextResponse.json({ error: 'candidate not active' }, { status: 400 })
-      const stageHistory = notes._stage_history || []
+      const currentNotes = await freshNotes()
+      const stageHistory = currentNotes._stage_history || []
       stageHistory.push({ stage: candidate.stage as string, date: now.slice(0, 10) })
-      const merged = JSON.stringify({ ...notes, _launched_at: now.slice(0, 10), _stage_history: stageHistory, _next_meeting: null })
+      const merged = JSON.stringify({ ...currentNotes, _launched_at: now.slice(0, 10), _stage_history: stageHistory, _next_meeting: null })
       const { error: launchErr } = await sbAdmin.from('candidates').update({
         status: 'launched',
         interview_notes: merged,
