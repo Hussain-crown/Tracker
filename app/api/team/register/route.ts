@@ -17,7 +17,7 @@ import { sendPushToUser } from '@/lib/push'
 // disconnected team_members row instead of being reconnected to their real
 // one — an IBO must map to exactly one account.
 export async function POST(req: Request) {
-  if (isRateLimited(getClientIp(req), 10, 60_000))
+  if (await isRateLimited(getClientIp(req), 10, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const user = await verifyUser(req)

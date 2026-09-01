@@ -23,7 +23,7 @@ async function getAdminId(): Promise<string|null> {
 }
 
 export async function GET(req: Request) {
-  if (isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(getClientIp(req), 20, 60_000))
     return NextResponse.json({ valid: false, error: 'Too many requests' }, { status: 429 })
 
   const { searchParams } = new URL(req.url)
