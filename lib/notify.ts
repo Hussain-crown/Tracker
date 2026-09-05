@@ -8,8 +8,28 @@ const sb = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'placeholder',
 )
 
+// Best-effort webhook alert (Slack incoming webhook / Discord / any endpoint
+// that accepts {text}) — completely independent of the Google token, so it
+// still fires when the OAuth connection is the thing that's broken. Set
+// ADMIN_ALERT_WEBHOOK_URL to enable; a no-op until then.
+async function notifyWebhook(subject: string, body: string): Promise<void> {
+  const url = process.env.ADMIN_ALERT_WEBHOOK_URL
+  if (!url) return
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: `*${subject}*\n${body}`.slice(0, 4000) }),
+      signal: AbortSignal.timeout(8000),
+    })
+  } catch (e: unknown) {
+    Sentry.captureException(e)
+  }
+}
+
 // Best-effort admin alert via Gmail. Never throws — callers must not fail due to alerting.
 export async function notifyAdminError(subject: string, body: string): Promise<void> {
+  await notifyWebhook(subject, body)
   try {
     const { data: metaRows } = await sb.from('meta')
       .select('value,user_id')
