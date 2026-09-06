@@ -718,61 +718,126 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         </div>
       )}
 
-      {/* ── LEAD DRAWER ───────────────────────────────────── */}
-      {drawerLead&&(
+      {/* ── LEAD DRAWER (full profile) ───────────────────────── */}
+      {drawerLead&&(()=>{
+        const cfg=STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['Convo']
+        const score=hxl(drawerLead.hunger,drawerLead.looking)
+        const initials=(drawerLead.name||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]?.toUpperCase()).join('')||'?'
+        const SECTION:React.CSSProperties={background:'var(--s2)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:14}
+        const SECTION_HEAD:React.CSSProperties={display:'flex',alignItems:'center',gap:8,marginBottom:14}
+        const SECTION_ICON:React.CSSProperties={width:24,height:24,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0}
+        const FIELD=({l,v,c}:{l:string;v:string;c?:string})=>(
+          <div>
+            <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'1px',textTransform:'uppercase' as const,marginBottom:3}}>{l}</div>
+            <div style={{fontSize:12,fontWeight:600,color:c||'var(--text2)'}}>{v||'—'}</div>
+          </div>
+        )
+        return(
         <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDrawerLead(null)}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,overflow:'hidden'}}>
-            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
-              <div>
-                <div style={{fontSize:18,fontWeight:700,marginBottom:4}}>{drawerLead.name}</div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['Convo']).bg,color:(STAGE_CFG[drawerLead.stage as Stage]??STAGE_CFG['Convo']).color,fontWeight:600}}>{drawerLead.stage}</span>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,overflow:'hidden',margin:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',display:'flex',flexDirection:'column' as const,maxHeight:'88vh'}}>
+            <div style={{padding:'20px 24px',borderBottom:'1px solid var(--br)',display:'flex',alignItems:'center',gap:14,background:'linear-gradient(180deg,var(--s2),var(--s1))',flexShrink:0}}>
+              <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${GOLD},var(--gold3))`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:15,color:'#000',flexShrink:0}}>{initials}</div>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:17,fontWeight:800,whiteSpace:'nowrap' as const,overflow:'hidden',textOverflow:'ellipsis'}}>{drawerLead.name}</div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,marginTop:4}}>
+                  <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{drawerLead.stage}</span>
                   <span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.source}</span>
-                  {drawerLead.phone&&<span style={{fontSize:10,color:'var(--text4)'}}>{drawerLead.phone}</span>}
-                  {drawerLead.instagram&&<span style={{fontSize:10,color:PURPLE}}>@{drawerLead.instagram}</span>}
                 </div>
               </div>
-              <button onClick={()=>setDrawerLead(null)} style={{background:'none',border:'none',color:'var(--text4)',cursor:'pointer',fontSize:22}}>×</button>
+              <button onClick={()=>setDrawerLead(null)} style={{width:28,height:28,borderRadius:8,border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontSize:14,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
             </div>
-            <div style={{padding:'18px 24px',maxHeight:'70vh',overflowY:'auto' as const}}>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                {[{l:'HxL Score',v:`${hxl(drawerLead.hunger,drawerLead.looking)} (H${drawerLead.hunger}×L${drawerLead.looking})`,c:hxlColor(hxl(drawerLead.hunger,drawerLead.looking))},{l:'Relationship',v:drawerLead.relationship||'—',c:'var(--text2)'},{l:'Age Range',v:drawerLead.age_range||'—',c:'var(--text2)'},{l:'Primary Driver',v:drawerLead.primary_driver||'—',c:GOLD},{l:'Source',v:drawerLead.source,c:'var(--text2)'}].map(x=>(
-                  <div key={x.l}>
-                    <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div>
-                    <div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div>
-                  </div>
-                ))}
+            <div style={{padding:'20px 24px',overflowY:'auto' as const,flex:1}}>
+
+              {/* Identity */}
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(200,162,74,0.15)'}}>🪪</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Identity</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <FIELD l="Phone" v={drawerLead.phone}/>
+                  <FIELD l="Email" v={drawerLead.email}/>
+                  <FIELD l="Source" v={drawerLead.source}/>
+                  <FIELD l="Stage" v={drawerLead.stage} c={cfg.color}/>
+                </div>
               </div>
-              {drawerLead.pain_point&&(
-                <div style={{marginBottom:16,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}>
-                  <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>THEIR WHY</div>
-                  <div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{drawerLead.pain_point}"</div>
+
+              {/* Scoring */}
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(224,85,85,0.15)'}}>🔥</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Scoring</span>
+                  <span className="mono" style={{marginLeft:'auto',fontSize:11,color:'var(--text4)'}}>HxL</span>
+                  <span className="mono" style={{fontSize:16,fontWeight:800,color:hxlColor(score)}}>{score}</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <FIELD l="Hunger" v={`${drawerLead.hunger}/10`}/>
+                  <FIELD l="Looking" v={`${drawerLead.looking}/10`}/>
+                </div>
+              </div>
+
+              {/* Context */}
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(91,155,213,0.15)'}}>🧭</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Context</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:drawerLead.pain_point?12:0}}>
+                  <FIELD l="Relationship" v={drawerLead.relationship}/>
+                  <FIELD l="Age Range" v={drawerLead.age_range}/>
+                  <FIELD l="Life Stage" v={drawerLead.life_stage}/>
+                  <FIELD l="Primary Driver" v={drawerLead.primary_driver} c={GOLD}/>
+                </div>
+                {drawerLead.pain_point&&(
+                  <div style={{padding:'10px 12px',background:'var(--s1)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}>
+                    <div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>THEIR WHY</div>
+                    <div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{drawerLead.pain_point}"</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Notes — captured at creation/edit */}
+              {drawerLead.notes&&(
+                <div style={SECTION}>
+                  <div style={SECTION_HEAD}>
+                    <span style={{...SECTION_ICON,background:'rgba(155,91,213,0.15)'}}>📝</span>
+                    <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Notes</span>
+                  </div>
+                  <div style={{fontSize:12,color:'var(--text2)',lineHeight:1.6,whiteSpace:'pre-wrap' as const}}>{drawerLead.notes}</div>
                 </div>
               )}
 
-              {/* Contact History */}
-              <div style={SL}>Contact History</div>
-              {leadLogs(drawerLead.id).length===0
-                ?<div style={{fontSize:12,color:'var(--text4)',marginBottom:16}}>No contact logged yet</div>
-                :leadLogs(drawerLead.id).map(log=>(
-                  <div key={log.id} style={{padding:'8px 0',borderBottom:'1px solid var(--br)',marginBottom:4}}>
-                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
-                      <span style={{fontSize:10,fontWeight:600,color:{Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}[log.outcome]??'var(--text4)'}}>{log.outcome||log.event_type}</span>
-                      <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
+              {/* Contact History — every logged note */}
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(76,175,125,0.15)'}}>💬</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Contact History</span>
+                  <span style={{marginLeft:'auto',fontSize:10,color:'var(--text4)'}}>{leadLogs(drawerLead.id).length} entries</span>
+                </div>
+                {leadLogs(drawerLead.id).length===0
+                  ?<div style={{fontSize:12,color:'var(--text4)'}}>No contact logged yet</div>
+                  :leadLogs(drawerLead.id).map(log=>(
+                    <div key={log.id} style={{padding:'8px 0',borderBottom:'1px solid var(--br)'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                        <span style={{fontSize:10,fontWeight:600,color:'var(--text3)'}}>{log.event_type.replace(/_/g,' ')}</span>
+                        <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
+                      </div>
+                      {log.notes&&<div style={{fontSize:11,color:'var(--text2)',lineHeight:1.5}}>{log.notes}</div>}
                     </div>
-                    {log.notes&&<div style={{fontSize:11,color:'var(--text3)',lineHeight:1.5}}>{log.notes}</div>}
-                    {log.next_action&&<div style={{fontSize:10,color:'var(--text4)',marginTop:2}}>Next: {log.next_action}{log.next_date?` · ${fmtDate(log.next_date)}`:''}</div>}
-                  </div>
-                ))
-              }
+                  ))
+                }
+              </div>
 
               {/* Timeline — stage-change events */}
               {(()=>{
                 const timelineLogs=leadLogs(drawerLead.id).filter(l=>['convo','contact','mpa','catch_up','dtm','lead_created'].includes(l.event_type))
                 if(timelineLogs.length===0)return null
                 return(
-                  <div style={{marginTop:16}}>
-                    <div style={SL}>Stage Timeline</div>
+                  <div style={SECTION}>
+                    <div style={SECTION_HEAD}>
+                      <span style={{...SECTION_ICON,background:'rgba(200,162,74,0.15)'}}>📍</span>
+                      <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Stage Timeline</span>
+                    </div>
                     <div style={{position:'relative' as const,paddingLeft:14}}>
                       <div style={{position:'absolute' as const,left:4,top:4,bottom:4,width:1,background:'var(--br)'}}/>
                       {timelineLogs.map((log,i)=>{
@@ -790,29 +855,28 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                   </div>
                 )
               })()}
-
-              <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const,alignItems:'center'}}>
-                <button onClick={()=>{setContactModal(drawerLead);setContactLog({notes:''});setDrawerLead(null)}}
-                  style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
-                  ✓ Log Contact
+            </div>
+            <div style={{display:'flex',gap:8,padding:'16px 24px',borderTop:'1px solid var(--br)',background:'var(--s1)',flexShrink:0,flexWrap:'wrap' as const}}>
+              <button onClick={()=>{setContactModal(drawerLead);setContactLog({notes:''});setDrawerLead(null)}}
+                style={{padding:'10px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
+                ✓ Log Contact
+              </button>
+              {STAGES.indexOf(drawerLead.stage as Stage)>0&&(
+                <button onClick={()=>changeStage(drawerLead,STAGES[STAGES.indexOf(drawerLead.stage as Stage)-1])} style={{padding:'10px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
+                  ← {STAGES[STAGES.indexOf(drawerLead.stage as Stage)-1]}
                 </button>
-                {STAGES.indexOf(drawerLead.stage as Stage)>0&&(
-                  <button onClick={()=>changeStage(drawerLead,STAGES[STAGES.indexOf(drawerLead.stage as Stage)-1])} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
-                    ← {STAGES[STAGES.indexOf(drawerLead.stage as Stage)-1]}
-                  </button>
-                )}
-                {STAGES.indexOf(drawerLead.stage as Stage)<STAGES.length-1&&(
-                  <button onClick={()=>changeStage(drawerLead,STAGES[STAGES.indexOf(drawerLead.stage as Stage)+1])} style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
-                    → {STAGES[STAGES.indexOf(drawerLead.stage as Stage)+1]}
-                  </button>
-                )}
-                <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
-                {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
-              </div>
+              )}
+              {STAGES.indexOf(drawerLead.stage as Stage)<STAGES.length-1&&(
+                <button onClick={()=>changeStage(drawerLead,STAGES[STAGES.indexOf(drawerLead.stage as Stage)+1])} style={{padding:'10px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
+                  → {STAGES[STAGES.indexOf(drawerLead.stage as Stage)+1]}
+                </button>
+              )}
+              <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'10px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
+              {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'10px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
             </div>
           </div>
         </div>
-      )}
+        )})()}
 
       {/* ── EDIT MODAL ─────────────────────────────────────── */}
       {open&&(()=>{
