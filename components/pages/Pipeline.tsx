@@ -65,6 +65,11 @@ const CSV_FIELD_MAP:Record<string,keyof Lead>={
   email:'email',
   source:'source',stage:'stage',notes:'notes',
   contact:'contact','contact method':'contact',
+  relationship:'relationship',
+  'age range':'age_range',age_range:'age_range',
+  'life stage':'life_stage',life_stage:'life_stage',
+  'primary driver':'primary_driver',primary_driver:'primary_driver',
+  'pain point':'pain_point',pain_point:'pain_point','their why':'pain_point',
 }
 
 function todayStr(){return today()}
