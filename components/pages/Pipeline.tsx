@@ -132,10 +132,8 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
         </div>
       </div>
       <div style={{fontSize:9.5,color:cfg.color,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase' as const,marginBottom:6}}>{l.stage} · {daysInStage}d</div>
-      <div style={{display:'flex',alignItems:'center',gap:3,marginBottom:10}}>
-        {STAGES.map((s,i)=>(
-          <div key={s} style={{flex:1,height:4,borderRadius:2,background:i<idx?cfg.color:i===idx?cfg.color:'var(--s3)',opacity:i<idx?0.35:1}}/>
-        ))}
+      <div style={{height:4,borderRadius:2,background:'var(--s3)',marginBottom:10,overflow:'hidden'}}>
+        <div style={{height:'100%',width:`${((idx+1)/STAGES.length)*100}%`,background:cfg.color,borderRadius:2,transition:'width 0.3s ease'}}/>
       </div>
       {l.primary_driver&&<div style={{fontSize:11.5,color:'var(--text3)',marginBottom:10}}>→ <span style={{color:GOLD,fontWeight:600}}>{l.primary_driver}</span></div>}
       <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11.5,padding:'8px 10px',borderRadius:'var(--r)',background:overdue?'rgba(224,85,85,0.08)':'var(--s2)',marginBottom:12}}>
