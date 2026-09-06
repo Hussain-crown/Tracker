@@ -4,13 +4,13 @@
 
 export interface Lead {
   id: string; user_id: string; name: string
-  phone: string; instagram: string; contact: string
+  phone: string; instagram: string; contact: string; email?: string
   source: string; stage: string; score: number
   hunger: number; looking: number
-  relationship: string    // 'Close friend' | 'Acquaintance' | 'Stranger' | 'Online only'
+  relationship: string    // 'Close friend' | 'Acquaintance' | 'Stranger' | 'Online only' | 'Family'
   age_range: string       // 'Under 25' | '25-35' | '35-45' | '45+'
-  life_stage: string      // 'Student' | 'Working' | 'Business owner' | 'Parent' | 'Retired'
-  primary_driver: string  // 'Time freedom' | 'Extra income' | 'Full-time income' | 'Business ownership' | 'Products only'
+  life_stage: string      // comma-joined, up to 3 of: 'Student' | 'Working' | 'Business owner' | 'Parent' | 'Retired'
+  primary_driver: string  // comma-joined, 1-3 of: 'Family' | 'Community' | 'Purpose' | 'Personal Development' | 'Time' | 'Money' | 'Lifestyle'
   pain_point: string      // their words
   archived: boolean
   archived_reason: string

@@ -24,8 +24,9 @@ const SOURCES    = ['Instagram','Facebook','TikTok','LinkedIn','YouTube','Cold A
 const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
 const NEXT_ACTS  = ['Call','MPA','Catch-Up','DTM','Send Info','Other']
 const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
-const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only']
+const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only','Family']
 const AGE_RANGES = ['Under 25','25-35','35-45','45+']
+const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
 const DRIVERS    = ['Family','Community','Purpose','Personal Development','Time','Money','Lifestyle']
 const HUNGER_ANCHORS = ['Content with life','Mild dissatisfaction','Wants change','Unhappy, exploring','Desperate to change']
 const LOOKING_ANCHORS= ['Completely closed','Politely listening','Curious, open','Actively searching','Ready to start now']
@@ -48,7 +49,8 @@ function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime
 function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<today())}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
-function blankLead():Partial<Lead>{return{name:'',phone:'',instagram:'',contact:'',source:'Instagram',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',score:0}}
+function blankLead():Partial<Lead>{return{name:'',phone:'',email:'',instagram:'',contact:'',source:'',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',score:0}}
+function csvToList(s?:string):string[]{return(s||'').split(',').map(x=>x.trim()).filter(Boolean)}
 
 function parseCSV(text:string){
   const lines=text.trim().split(/\r?\n/).filter(l=>l.trim())
@@ -60,6 +62,7 @@ const CSV_FIELD_MAP:Record<string,keyof Lead>={
   name:'name','full name':'name',fullname:'name',
   phone:'phone',mobile:'phone',
   instagram:'instagram',ig:'instagram',
+  email:'email',
   source:'source',stage:'stage',notes:'notes',
   contact:'contact','contact method':'contact',
 }
@@ -196,6 +199,46 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
 }
 
 // ── MAIN COMPONENT ─────────────────────────────────────────
+// ── MULTI-SELECT DROPDOWN (up to `max` picks, closed by default) ──
+function MultiSelectDropdown({label,options,values,onChange,max,invalid}:{label:string;options:string[];values:string[];onChange:(v:string[])=>void;max:number;invalid?:boolean}){
+  const [open,setOpen]=useState(false)
+  const ref=React.useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    function onDoc(e:MouseEvent){if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false)}
+    document.addEventListener('mousedown',onDoc)
+    return()=>document.removeEventListener('mousedown',onDoc)
+  },[])
+  function toggle(o:string){
+    if(values.includes(o))onChange(values.filter(v=>v!==o))
+    else if(values.length<max)onChange([...values,o])
+  }
+  return(
+    <div ref={ref} style={{position:'relative'}}>
+      <div style={SL}>{label} {max>1?`(up to ${max})`:''}</div>
+      <div onClick={()=>setOpen(o=>!o)} style={{...SEL,display:'flex',justifyContent:'space-between',alignItems:'center',border:`1px solid ${invalid?RED:'var(--br2)'}`}}>
+        <span style={{color:values.length?'var(--text)':'var(--text4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{values.length?values.join(', '):'Select…'}</span>
+        <span style={{fontSize:10,color:'var(--text4)',flexShrink:0,marginLeft:6}}>{open?'▲':'▼'}</span>
+      </div>
+      {open&&(
+        <div style={{position:'absolute',top:'100%',left:0,right:0,marginTop:4,background:'var(--s2)',border:'1px solid var(--br2)',borderRadius:'var(--r)',zIndex:20,maxHeight:200,overflowY:'auto' as const,boxShadow:'0 8px 24px rgba(0,0,0,0.4)'}}>
+          {options.map(o=>{
+            const checked=values.includes(o)
+            const disabled=!checked&&values.length>=max
+            return(
+              <div key={o} onClick={()=>!disabled&&toggle(o)} style={{padding:'8px 12px',display:'flex',alignItems:'center',gap:8,cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.4:1,fontSize:13,fontFamily:"'Sora',sans-serif"}}>
+                <span style={{width:14,height:14,borderRadius:4,border:`1px solid ${checked?GOLD:'var(--br2)'}`,background:checked?GOLD:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  {checked&&<span style={{color:'#000',fontSize:10,fontWeight:800}}>✓</span>}
+                </span>
+                <span>{o}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const {leads,userId,upsertLead,deleteLead,loadLeads,
          upsertCandidate,loadCandidates,candidates,
@@ -210,6 +253,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [ed,setEd]             = useState<Lead|null>(null)
   const [form,setForm]         = useState<Partial<Lead>>(blankLead())
   const [err,setErr]           = useState('')
+  const [invalidFields,setInvalidFields] = useState<Set<string>>(new Set())
   const [contactModal,setContactModal] = useState<Lead|null>(null)
   const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
   const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
@@ -372,20 +416,30 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const reEngageLeads  = useMemo(()=>archived.filter(l=>(l.archived_reason||'')===('Wrong timing')&&daysSince(l.updated_at)>=90),[archived])
 
   function leadLogs(id:string){return contactLogs.filter(c=>c.entity_id===id).sort((a,b)=>b.created_at.localeCompare(a.created_at))}
-  function openAdd(){setEd(null);setForm(blankLead());setErr('');setBanner(null);setOpen(true)}
-  function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setBanner(null);setOpen(true)}
+  function openAdd(){setEd(null);setForm(blankLead());setErr('');setInvalidFields(new Set());setBanner(null);setOpen(true)}
+  function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setInvalidFields(new Set());setBanner(null);setOpen(true)}
 
   async function saveLead(force=false){
-    if(!form.name?.trim()||!userId)return setErr('Name required')
+    if(!userId)return
+    const missing=new Set<string>()
+    if(!form.name?.trim())missing.add('name')
+    if(!form.phone?.trim())missing.add('phone')
+    if(!form.source)missing.add('source')
+    if(!form.relationship)missing.add('relationship')
+    if(!form.age_range)missing.add('age_range')
+    if(csvToList(form.life_stage).length===0)missing.add('life_stage')
+    if(csvToList(form.primary_driver).length===0)missing.add('primary_driver')
+    if(missing.size>0){setInvalidFields(missing);return setErr('Missing required fields')}
+    setInvalidFields(new Set())
     if(!ed&&!force){
-      const normName=form.name.trim().toLowerCase()
+      const normName=form.name!.trim().toLowerCase()
       const normPhone=(form.phone||'').replace(/\D/g,'')
       const dupe=active.find(l=>l.name.toLowerCase().trim()===normName||(normPhone.length>=8&&(l.phone||'').replace(/\D/g,'')===normPhone))
       if(dupe){setErr(`⚠ Duplicate: "${dupe.name}" already in pipeline. Tap Save again to add anyway.`);return}
     }
     setErr('')
     const score=hxl(form.hunger??5,form.looking??5)
-    const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name.trim(),phone:form.phone||'',instagram:form.instagram||'',contact:form.phone||form.instagram||form.contact||'',source:form.source||'Instagram',stage:form.stage||'Contact',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
+    const l:Lead={id:ed?.id??uid(),user_id:userId,name:form.name!.trim(),phone:form.phone||'',email:form.email||'',instagram:form.instagram||'',contact:form.phone||form.email||form.contact||'',source:form.source||'',stage:form.stage||'Contact',hunger:form.hunger??5,looking:form.looking??5,score,relationship:form.relationship||'',age_range:form.age_range||'',life_stage:form.life_stage||'',primary_driver:form.primary_driver||'',pain_point:form.pain_point||'',archived:false,archived_reason:'',notes:form.notes||'',next_action:form.next_action||'',next_action_date:form.next_action_date||'',created_at:ed?.created_at??now(),updated_at:now()}
     const ok=await safeWrite(async()=>{
       await upsertLead(l)
       if(!ed){
@@ -440,7 +494,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     setConverting(true)
     try{
       const ok=await safeWrite(async()=>{
-        await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({}),status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
+        await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({}),status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
         await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline to Candidate — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
         await deleteLead(l.id)
       },'Conversion failed')
@@ -756,19 +810,20 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                 <div style={{gridColumn:'1/-1'}}>
                   <div style={SL}>Name *</div>
-                  <input value={form.name||''} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full name" style={INP}/>
+                  <input value={form.name||''} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full name" style={{...INP,border:`1px solid ${invalidFields.has('name')?RED:'var(--br2)'}`}}/>
                 </div>
                 <div>
-                  <div style={SL}>Phone</div>
-                  <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={INP}/>
+                  <div style={SL}>Phone *</div>
+                  <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={{...INP,border:`1px solid ${invalidFields.has('phone')?RED:'var(--br2)'}`}}/>
                 </div>
                 <div>
-                  <div style={SL}>Instagram</div>
-                  <input value={form.instagram||''} onChange={e=>setForm(p=>({...p,instagram:e.target.value}))} placeholder="@handle" style={INP}/>
+                  <div style={SL}>Email</div>
+                  <input type="email" value={form.email||''} onChange={e=>setForm(p=>({...p,email:e.target.value}))} placeholder="name@email.com" style={INP}/>
                 </div>
                 <div>
-                  <div style={SL}>Source</div>
-                  <select value={form.source||'Instagram'} onChange={e=>setForm(p=>({...p,source:e.target.value}))} style={SEL}>
+                  <div style={SL}>Source *</div>
+                  <select value={form.source||''} onChange={e=>setForm(p=>({...p,source:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('source')?RED:'var(--br2)'}`}}>
+                    <option value="">Select…</option>
                     {SOURCES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
@@ -797,25 +852,23 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Context</div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                 <div>
-                  <div style={SL}>Relationship</div>
-                  <select value={form.relationship||''} onChange={e=>setForm(p=>({...p,relationship:e.target.value}))} style={SEL}>
+                  <div style={SL}>Relationship *</div>
+                  <select value={form.relationship||''} onChange={e=>setForm(p=>({...p,relationship:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('relationship')?RED:'var(--br2)'}`}}>
                     <option value="">Select…</option>
                     {RELATIONS.map(o=><option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <div style={SL}>Age Range</div>
-                  <select value={form.age_range||''} onChange={e=>setForm(p=>({...p,age_range:e.target.value}))} style={SEL}>
+                  <div style={SL}>Age Range *</div>
+                  <select value={form.age_range||''} onChange={e=>setForm(p=>({...p,age_range:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('age_range')?RED:'var(--br2)'}`}}>
                     <option value="">Select…</option>
                     {AGE_RANGES.map(o=><option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
-              </div>
-              <div style={{marginBottom:10}}>
-                <div style={SL}>Primary Driver — choose 1–3</div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,marginTop:4}}>
-                  {(()=>{const sel=(form.primary_driver||'').split(',').map((s:string)=>s.trim()).filter(Boolean);return DRIVERS.map(d=>{const on=sel.includes(d);return(<button key={d} type="button" onClick={()=>{const next=on?sel.filter((x:string)=>x!==d):sel.length<3?[...sel,d]:sel;setForm(p=>({...p,primary_driver:next.join(', ')}))}} style={{padding:'5px 12px',borderRadius:999,border:`1px solid ${on?GOLD:'var(--br)'}`,background:on?'rgba(200,162,74,0.15)':'var(--s2)',color:on?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:on?700:400,marginBottom:4}}>{d}</button>)})})()}
-                </div>
+                <MultiSelectDropdown label="Life Stage *" options={LIFE_STAGES} max={3} invalid={invalidFields.has('life_stage')}
+                  values={csvToList(form.life_stage)} onChange={v=>setForm(p=>({...p,life_stage:v.join(', ')}))}/>
+                <MultiSelectDropdown label="Primary Driver *" options={DRIVERS} max={3} invalid={invalidFields.has('primary_driver')}
+                  values={csvToList(form.primary_driver)} onChange={v=>setForm(p=>({...p,primary_driver:v.join(', ')}))}/>
               </div>
               <div style={{marginBottom:10}}>
                 <div style={SL}>Their Why (goal / motivation)</div>
