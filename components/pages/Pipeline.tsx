@@ -98,103 +98,80 @@ interface LeadCardProps {
   nextDue?: string
   isDupe?: boolean
 }
-function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,changeStage,touchCount,nextDue,isDupe}:LeadCardProps){
+function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,changeStage,isDupe}:LeadCardProps){
   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
-  const stale=isStale(l);const overdue=isOverdue(l)
-  const days=daysSince(l.updated_at)
+  const overdue=isOverdue(l)
   const isDTM=l.stage==='DTM'
   const isCandidate=candidates.some(c=>c.name===l.name)
   const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
-  // Days in current stage (from last stage-change log or created_at)
   const stageChangeLogs=logs.filter(c=>['convo','contact','mpa','catch_up','dtm','lead_created'].includes(c.event_type))
   const stageChangeDate=stageChangeLogs[0]?.created_at??l.created_at
   const daysInStage=Math.floor((Date.now()-new Date(stageChangeDate).getTime())/86400000)
-  const stageAlertColor=daysInStage>=21?RED:daysInStage>=14?GOLD:null
-  // Dynamic health score
   const health=healthScore(l, lastLog?.created_at??l.updated_at)
-  const outcomeColor:{[k:string]:string}={Positive:GREEN,Neutral:GOLD,Negative:RED,'No Show':RED,'Not Yet':'var(--text4)'}
-  const dotColor=outcomeColor[lastLog?.outcome??'']??'var(--text4)'
-
-  // Next due badge color
-  const today=todayStr()
-  let nextDueColor='var(--text4)'
-  if(nextDue){
-    if(nextDue<today)nextDueColor=RED
-    else if(nextDue===today)nextDueColor=GOLD
-  }
+  const idx=STAGES.indexOf(l.stage as Stage)
+  const [menuOpen,setMenuOpen]=useState(false)
+  const menuRef=React.useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    function onDoc(e:MouseEvent){if(menuRef.current&&!menuRef.current.contains(e.target as Node))setMenuOpen(false)}
+    document.addEventListener('mousedown',onDoc)
+    return()=>document.removeEventListener('mousedown',onDoc)
+  },[])
 
   return(
     <div style={{...CARD,marginBottom:10,borderLeft:`3px solid ${cfg.color}`,position:'relative',transition:'all 0.15s'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:14,fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:8}}>
-            <span>{l.name}</span>
-            {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:dotColor,display:'inline-block',flexShrink:0}}/>}
-            {isDupe&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'rgba(249,115,22,0.15)',color:'#f97316',fontWeight:700,letterSpacing:'0.5px'}}>DUPE</span>}
-          </div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{l.stage}</span>
-            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{l.source}</span>
-            {l.relationship&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'var(--s2)',color:'var(--text4)'}}>{l.relationship}</span>}
-            {overdue&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.15)',color:RED,fontWeight:600}}>⛔ {daysSince(l.next_action_date||'')}d overdue</span>}
-            {stale&&!overdue&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(200,162,74,0.1)',color:GOLD}}>{days}d no update</span>}
-            {!stale&&!overdue&&<span style={{fontSize:10,color:'var(--text4)'}}>{days===0?'Today':days+'d ago'}</span>}
-            {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'20',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in {l.stage}</span>}
-          </div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:10}}>
+        <div style={{fontSize:14,fontWeight:700,display:'flex',alignItems:'center',gap:8,cursor:'pointer'}} onClick={()=>setDrawerLead(l)}>
+          <span>{l.name}</span>
+          {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:GREEN,display:'inline-block',flexShrink:0}}/>}
+          {isDupe&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'rgba(249,115,22,0.15)',color:'#f97316',fontWeight:700,letterSpacing:'0.5px'}}>DUPE</span>}
         </div>
         <div style={{textAlign:'right' as const,flexShrink:0}}>
           <div className="mono" style={{fontSize:22,fontWeight:800,color:healthColor(health),lineHeight:1}}>{health}</div>
           <div style={{fontSize:8,color:'var(--text4)'}}>H{l.hunger}×L{l.looking}</div>
         </div>
       </div>
-      {(l.primary_driver||l.pain_point)&&(
-        <div style={{fontSize:11,color:'var(--text3)',marginBottom:8,lineHeight:1.5}}>
-          {l.primary_driver&&<span style={{color:GOLD,fontWeight:600,marginRight:6}}>→ {l.primary_driver}</span>}
-          {l.pain_point&&<span>"{l.pain_point.slice(0,60)}{l.pain_point.length>60?'…':''}"</span>}
-        </div>
-      )}
-      {l.next_action&&(
-        <div style={{fontSize:11,color:overdue?RED:'var(--text3)',marginBottom:8}}>
-          <span style={{color:'var(--text4)'}}>Next: </span>
-          <span style={{fontWeight:600}}>{l.next_action}</span>
-          {l.next_action_date&&<span style={{color:overdue?RED:'var(--text4)',marginLeft:4}}>{fmtDate(l.next_action_date)}</span>}
-        </div>
-      )}
-      {lastLog?.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>Last: "{lastLog.notes.slice(0,80)}"</div>}
-
-      {/* Touch count + next due badge */}
-      <div style={{display:'flex',gap:10,alignItems:'center',marginBottom:8}}>
-        {(touchCount!==undefined&&touchCount>0)&&(
-          <span style={{fontSize:10,color:'var(--text4)'}}>{touchCount} touch{touchCount===1?'':'es'}</span>
-        )}
-        {nextDue&&(
-          <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:nextDueColor+'20',color:nextDueColor,fontWeight:600}}>
-            due {fmtDate(nextDue)}
-          </span>
+      <div style={{fontSize:9.5,color:cfg.color,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase' as const,marginBottom:6}}>{l.stage} · {daysInStage}d</div>
+      <div style={{display:'flex',alignItems:'center',gap:3,marginBottom:10}}>
+        {STAGES.map((s,i)=>(
+          <div key={s} style={{flex:1,height:4,borderRadius:2,background:i<idx?cfg.color:i===idx?cfg.color:'var(--s3)',opacity:i<idx?0.35:1}}/>
+        ))}
+      </div>
+      {l.primary_driver&&<div style={{fontSize:11.5,color:'var(--text3)',marginBottom:10}}>→ <span style={{color:GOLD,fontWeight:600}}>{l.primary_driver}</span></div>}
+      <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11.5,padding:'8px 10px',borderRadius:'var(--r)',background:overdue?'rgba(224,85,85,0.08)':'var(--s2)',marginBottom:12}}>
+        {l.next_action?(
+          <><span style={{color:'var(--text4)'}}>Next:</span><span style={{color:overdue?RED:'var(--text2)',fontWeight:600}}>{l.next_action}{l.next_action_date?` · ${fmtDate(l.next_action_date)}`:''}</span></>
+        ):(
+          <><span style={{color:'var(--text4)'}}>Last:</span><span style={{color:'var(--text2)',fontWeight:600}}>{(lastLog?.notes||'Added').slice(0,60)}</span></>
         )}
       </div>
 
-      <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,alignItems:'center'}}>
+      <div style={{display:'flex',gap:6,alignItems:'center'}}>
         <button onClick={()=>{setContactModal(l);setContactLog({notes:''})}}
-          style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
+          style={{padding:'8px 13px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11.5,fontWeight:600}}>
           ✓ Log
         </button>
-        {STAGES.indexOf(l.stage as Stage)<STAGES.length-1&&(
-          <button onClick={()=>changeStage(l,STAGES[STAGES.indexOf(l.stage as Stage)+1])} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
-            → {STAGES[STAGES.indexOf(l.stage as Stage)+1]}
+        {idx<STAGES.length-1&&(
+          <button onClick={()=>changeStage(l,STAGES[idx+1])} style={{padding:'8px 13px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11.5,fontWeight:600}}>
+            → {STAGES[idx+1]}
           </button>
         )}
         {isDTM&&!isCandidate&&(
-          <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
-            🚀 Convert to Candidate
+          <button onClick={()=>setBookPFModal(l)} style={{padding:'8px 13px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11.5,fontWeight:700}}>
+            🚀 Convert
           </button>
         )}
-        <button onClick={()=>setBriefModal({lead:l,text:'',loading:false})} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Brief</button>
-        <button onClick={()=>setDrawerLead(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>View →</button>
-        <button onClick={()=>openEdit(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Edit</button>
+        <div ref={menuRef} style={{position:'relative',marginLeft:'auto'}}>
+          <button onClick={()=>setMenuOpen(o=>!o)} style={{width:32,height:32,borderRadius:'var(--r)',border:`1px solid ${menuOpen?GOLD:'var(--br)'}`,background:'transparent',color:menuOpen?GOLD:'var(--text4)',cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center'}}>⋯</button>
+          {menuOpen&&(
+            <div style={{position:'absolute',bottom:'calc(100% + 6px)',right:0,background:'var(--s2)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:4,minWidth:150,zIndex:10,boxShadow:'0 12px 32px rgba(0,0,0,0.4)'}}>
+              <div onClick={()=>{setBriefModal({lead:l,text:'',loading:false});setMenuOpen(false)}} style={{padding:'8px 10px',borderRadius:6,cursor:'pointer',fontSize:12,color:'var(--text2)'}}>Brief</div>
+              <div onClick={()=>{setDrawerLead(l);setMenuOpen(false)}} style={{padding:'8px 10px',borderRadius:6,cursor:'pointer',fontSize:12,color:'var(--text2)'}}>View Profile →</div>
+              <div onClick={()=>{openEdit(l);setMenuOpen(false)}} style={{padding:'8px 10px',borderRadius:6,cursor:'pointer',fontSize:12,color:'var(--text2)'}}>Edit</div>
+            </div>
+          )}
+        </div>
       </div>
-
     </div>
   )
 }
@@ -595,17 +572,15 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
           {(['leads','funnel','archived'] as View[]).map(v=>(
             <button key={v} onClick={()=>setView(v)}
               style={{flex:1,padding:'8px 10px',borderRadius:'var(--r)',border:'none',background:view===v?'var(--s3)':'transparent',color:view===v?GOLD:'var(--text3)',fontSize:11,fontWeight:view===v?700:400,cursor:'pointer',fontFamily:"'Sora',sans-serif",textTransform:'capitalize' as const,transition:'all 0.15s',whiteSpace:'nowrap' as const}}>
-              {v==='leads'?`📋 All (${active.length})`:v==='funnel'?'📊 Funnel':`🗄 Archived (${archived.length})`}
+              {v==='leads'?'📋 List':v==='funnel'?'📊 Funnel':`🗄 Archived (${archived.length})`}
             </button>
           ))}
         </div>
       </div>
 
       {/* ── STATS STRIP (all views) ───────────────────────── */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:6,marginBottom:10}}>
         {[
-          {label:'Active',value:active.length,color:GOLD},
-          {label:'Overdue',value:statsOverdue.length,color:RED},
           {label:'DTM Ready',value:statsDTM.length,color:GREEN},
           {label:'Hot HxL≥70',value:statsHot.length,color:GREEN},
         ].map(x=>(
@@ -630,19 +605,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       {/* ── LEADS VIEW ────────────────────────────────────── */}
       {view==='leads'&&(
         <div>
-          {/* Stage filter pills */}
-          <div style={{display:'flex',gap:6,marginBottom:10,overflowX:'auto' as const,paddingBottom:4}}>
-            {(['all',...STAGES] as (Stage|'all')[]).map(s=>{
-              const count=s==='all'?active.length:(stageCounts[s]||0)
-              const active_=filter===s
-              return(
-                <button key={s} onClick={()=>setFilter(s)}
-                  style={{padding:'5px 12px',borderRadius:999,border:`1px solid ${active_?GOLD:'var(--br)'}`,background:active_?'rgba(200,162,74,0.15)':'var(--s1)',color:active_?GOLD:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:active_?700:400,flexShrink:0,whiteSpace:'nowrap' as const}}>
-                  {s==='all'?'All':s} {count}
-                </button>
-              )
-            })}
-          </div>
           {/* Search row */}
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' as const,alignItems:'center'}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone, Instagram…" style={{flex:1,minWidth:160,...INP}}/>
