@@ -180,10 +180,7 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
           style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
           ✓ Log
         </button>
-        <select value={l.stage} onChange={e=>{const ns=e.target.value as Stage;if(ns!==l.stage)changeStage(l,ns)}}
-          style={{padding:'7px 10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
-          {STAGES.map(s=><option key={s} value={s}>{s===l.stage?s:(STAGES.indexOf(s)>STAGES.indexOf(l.stage as Stage)?`→ ${s}`:`← ${s}`)}</option>)}
-        </select>
+        <StageDropdown stage={l.stage as Stage} onChange={ns=>changeStage(l,ns)}/>
         {isDTM&&!isCandidate&&(
           <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
             🚀 Convert to Candidate
@@ -230,6 +227,43 @@ function MultiSelectDropdown({label,options,values,onChange,max,invalid}:{label:
                   {checked&&<span style={{color:'#000',fontSize:10,fontWeight:800}}>✓</span>}
                 </span>
                 <span>{o}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── STAGE DROPDOWN — jump to any stage, forward or backward ──
+function StageDropdown({stage,onChange}:{stage:Stage;onChange:(s:Stage)=>void}){
+  const [open,setOpen]=useState(false)
+  const ref=React.useRef<HTMLDivElement>(null)
+  const idx=STAGES.indexOf(stage)
+  useEffect(()=>{
+    function onDoc(e:MouseEvent){if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false)}
+    document.addEventListener('mousedown',onDoc)
+    return()=>document.removeEventListener('mousedown',onDoc)
+  },[])
+  return(
+    <div ref={ref} style={{position:'relative'}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,padding:'7px 10px',borderRadius:'var(--r)',border:`1px solid ${open?GOLD:'var(--br)'}`,background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
+        {stage}
+        <span style={{fontSize:8,color:'var(--text4)',transition:'transform 0.15s ease',transform:open?'rotate(180deg)':'none'}}>▼</span>
+      </div>
+      {open&&(
+        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,minWidth:170,background:'var(--s2)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:4,zIndex:20,boxShadow:'0 12px 32px rgba(0,0,0,0.4)'}}>
+          {STAGES.map((s,i)=>{
+            const isCurrent=i===idx
+            const fwd=i>idx
+            return(
+              <div key={s} onClick={()=>{if(!isCurrent){onChange(s);setOpen(false)}}}
+                style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'8px 10px',borderRadius:6,cursor:isCurrent?'default':'pointer',fontSize:12,color:isCurrent?'var(--text4)':'var(--text2)',fontFamily:"'Sora',sans-serif"}}>
+                {s}
+                <span style={{fontSize:9,fontWeight:700,letterSpacing:'0.5px',color:isCurrent?'var(--text4)':(fwd?GREEN:'var(--text4)')}}>
+                  {isCurrent?'current':(fwd?'→ forward':'← back')}
+                </span>
               </div>
             )
           })}
@@ -795,10 +829,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                   style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
                   ✓ Log Contact
                 </button>
-                <select value={drawerLead.stage} onChange={e=>{const ns=e.target.value as Stage;if(ns!==drawerLead.stage)changeStage(drawerLead,ns)}}
-                  style={{padding:'8px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
-                  {STAGES.map(s=><option key={s} value={s}>{s===drawerLead.stage?s:(STAGES.indexOf(s)>STAGES.indexOf(drawerLead.stage as Stage)?`→ ${s}`:`← ${s}`)}</option>)}
-                </select>
+                <StageDropdown stage={drawerLead.stage as Stage} onChange={ns=>changeStage(drawerLead,ns)}/>
                 <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
                 {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
               </div>
