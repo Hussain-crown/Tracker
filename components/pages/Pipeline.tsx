@@ -20,7 +20,7 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
   'DTM':      {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:null},
 }
 
-const SOURCES    = ['Instagram','Facebook','TikTok','LinkedIn','YouTube','Cold Approach','Referral','Event','University','Gym','Work','Church / Community','Online Ad','Other']
+const SOURCES    = ['Instagram','Facebook','LinkedIn','Cold Approach','Referral','Event','University','Gym','Work','Church / Community','Online Ad','Other']
 const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
 const NEXT_ACTS  = ['Call','MPA','Catch-Up','DTM','Send Info','Other']
 const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
@@ -801,95 +801,129 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       )}
 
       {/* ── EDIT MODAL ─────────────────────────────────────── */}
-      {open&&(
+      {open&&(()=>{
+        const hxlNow=hxl(form.hunger??5,form.looking??5)
+        const SECTION:React.CSSProperties={background:'var(--s2)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:14}
+        const SECTION_HEAD:React.CSSProperties={display:'flex',alignItems:'center',gap:8,marginBottom:14}
+        const SECTION_ICON:React.CSSProperties={width:24,height:24,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0}
+        const initials=(form.name||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]?.toUpperCase()).join('')||'?'
+        return(
         <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:520,overflow:'hidden',margin:'auto'}}>
-            <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',fontSize:16,fontWeight:700}}>{ed?'Edit Prospect':'Prospect Profile'}</div>
-            <div style={{padding:'20px 24px',maxHeight:'75vh',overflowY:'auto' as const}}>
-              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,marginTop:4}}>Identity</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                <div style={{gridColumn:'1/-1'}}>
-                  <div style={SL}>Name *</div>
-                  <input value={form.name||''} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full name" style={{...INP,border:`1px solid ${invalidFields.has('name')?RED:'var(--br2)'}`}}/>
-                </div>
-                <div>
-                  <div style={SL}>Phone *</div>
-                  <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={{...INP,border:`1px solid ${invalidFields.has('phone')?RED:'var(--br2)'}`}}/>
-                </div>
-                <div>
-                  <div style={SL}>Email</div>
-                  <input type="email" value={form.email||''} onChange={e=>setForm(p=>({...p,email:e.target.value}))} placeholder="name@email.com" style={INP}/>
-                </div>
-                <div>
-                  <div style={SL}>Source *</div>
-                  <select value={form.source||''} onChange={e=>setForm(p=>({...p,source:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('source')?RED:'var(--br2)'}`}}>
-                    <option value="">Select…</option>
-                    {SOURCES.map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={SL}>Stage</div>
-                  <select value={form.stage||'Contact'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
-                    {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,overflow:'hidden',margin:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',display:'flex',flexDirection:'column' as const,maxHeight:'88vh'}}>
+            <div style={{padding:'20px 24px',borderBottom:'1px solid var(--br)',display:'flex',alignItems:'center',gap:14,background:'linear-gradient(180deg,var(--s2),var(--s1))',flexShrink:0}}>
+              <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${GOLD},var(--gold3))`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:15,color:'#000',flexShrink:0}}>{initials}</div>
+              <div style={{minWidth:0,flex:1}}>
+                <div style={{fontSize:17,fontWeight:800,whiteSpace:'nowrap' as const,overflow:'hidden',textOverflow:'ellipsis'}}>{form.name?.trim()||(ed?'Edit Prospect':'New Prospect')}</div>
+                <div style={{fontSize:11,color:'var(--text4)',marginTop:2}}>{ed?'Editing existing prospect':'Add to your pipeline'}</div>
               </div>
-              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Scoring</div>
-              {([{k:'hunger' as const,label:'Hunger (1-10)',anchors:HUNGER_ANCHORS},{k:'looking' as const,label:'Looking (1-10)',anchors:LOOKING_ANCHORS}]).map(f=>(
-                <div key={f.k} style={{marginBottom:14}}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                    <div style={SL}>{f.label}</div>
-                    <span className="mono" style={{fontSize:12,fontWeight:700,color:hxlColor((form[f.k]??5)*10)}}>{form[f.k]??5}/10</span>
+              <button onClick={()=>setOpen(false)} style={{width:28,height:28,borderRadius:8,border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontSize:14,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>×</button>
+            </div>
+            <div style={{padding:'20px 24px',overflowY:'auto' as const,flex:1}}>
+
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(200,162,74,0.15)'}}>🪪</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Identity</span>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <div style={SL}>Name *</div>
+                    <input value={form.name||''} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Full name" style={{...INP,border:`1px solid ${invalidFields.has('name')?RED:'var(--br2)'}`}}/>
                   </div>
-                  <input type="range" min={1} max={10} value={form[f.k]??5} onChange={e=>setForm(p=>({...p,[f.k]:parseInt(e.target.value,10)}))} style={{width:'100%',accentColor:hxlColor((form[f.k]??5)*10),marginBottom:4}}/>
-                  <div style={{fontSize:9,color:'var(--text4)',textAlign:'center' as const}}>{f.anchors[Math.round(((form[f.k]??5)-1)/9*4)]}</div>
+                  <div>
+                    <div style={SL}>Phone *</div>
+                    <input type="tel" value={form.phone||''} onChange={e=>setForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={{...INP,border:`1px solid ${invalidFields.has('phone')?RED:'var(--br2)'}`}}/>
+                  </div>
+                  <div>
+                    <div style={SL}>Email</div>
+                    <input type="email" value={form.email||''} onChange={e=>setForm(p=>({...p,email:e.target.value}))} placeholder="name@email.com" style={INP}/>
+                  </div>
+                  <div>
+                    <div style={SL}>Relationship *</div>
+                    <select value={form.relationship||''} onChange={e=>setForm(p=>({...p,relationship:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('relationship')?RED:'var(--br2)'}`}}>
+                      <option value="">Select…</option>
+                      {RELATIONS.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={SL}>Stage</div>
+                    <select value={form.stage||'Contact'} onChange={e=>setForm(p=>({...p,stage:e.target.value}))} style={SEL}>
+                      {STAGES.map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
                 </div>
-              ))}
-              <div style={{padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:14,textAlign:'center' as const}}>
-                <span style={{fontSize:10,color:'var(--text4)'}}>HxL Score: </span>
-                <span className="mono" style={{fontSize:18,fontWeight:800,color:hxlColor(hxl(form.hunger??5,form.looking??5))}}>{hxl(form.hunger??5,form.looking??5)}</span>
               </div>
-              <div style={{fontSize:9,color:GOLD,fontWeight:700,letterSpacing:'2px',textTransform:'uppercase' as const,marginBottom:10,borderTop:'1px solid var(--br)',paddingTop:14}}>Context</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                <div>
-                  <div style={SL}>Relationship *</div>
-                  <select value={form.relationship||''} onChange={e=>setForm(p=>({...p,relationship:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('relationship')?RED:'var(--br2)'}`}}>
-                    <option value="">Select…</option>
-                    {RELATIONS.map(o=><option key={o} value={o}>{o}</option>)}
-                  </select>
+
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(224,85,85,0.15)'}}>🔥</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Scoring</span>
+                  <span className="mono" style={{marginLeft:'auto',fontSize:11,color:'var(--text4)'}}>HxL</span>
+                  <span className="mono" style={{fontSize:16,fontWeight:800,color:hxlColor(hxlNow)}}>{hxlNow}</span>
                 </div>
-                <div>
-                  <div style={SL}>Age Range *</div>
-                  <select value={form.age_range||''} onChange={e=>setForm(p=>({...p,age_range:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('age_range')?RED:'var(--br2)'}`}}>
-                    <option value="">Select…</option>
-                    {AGE_RANGES.map(o=><option key={o} value={o}>{o}</option>)}
-                  </select>
+                {([{k:'hunger' as const,label:'Hunger',anchors:HUNGER_ANCHORS},{k:'looking' as const,label:'Looking',anchors:LOOKING_ANCHORS}]).map(f=>(
+                  <div key={f.k} style={{marginBottom:12}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                      <div style={SL}>{f.label} (1–10)</div>
+                      <span className="mono" style={{fontSize:12,fontWeight:700,color:hxlColor((form[f.k]??5)*10)}}>{form[f.k]??5}/10</span>
+                    </div>
+                    <input type="range" min={1} max={10} value={form[f.k]??5} onChange={e=>setForm(p=>({...p,[f.k]:parseInt(e.target.value,10)}))} style={{width:'100%',accentColor:hxlColor((form[f.k]??5)*10),marginBottom:4}}/>
+                    <div style={{fontSize:9,color:'var(--text4)',textAlign:'center' as const}}>{f.anchors[Math.round(((form[f.k]??5)-1)/9*4)]}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(91,155,213,0.15)'}}>🧭</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Context</span>
                 </div>
-                <MultiSelectDropdown label="Life Stage *" options={LIFE_STAGES} max={3} invalid={invalidFields.has('life_stage')}
-                  values={csvToList(form.life_stage)} onChange={v=>setForm(p=>({...p,life_stage:v.join(', ')}))}/>
-                <MultiSelectDropdown label="Primary Driver *" options={DRIVERS} max={3} invalid={invalidFields.has('primary_driver')}
-                  values={csvToList(form.primary_driver)} onChange={v=>setForm(p=>({...p,primary_driver:v.join(', ')}))}/>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                  <div>
+                    <div style={SL}>Source *</div>
+                    <select value={form.source||''} onChange={e=>setForm(p=>({...p,source:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('source')?RED:'var(--br2)'}`}}>
+                      <option value="">Select…</option>
+                      {SOURCES.map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={SL}>Age Range *</div>
+                    <select value={form.age_range||''} onChange={e=>setForm(p=>({...p,age_range:e.target.value}))} style={{...SEL,border:`1px solid ${invalidFields.has('age_range')?RED:'var(--br2)'}`}}>
+                      <option value="">Select…</option>
+                      {AGE_RANGES.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <MultiSelectDropdown label="Life Stage *" options={LIFE_STAGES} max={3} invalid={invalidFields.has('life_stage')}
+                    values={csvToList(form.life_stage)} onChange={v=>setForm(p=>({...p,life_stage:v.join(', ')}))}/>
+                  <MultiSelectDropdown label="Primary Driver *" options={DRIVERS} max={3} invalid={invalidFields.has('primary_driver')}
+                    values={csvToList(form.primary_driver)} onChange={v=>setForm(p=>({...p,primary_driver:v.join(', ')}))}/>
+                </div>
+                <div style={{marginBottom:0}}>
+                  <div style={SL}>Their Why (goal / motivation)</div>
+                  <input value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} placeholder="What drives them? What are they moving toward?" style={INP}/>
+                </div>
               </div>
-              <div style={{marginBottom:10}}>
-                <div style={SL}>Their Why (goal / motivation)</div>
-                <input value={form.pain_point||''} onChange={e=>setForm(p=>({...p,pain_point:e.target.value}))} placeholder="What drives them? What are they moving toward?" style={INP}/>
-              </div>
-              <div style={{marginBottom:16}}>
-                <div style={SL}>Notes</div>
+
+              <div style={SECTION}>
+                <div style={SECTION_HEAD}>
+                  <span style={{...SECTION_ICON,background:'rgba(155,91,213,0.15)'}}>📝</span>
+                  <span style={{fontSize:12,fontWeight:800,letterSpacing:'0.5px'}}>Notes</span>
+                </div>
                 <textarea value={form.notes||''} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={3} placeholder="Anything relevant…" style={{...INP,resize:'vertical' as const}}/>
               </div>
-              {err&&<div style={{color:RED,fontSize:12,marginBottom:10}}>{err}</div>}
-              <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>saveLead(err.startsWith('⚠ Duplicate'))} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
-                  {ed?'Save Changes':err.startsWith('⚠ Duplicate')?'Add Anyway':'Save'}
-                </button>
-                <button onClick={()=>setOpen(false)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-                {ed&&<button onClick={()=>{setArchiveModal(ed);setOpen(false)}} style={{padding:'11px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
-              </div>
+
+              {err&&<div style={{color:RED,fontSize:12,marginBottom:6,padding:'8px 12px',background:'rgba(224,85,85,0.08)',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.25)'}}>{err}</div>}
+            </div>
+            <div style={{display:'flex',gap:8,padding:'16px 24px',borderTop:'1px solid var(--br)',background:'var(--s1)',flexShrink:0}}>
+              <button onClick={()=>saveLead(err.startsWith('⚠ Duplicate'))} style={{flex:1,padding:'12px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                {ed?'Save Changes':err.startsWith('⚠ Duplicate')?'Add Anyway':'Save Prospect'}
+              </button>
+              <button onClick={()=>setOpen(false)} style={{padding:'12px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
+              {ed&&<button onClick={()=>{setArchiveModal(ed);setOpen(false)}} style={{padding:'12px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
             </div>
           </div>
         </div>
-      )}
+        )})()}
 
       {/* ── LOG CONTACT MODAL ─────────────────────────────── */}
       {contactModal&&(
