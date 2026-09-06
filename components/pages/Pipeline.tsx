@@ -449,8 +449,11 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
       await upsertLead(l)
       if(!ed){
         await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'lead_created',outcome:'',notes:`Added from ${l.source}`,fathom_link:'',next_action:l.next_action,next_date:l.next_action_date,created_at:new Date().toISOString()})
+        // Every new prospect always counts as an interruption + convo + contact,
+        // regardless of what stage they're entered at — plus anything further
+        // along if they're added directly at a later stage (e.g. a backfilled DTM).
         const stageHabits:Record<string,keyof HabitEntry>={Interruption:'interruptions',Convo:'convo',Contact:'contact',MPA:'mpa','Catch-Up':'catch_up',DTM:'dtm'}
-        const idx=STAGES.indexOf(l.stage as Stage)
+        const idx=Math.max(STAGES.indexOf(l.stage as Stage),STAGES.indexOf('Contact'))
         for(let i=0;i<=idx;i++){const h=stageHabits[STAGES[i]];if(h)await autoLogHabit(h)}
       }
     },'Save lead failed')
