@@ -180,11 +180,6 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
           style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
           ✓ Log
         </button>
-        {STAGES.indexOf(l.stage as Stage)>0&&(
-          <button onClick={()=>changeStage(l,STAGES[STAGES.indexOf(l.stage as Stage)-1])} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
-            ← {STAGES[STAGES.indexOf(l.stage as Stage)-1]}
-          </button>
-        )}
         {STAGES.indexOf(l.stage as Stage)<STAGES.length-1&&(
           <button onClick={()=>changeStage(l,STAGES[STAGES.indexOf(l.stage as Stage)+1])} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
             → {STAGES[STAGES.indexOf(l.stage as Stage)+1]}
