@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import type { HabitEntry } from '@/lib/stores/types'
 import { uid, now, today } from '@/lib/utils'
-import { buildPreCallBrief, suggestFollowUpDays } from '@/lib/aiText'
+import { buildPreCallBrief } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
@@ -21,16 +21,12 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null}> = {
 }
 
 const SOURCES    = ['Instagram','Facebook','LinkedIn','Cold Approach','Referral','Event','University','Gym','Work','Church / Community','Online Ad','Other']
-const OUTCOMES   = ['Positive','Neutral','Negative','No Show','Not Yet']
-const NEXT_ACTS  = ['Call','MPA','Catch-Up','DTM','Send Info','Other']
-const ACTION_BY_OUTCOME: Record<string,string> = { Positive:'DTM', Neutral:'Call', Negative:'Send Info', 'No Show':'Call', 'Not Yet':'Catch-Up' }
 const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only','Family']
 const AGE_RANGES = ['Under 25','25-35','35-45','45+']
 const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
 const DRIVERS    = ['Family','Community','Purpose','Personal Development','Time','Money','Lifestyle']
 const HUNGER_ANCHORS = ['Content with life','Mild dissatisfaction','Wants change','Unhappy, exploring','Desperate to change']
 const LOOKING_ANCHORS= ['Completely closed','Politely listening','Curious, open','Actively searching','Ready to start now']
-const OBJECTIONS = ['None','No time','No money','Need to think','Partner not on board','Wrong timing','Other']
 
 // ── HELPERS ────────────────────────────────────────────────
 function hxl(h:number,l:number){return Math.round(h*l)}
@@ -92,17 +88,17 @@ interface LeadCardProps {
   candidates: {name:string}[]
   contactLogs: ContactLog[]
   setContactModal: (l:Lead)=>void
-  setContactLog: (v:{outcome:string;notes:string;nextAction:string;nextDate:string;rationale:string;objection:string})=>void
+  setContactLog: (v:{notes:string})=>void
   setBookPFModal: (l:Lead)=>void
   setBriefModal: (v:{lead:Lead;text:string;loading:boolean})=>void
   setDrawerLead: (l:Lead)=>void
   openEdit: (l:Lead)=>void
-  advanceStage: (l:Lead)=>void
+  changeStage: (l:Lead,newStage:Stage)=>void
   touchCount?: number
   nextDue?: string
   isDupe?: boolean
 }
-function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage,touchCount,nextDue,isDupe}:LeadCardProps){
+function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,changeStage,touchCount,nextDue,isDupe}:LeadCardProps){
   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
   const stale=isStale(l);const overdue=isOverdue(l)
   const days=daysSince(l.updated_at)
@@ -180,15 +176,14 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
       </div>
 
       <div style={{display:'flex',gap:6,flexWrap:'wrap' as const,alignItems:'center'}}>
-        <button onClick={()=>{setContactModal(l);setContactLog({outcome:'Positive',notes:'',nextAction:l.next_action||'Call',nextDate:'',rationale:'',objection:'None'})}}
+        <button onClick={()=>{setContactModal(l);setContactLog({notes:''})}}
           style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>
           ✓ Log
         </button>
-        {STAGE_CFG[l.stage as Stage]?.next&&(
-          <button onClick={()=>advanceStage(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
-            → {STAGE_CFG[l.stage as Stage]?.next}
-          </button>
-        )}
+        <select value={l.stage} onChange={e=>{const ns=e.target.value as Stage;if(ns!==l.stage)changeStage(l,ns)}}
+          style={{padding:'7px 10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
+          {STAGES.map(s=><option key={s} value={s}>{s===l.stage?s:(STAGES.indexOf(s)>STAGES.indexOf(l.stage as Stage)?`→ ${s}`:`← ${s}`)}</option>)}
+        </select>
         {isDTM&&!isCandidate&&(
           <button onClick={()=>setBookPFModal(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700}}>
             🚀 Convert to Candidate
@@ -260,7 +255,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [err,setErr]           = useState('')
   const [invalidFields,setInvalidFields] = useState<Set<string>>(new Set())
   const [contactModal,setContactModal] = useState<Lead|null>(null)
-  const [contactLog,setContactLog]     = useState({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+  const [contactLog,setContactLog]     = useState({notes:''})
   const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
   const [converting,setConverting]     = useState(false)
   const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
@@ -470,29 +465,35 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   async function restoreLead(l:Lead){await safeWrite(()=>upsertLead({...l,archived:false,archived_reason:'',updated_at:now()}),'Restore lead failed')}
 
-  async function advanceStage(l:Lead){
-    const cfg=STAGE_CFG[l.stage as Stage];if(!cfg?.next)return
-    const eventType=cfg.next!.toLowerCase().replace('-','_')
+  async function changeStage(l:Lead,newStage:Stage){
+    if(newStage===l.stage)return
+    const oldIdx=STAGES.indexOf(l.stage as Stage)
+    const newIdx=STAGES.indexOf(newStage)
+    const forward=newIdx>oldIdx
+    const eventType=newStage.toLowerCase().replace('-','_').replace(/\s+/g,'_')
     const ok=await safeWrite(async()=>{
-      await upsertLead({...l,stage:cfg.next as Stage,updated_at:now()})
-      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:eventType,outcome:'Positive',notes:`Advanced to ${cfg.next}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
-    },'Advance stage failed')
-    const habitField=STAGE_HABIT[eventType]
-    if(ok&&habitField)await autoLogHabit(habitField)
+      await upsertLead({...l,stage:newStage,updated_at:now()})
+      await addContactLog({id:uid(),user_id:userId!,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:eventType,outcome:forward?'Positive':'Negative',notes:forward?`Advanced to ${newStage}`:`Moved back to ${newStage}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
+    },'Stage change failed')
+    if(!ok)return
+    // Moving forward credits the habit for every stage skipped over; moving
+    // back doesn't take credit away — those contacts already happened.
+    if(forward){
+      for(let i=oldIdx+1;i<=newIdx;i++){
+        const h=STAGE_HABIT[STAGES[i].toLowerCase().replace('-','_')]
+        if(h)await autoLogHabit(h)
+      }
+    }
   }
 
   async function logContact(){
     if(!contactModal||!userId)return
     const l=contactModal
     const ok=await safeWrite(async()=>{
-      await upsertLead({...l,next_action:contactLog.nextAction,next_action_date:contactLog.nextDate,updated_at:now()})
-      const logObj:any={id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:contactLog.outcome,notes:contactLog.notes,fathom_link:'',next_action:contactLog.nextAction,next_date:contactLog.nextDate,created_at:new Date().toISOString()}
-      if(contactLog.objection&&contactLog.objection!=='None')logObj.objection=contactLog.objection
-      await addContactLog(logObj)
+      await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:'',notes:contactLog.notes,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
     },'Log contact failed')
     if(ok){
-      await autoLogHabit('convo')
-      setContactModal(null);setContactLog({outcome:'Positive',notes:'',nextAction:'Call',nextDate:'',rationale:'',objection:'None'})
+      setContactModal(null);setContactLog({notes:''})
     }
   }
 
@@ -572,7 +573,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     setTimeout(()=>{setCsvModal(null);setCsvProgress(null)},1500)
   }
 
-  const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,advanceStage}
+  const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,changeStage}
 
   return(
     <ErrorBoundary label="Pipeline">
@@ -789,17 +790,15 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                 )
               })()}
 
-              <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const}}>
-                <button onClick={()=>{setContactModal(drawerLead);setContactLog({outcome:'Positive',notes:'',nextAction:drawerLead.next_action||'Call',nextDate:'',rationale:'',objection:'None'});setDrawerLead(null)}}
+              <div style={{display:'flex',gap:8,marginTop:16,flexWrap:'wrap' as const,alignItems:'center'}}>
+                <button onClick={()=>{setContactModal(drawerLead);setContactLog({notes:''});setDrawerLead(null)}}
                   style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
                   ✓ Log Contact
                 </button>
-                {STAGE_CFG[drawerLead.stage as Stage]?.next&&(
-                  <button onClick={()=>{advanceStage(drawerLead);setDrawerLead(null)}}
-                    style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600}}>
-                    → Advance
-                  </button>
-                )}
+                <select value={drawerLead.stage} onChange={e=>{const ns=e.target.value as Stage;if(ns!==drawerLead.stage)changeStage(drawerLead,ns)}}
+                  style={{padding:'8px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>
+                  {STAGES.map(s=><option key={s} value={s}>{s===drawerLead.stage?s:(STAGES.indexOf(s)>STAGES.indexOf(drawerLead.stage as Stage)?`→ ${s}`:`← ${s}`)}</option>)}
+                </select>
                 <button onClick={()=>{openEdit(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Edit Profile</button>
                 {!drawerLead.archived&&<button onClick={()=>{setArchiveModal(drawerLead);setDrawerLead(null)}} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
               </div>
@@ -939,44 +938,10 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:28,margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact — {contactModal.name}</div>
             <div style={{fontSize:10,color:'var(--text4)',marginBottom:18}}>{contactModal.stage} · HxL {hxl(contactModal.hunger,contactModal.looking)} · {contactModal.primary_driver||contactModal.source}</div>
-            <div style={{marginBottom:12}}>
-              <div style={SL}>Outcome</div>
-              <div style={{display:'flex',gap:6,flexWrap:'wrap' as const}}>
-                {OUTCOMES.map(o=>(
-                  <button key={o} onClick={()=>{
-                    const sugg=suggestFollowUpDays(o,7)
-                    const d=new Date();d.setDate(d.getDate()+sugg.days)
-                    setContactLog(p=>({...p,outcome:o,nextAction:ACTION_BY_OUTCOME[o]||p.nextAction,nextDate:d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}),rationale:sugg.rationale}))
-                  }}
-                    style={{padding:'6px 12px',borderRadius:'var(--r)',border:`1px solid ${contactLog.outcome===o?GOLD:'var(--br)'}`,background:contactLog.outcome===o?'rgba(200,162,74,0.15)':'var(--s2)',color:contactLog.outcome===o?GOLD:'var(--text4)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:contactLog.outcome===o?700:400}}>
-                    {o}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={SL}>Objection</div>
-              <select value={contactLog.objection} onChange={e=>setContactLog(p=>({...p,objection:e.target.value}))} style={SEL}>
-                {OBJECTIONS.map(o=><option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-            <div style={{marginBottom:12}}>
+            <div style={{marginBottom:18}}>
               <div style={SL}>Notes</div>
-              <textarea value={contactLog.notes} onChange={e=>setContactLog(p=>({...p,notes:e.target.value}))} rows={3} placeholder="What happened? Key moments, commitments…" style={{...INP,resize:'vertical' as const}}/>
+              <textarea value={contactLog.notes} onChange={e=>setContactLog({notes:e.target.value})} rows={5} placeholder="What happened? Key moments, commitments…" autoFocus style={{...INP,resize:'vertical' as const}}/>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
-              <div>
-                <div style={SL}>Next Action</div>
-                <select value={contactLog.nextAction} onChange={e=>setContactLog(p=>({...p,nextAction:e.target.value}))} style={SEL}>
-                  {NEXT_ACTS.map(a=><option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-              <div>
-                <div style={SL}>Next Date</div>
-                <input type="date" value={contactLog.nextDate} onChange={e=>setContactLog(p=>({...p,nextDate:e.target.value}))} style={INP}/>
-              </div>
-            </div>
-            {contactLog.rationale&&<div style={{fontSize:11,color:'var(--text4)',fontStyle:'italic',marginBottom:18,marginTop:-10}}>{contactLog.rationale}</div>}
             <div style={{display:'flex',gap:8}}>
               <button onClick={logContact} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save Log</button>
               <button onClick={()=>setContactModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
