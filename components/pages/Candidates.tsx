@@ -7,17 +7,16 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { today } from '@/lib/utils'
 
 // ── STAGES ────────────────────────────────────────────────
-const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer Questions','Offer Call'] as const
+const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer'] as const
 type Stage = typeof STAGES[number]
 const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null;nextAction:string}> = {
-  'Pre-Filter':     {color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'MG1',             nextAction:'Run Pre-Filter call'},
-  'MG1':            {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'MG2',             nextAction:'Run MG1'},
-  'MG2':            {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:'FU1',             nextAction:'Run MG2'},
-  'FU1':            {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'FU2',             nextAction:'First follow-up call'},
-  'FU2':            {color:'var(--gold)',   bg:'rgba(200,162,74,0.10)', next:'FU3',             nextAction:'Second follow-up call'},
-  'FU3':            {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:'Offer Questions', nextAction:'Final decision call'},
-  'Offer Questions':{color:'var(--orange)', bg:'rgba(232,145,58,0.10)', next:'Offer Call',      nextAction:'Complete offer questions'},
-  'Offer Call':     {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:null,              nextAction:'Run offer call'},
+  'Pre-Filter':{color:'var(--blue)',   bg:'rgba(91,155,213,0.12)',  next:'MG1', nextAction:'Run Pre-Filter call'},
+  'MG1':       {color:'var(--purple)', bg:'rgba(155,91,213,0.12)', next:'MG2', nextAction:'Run MG1'},
+  'MG2':       {color:'var(--teal)',   bg:'rgba(91,213,155,0.12)', next:'FU1', nextAction:'Run MG2'},
+  'FU1':       {color:'var(--gold)',   bg:'rgba(200,162,74,0.12)', next:'FU2', nextAction:'First follow-up call'},
+  'FU2':       {color:'var(--gold)',   bg:'rgba(200,162,74,0.10)', next:'FU3', nextAction:'Second follow-up call'},
+  'FU3':       {color:'var(--orange)', bg:'rgba(232,145,58,0.12)', next:'Offer', nextAction:'Final decision call'},
+  'Offer':     {color:'var(--green)',  bg:'rgba(76,175,125,0.12)', next:null,  nextAction:'Run offer call'},
 }
 const FU_STAGES: Stage[] = ['FU1','FU2','FU3']
 const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Ghosted','Chose another opportunity','Other']
@@ -35,7 +34,7 @@ const OVERLAY:React.CSSProperties={position:'fixed',inset:0,background:'rgba(0,0
 function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime())/86400000):999}
 function fmtDate(d:string){return new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'Australia/Brisbane'})}
 function normaliseStage(s:string):Stage{
-  const map:Record<string,Stage>={'Pre-Filter':'Pre-Filter','PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1','MG1':'MG1','MG2 Booked':'MG2','MG2 Completed':'MG2','MG2':'MG2','FU1':'FU1','FU2':'FU2','FU3':'FU3','Follow-Up':'FU1','Offer Questions':'Offer Questions','Offer':'Offer Call','Offer Call':'Offer Call','Review':'Offer Call'}
+  const map:Record<string,Stage>={'Pre-Filter':'Pre-Filter','PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1','MG1':'MG1','MG2 Booked':'MG2','MG2 Completed':'MG2','MG2':'MG2','FU1':'FU1','FU2':'FU2','FU3':'FU3','Follow-Up':'FU1','Offer Questions':'Offer','Offer':'Offer','Offer Call':'Offer','Review':'Offer'}
   return map[s]??'Pre-Filter'
 }
 function getNotes(c:Candidate):string{try{const p=JSON.parse(c.interview_notes||'{}');return p.__notes??''}catch{return c.interview_notes||''}}
@@ -52,15 +51,6 @@ function healthScore(c:Candidate, lastContact:string):number{
   return Math.round(hxl*0.5+recency*0.3+stageDepth*0.2)
 }
 function healthColor(s:number){return s>=70?GREEN:s>=45?GOLD:RED}
-
-function nextBestAction(c:Candidate,daysInStage:number,lastOutcome?:string):{label:string;urgent:boolean}{
-  const stage=normaliseStage(c.stage)
-  const FU=FU_STAGES.includes(stage)
-  if(daysInStage>=21&&FU)return{label:'⚠ Stalling — close or DQ',urgent:true}
-  if(lastOutcome==='No Show')return{label:'↻ No-show — rebook needed',urgent:true}
-  if(FU&&daysInStage>=14)return{label:`📞 Follow up now — ${daysInStage}d`,urgent:true}
-  return{label:`→ ${STAGE_CFG[stage].nextAction}`,urgent:false}
-}
 
 const TZ='Australia/Brisbane'
 function fmtDay(d:string){return new Date(d+'T12:00:00+10:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:TZ})}
@@ -92,25 +82,22 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,
   const logs=contactLogs.filter(l=>l.entity_id===c.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
   const daysInStage=daysSince(lastLog?.created_at??c.created_at)
-  const stageAlertColor=daysInStage>=14?RED:daysInStage>=7?GOLD:null
   const isStalling=FU_STAGES.includes(stage)&&daysSince(lastLog?.created_at??c.updated_at)>=21
-  const outColor:{[k:string]:string}={Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}
-  const objection=(lastLog as any)?.objection
   const nextMeeting=getNextMeeting(c)
+  const idx=STAGES.indexOf(stage)
   return(
     <div style={{...CARD,borderLeft:`3px solid ${cfg.color}`}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{fontSize:14,fontWeight:700,marginBottom:4,display:'flex',alignItems:'center',gap:8}}>
             <span>{c.name}</span>
-            {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:outColor[lastLog.outcome]??'var(--text4)',display:'inline-block',flexShrink:0}}/>}
+            {lastLog&&<span style={{width:6,height:6,borderRadius:'50%',background:GREEN,display:'inline-block',flexShrink:0}}/>}
             {isDupe&&<span style={{fontSize:9,padding:'2px 6px',borderRadius:6,background:'rgba(249,115,22,0.15)',color:'#f97316',fontWeight:700,letterSpacing:'0.5px'}}>DUPE</span>}
           </div>
           <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-            <span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:cfg.bg,color:cfg.color,fontWeight:600}}>{stage}</span>
-            {stageAlertColor&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:stageAlertColor+'15',color:stageAlertColor,fontWeight:600}}>{daysInStage}d in stage</span>}
             {isStalling&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(224,85,85,0.12)',color:RED,fontWeight:700}}>⚠ Stalling</span>}
             {getNoShows(c)>0&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(232,145,58,0.15)',color:ORANGE,fontWeight:700}}>✗ {getNoShows(c)} no-show{getNoShows(c)>1?'s':''}</span>}
+            {nextMeeting&&<span style={{fontSize:10,padding:'2px 8px',borderRadius:8,background:'rgba(200,162,74,0.1)',color:GOLD,fontWeight:600}}>📅 {nextMeeting.type} · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</span>}
             {nextDue&&(()=>{
               const overdue=nextDue<todayStr;const dueToday=nextDue===todayStr
               const col=overdue?RED:dueToday?GOLD:'var(--text4)'
@@ -125,15 +112,14 @@ function CandCard({c,contactLogs,scores,onView,nextDue,touchCount,level=1,onLog,
           <div style={{fontSize:8,color:'var(--text4)'}}>health</div>
         </div>
       </div>
-      {(()=>{const nba=nextBestAction(c,daysInStage,lastLog?.outcome);return<div style={{marginBottom:8,padding:'5px 10px',borderRadius:'var(--r)',background:nba.urgent?'rgba(224,85,85,0.07)':'var(--s2)',border:`1px solid ${nba.urgent?RED+'30':'var(--br)'}`,display:'inline-block'}}><span style={{fontSize:11,fontWeight:700,color:nba.urgent?RED:'var(--text2)'}}>{nba.label}</span></div>})()}
-      {nextMeeting&&<div style={{fontSize:10,color:GOLD,marginBottom:6,padding:'2px 8px',background:'rgba(200,162,74,0.1)',borderRadius:'var(--r)',display:'inline-block',marginLeft:6}}>📅 {nextMeeting.type} booked · {fmtDay(nextMeeting.start_iso.slice(0,10))} {fmtTime(nextMeeting.start_iso)}</div>}
-      {objection&&objection!=='None'&&<div style={{fontSize:10,color:RED,marginBottom:6,padding:'2px 8px',background:'rgba(224,85,85,0.08)',borderRadius:'var(--r)',display:'inline-block'}}>Objection: {objection}</div>}
-      {c.pain_point&&<div style={{fontSize:11,color:'var(--text4)',marginBottom:6,fontStyle:'italic'}}>"{c.pain_point.slice(0,70)}{c.pain_point.length>70?'…':''}"</div>}
-      {lastLog&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8}}>Last: <span style={{color:outColor[lastLog.outcome]??'var(--text4)',fontWeight:600}}>{lastLog.outcome}</span>{lastLog.notes?` · "${lastLog.notes.slice(0,50)}"`:''}</div>}
+      <div style={{fontSize:9.5,color:cfg.color,fontWeight:700,letterSpacing:0.3,textTransform:'uppercase',marginBottom:6}}>{stage} · {daysInStage}d</div>
+      <div style={{height:4,borderRadius:2,background:'var(--s3)',marginBottom:12,overflow:'hidden'}}>
+        <div style={{height:'100%',width:`${((idx+1)/STAGES.length)*100}%`,background:cfg.color,borderRadius:2,transition:'width 0.3s ease'}}/>
+      </div>
       <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
         <button onClick={()=>onView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
         {level>=2&&onLog&&<button onClick={e=>{e.stopPropagation();onLog(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Log</button>}
-        {level>=2&&stage==='Offer Call'&&onLaunch
+        {level>=2&&stage==='Offer'&&onLaunch
           ?<button onClick={e=>{e.stopPropagation();onLaunch(c)}} style={{padding:'7px 14px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},#3da872)`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>🚀 Launch</button>
           :level>=2&&onAdvance&&STAGE_CFG[stage].next&&<button onClick={e=>{e.stopPropagation();onAdvance(c)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}10`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>Advance →</button>
         }
@@ -520,37 +506,14 @@ export default function Candidates({level=1}:{level?:number}={}){
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:480,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{logModal.name}</div>
-            <div style={{marginBottom:12}}>
-              <div style={SL}>Outcome</div>
-              <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                {['Positive','Neutral','Negative','No Show','Not Yet'].map(o=>(
-                  <button key={o} onClick={()=>setLogForm(f=>({...f,outcome:o}))}
-                    style={{padding:'6px 12px',borderRadius:20,border:`1px solid ${logForm.outcome===o?GOLD:'var(--br)'}`,background:logForm.outcome===o?`${GOLD}15`:'transparent',color:logForm.outcome===o?GOLD:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>
-                    {o}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={SL}>Objection</div>
-              <select value={logForm.objection} onChange={e=>setLogForm(f=>({...f,objection:e.target.value}))}
-                style={{...INP,fontSize:12}}>
-                <option value="None">None</option>
-                {OBJECTION_REASONS.map(r=><option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div style={{marginBottom:12}}>
+            <div style={{marginBottom:18}}>
               <div style={SL}>Notes</div>
-              <textarea value={logForm.logNotes} onChange={e=>setLogForm(f=>({...f,logNotes:e.target.value}))} rows={3} placeholder="What happened?" style={{...INP,resize:'vertical',fontSize:12}}/>
-            </div>
-            <div style={{marginBottom:16}}>
-              <div style={SL}>Next Follow-up Date</div>
-              <input type="date" value={logForm.nextDate} onChange={e=>setLogForm(f=>({...f,nextDate:e.target.value}))} style={{...INP,fontSize:12}}/>
+              <textarea value={logForm.logNotes} onChange={e=>setLogForm(f=>({...f,logNotes:e.target.value}))} rows={5} placeholder="What happened? Key moments, commitments…" autoFocus style={{...INP,resize:'vertical',fontSize:12}}/>
             </div>
             <div style={{display:'flex',gap:8}}>
               <button disabled={actionLoading} onClick={async()=>{
                 setActionLoading(true)
-                try{const r=await callAction('log_contact',logModal.id,{outcome:logForm.outcome,notes:logForm.logNotes,nextDate:logForm.nextDate,objection:logForm.objection});if(r?.error)throw new Error(r.error);setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'});setRefreshKey(k=>k+1)}catch(e:any){alert('Save failed: '+(e?.message||'Unknown error'))}finally{setActionLoading(false)}
+                try{const r=await callAction('log_contact',logModal.id,{notes:logForm.logNotes});if(r?.error)throw new Error(r.error);setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'});setRefreshKey(k=>k+1)}catch(e:any){alert('Save failed: '+(e?.message||'Unknown error'))}finally{setActionLoading(false)}
               }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
                 {actionLoading?'Saving…':'Save Log'}
               </button>
@@ -736,6 +699,16 @@ export default function Candidates({level=1}:{level?:number}={}){
               )}
 
             </div>
+            {normaliseStage(detail.stage)!=='Pre-Filter'&&(
+              <div style={{padding:'14px 24px',borderTop:'1px solid var(--br)',display:'flex'}}>
+                <button disabled={actionLoading} onClick={async()=>{
+                  setActionLoading(true)
+                  try{const r=await callAction('back_stage',detail.id,{});if(r?.error)throw new Error(r.error);setRefreshKey(k=>k+1);setDetail(null)}catch(e:any){alert('Move back failed: '+(e?.message||'Unknown error'))}finally{setActionLoading(false)}
+                }} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'var(--s2)',color:'var(--text2)',cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
+                  ← Move back a stage
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

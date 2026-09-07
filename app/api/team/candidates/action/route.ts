@@ -3,7 +3,12 @@ import { getSbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 
-const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer Questions','Offer Call']
+const STAGES = ['Pre-Filter','MG1','MG2','FU1','FU2','FU3','Offer']
+const STAGE_ALIASES: Record<string,string> = {
+  'PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1',
+  'MG2 Booked':'MG2','MG2 Completed':'MG2','Follow-Up':'FU1',
+  'Offer Questions':'Offer','Offer Call':'Offer','Review':'Offer',
+}
 
 export async function POST(req: Request) {
   try {
@@ -92,16 +97,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true })
     }
 
-    if (action === 'advance_stage') {
-      const STAGE_ALIASES: Record<string,string> = {
-        'PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1',
-        'MG2 Booked':'MG2','MG2 Completed':'MG2','Follow-Up':'FU1',
-        'Offer':'Offer Call','Review':'Offer Call',
-      }
+    if (action === 'advance_stage' || action === 'back_stage') {
       const effectiveStage = STAGE_ALIASES[candidate.stage as string] ?? (candidate.stage as string)
       const idx = STAGES.indexOf(effectiveStage)
-      const nextStage = idx >= 0 && idx < STAGES.length - 1 ? STAGES[idx + 1] : null
-      if (!nextStage) return NextResponse.json({ error: 'already at final stage' }, { status: 400 })
+      const dir = action === 'advance_stage' ? 1 : -1
+      const targetIdx = idx + dir
+      const targetStage = idx >= 0 && targetIdx >= 0 && targetIdx < STAGES.length ? STAGES[targetIdx] : null
+      if (!targetStage) return NextResponse.json({ error: action === 'advance_stage' ? 'already at final stage' : 'already at first stage' }, { status: 400 })
 
       const currentNotes = await freshNotes()
       const history = currentNotes._stage_history || []
@@ -109,11 +111,11 @@ export async function POST(req: Request) {
       const newNotes = JSON.stringify({ ...currentNotes, _stage_history: history })
 
       const { error: stageErr } = await sbAdmin.from('candidates').update({
-        stage: nextStage,
+        stage: targetStage,
         interview_notes: newNotes,
         updated_at: now,
       }).eq('id', candidateId)
-      if (stageErr) { console.error('advance_stage update failed:', stageErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
+      if (stageErr) { console.error(`${action} update failed:`, stageErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
 
       await sbAdmin.from('contact_logs').insert({
         id: crypto.randomUUID(),
@@ -121,12 +123,12 @@ export async function POST(req: Request) {
         entity_type: 'candidate',
         entity_id: candidateId,
         entity_name: (candidate as any).name || candidateId,
-        outcome: 'Positive',
-        notes: `Stage advanced to ${nextStage}`,
-        event_type: 'advance',
+        outcome: dir > 0 ? 'Positive' : 'Negative',
+        notes: dir > 0 ? `Stage advanced to ${targetStage}` : `Stage moved back to ${targetStage}`,
+        event_type: dir > 0 ? 'advance' : 'back',
         created_at: now,
       })
-      return NextResponse.json({ ok: true, stage: nextStage })
+      return NextResponse.json({ ok: true, stage: targetStage })
     }
 
     if (action === 'dq') {
