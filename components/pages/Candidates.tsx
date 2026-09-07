@@ -135,6 +135,7 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [allLogs,setAllLogs]       = useState<ContactLog[]>([])
   const [loading,setLoading]       = useState(true)
   const [tab,setTab]               = useState<Tab>('active')
+  const [search,setSearch]         = useState('')
   const [archiveFilter,setArchiveFilter] = useState('all')
   const [detail,setDetail]         = useState<Candidate|null>(null)
   const [detailTab,setDetailTab]   = useState<DetailTab>('profile')
@@ -205,6 +206,13 @@ export default function Candidates({level=1}:{level?:number}={}){
     return res.json()
   }
 
+  async function restoreCandidate(c:Candidate){
+    setActionLoading(true)
+    try{const r=await callAction('restore',c.id,{});if(r?.error)throw new Error(r.error);setRefreshKey(k=>k+1)}
+    catch(e:any){alert('Restore failed: '+(e?.message||'Unknown error'))}
+    finally{setActionLoading(false)}
+  }
+
   const todayStr=today()
 
   const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
@@ -253,13 +261,15 @@ export default function Candidates({level=1}:{level?:number}={}){
   },[allLogs])
 
   const displayList=useMemo(()=>{
-    return [...active].sort((a,b)=>{
+    let list=active
+    if(search)list=list.filter(c=>c.name.toLowerCase().includes(search.toLowerCase())||c.phone?.includes(search))
+    return [...list].sort((a,b)=>{
       const as=FU_STAGES.includes(normaliseStage(a.stage))&&daysSince(allLogs.filter(l=>l.entity_id===a.id)[0]?.created_at??a.updated_at)>=21
       const bs=FU_STAGES.includes(normaliseStage(b.stage))&&daysSince(allLogs.filter(l=>l.entity_id===b.id)[0]?.created_at??b.updated_at)>=21
       if(as!==bs)return as?-1:1
       return (scores[b.id]??0)-(scores[a.id]??0)
     })
-  },[active,scores,allLogs])
+  },[active,scores,allLogs,search])
 
   const funnel=useMemo(()=>{
     const total=active.length||1
@@ -270,14 +280,6 @@ export default function Candidates({level=1}:{level?:number}={}){
       avgDays:(()=>{const inS=active.filter(c=>normaliseStage(c.stage)===s);return inS.length?Math.round(inS.reduce((a,c)=>a+daysSince(c.updated_at),0)/inS.length):0})()
     }))
   },[active,stageCounts])
-
-  const objectionBreakdown=useMemo(()=>{
-    const m:Record<string,number>={}
-    allLogs.filter(l=>(l as any).objection&&(l as any).objection!=='None').forEach(l=>{
-      const o=(l as any).objection as string;m[o]=(m[o]||0)+1
-    })
-    return Object.entries(m).sort((a,b)=>b[1]-a[1])
-  },[allLogs])
 
   function openView(c:Candidate){setDetail(c);setDetailTab('profile');setBriefText('')}
 
@@ -321,8 +323,9 @@ export default function Candidates({level=1}:{level?:number}={}){
       {/* ── ACTIVE TAB ── */}
       {tab==='active'&&(
         <div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, phone…" style={{...INP,marginBottom:12}}/>
           {displayList.length===0
-            ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>No candidates assigned yet.</div>
+            ?<div style={{...CARD,textAlign:'center',padding:'48px',color:'var(--text4)'}}>{search?'No candidates match your search':'No candidates assigned yet.'}</div>
             :displayList.map(c=><CandCard key={c.id} c={c} {...cardProps} isDupe={dupeSet.has(c.id)} nextDue={nextDueMap[c.id]} touchCount={touchCountMap[c.id]}/>)
           }
         </div>
@@ -417,17 +420,6 @@ export default function Candidates({level=1}:{level?:number}={}){
             </div>
           </div>
 
-          {objectionBreakdown.length>0&&(
-            <div style={CARD}>
-              <div style={SL}>Common Objections</div>
-              {objectionBreakdown.map(([obj,count])=>(
-                <div key={obj} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid var(--br)',fontSize:12}}>
-                  <span style={{color:'var(--text2)'}}>{obj}</span>
-                  <span className="mono" style={{color:RED,fontWeight:700}}>{count}x</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -465,6 +457,7 @@ export default function Candidates({level=1}:{level?:number}={}){
                         <div style={{fontSize:12,fontWeight:600}}>{c.name}</div>
                         <div style={{fontSize:10,color:'var(--text4)'}}>{normaliseStage(c.stage)} · DQ'd {daysSince(c.updated_at)}d ago{log?.notes?` · ${log.notes}`:''}</div>
                       </div>
+                      <button disabled={actionLoading} onClick={()=>restoreCandidate(c)} style={{padding:'6px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600,flexShrink:0}}>↩ Restore</button>
                     </div>
                   )
                 })}
@@ -492,7 +485,10 @@ export default function Candidates({level=1}:{level?:number}={}){
                       </div>
                     </div>
                   </div>
-                  <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
+                    <button disabled={actionLoading} onClick={()=>restoreCandidate(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>↩ Restore</button>
+                  </div>
                 </div>
               )
             })
@@ -699,7 +695,14 @@ export default function Candidates({level=1}:{level?:number}={}){
               )}
 
             </div>
-            {normaliseStage(detail.stage)!=='Pre-Filter'&&(
+            {detail.status==='disqualified'?(
+              <div style={{padding:'14px 24px',borderTop:'1px solid var(--br)',display:'flex'}}>
+                <button disabled={actionLoading} onClick={async()=>{await restoreCandidate(detail);setDetail(null)}}
+                  style={{padding:'8px 14px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,fontWeight:600,opacity:actionLoading?0.6:1}}>
+                  ↩ Restore to Active
+                </button>
+              </div>
+            ):normaliseStage(detail.stage)!=='Pre-Filter'&&(
               <div style={{padding:'14px 24px',borderTop:'1px solid var(--br)',display:'flex'}}>
                 <button disabled={actionLoading} onClick={async()=>{
                   setActionLoading(true)

@@ -162,6 +162,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true })
     }
 
+    if (action === 'restore') {
+      if (candidate.status !== 'disqualified') return NextResponse.json({ error: 'candidate not disqualified' }, { status: 400 })
+      const { error: restoreErr } = await sbAdmin.from('candidates').update({
+        status: 'active',
+        updated_at: now,
+      }).eq('id', candidateId)
+      if (restoreErr) { console.error('restore update failed:', restoreErr); return NextResponse.json({ error: 'update_failed' }, { status: 500 }) }
+
+      await sbAdmin.from('contact_logs').insert({
+        id: crypto.randomUUID(),
+        user_id: user.id,
+        entity_type: 'candidate',
+        entity_id: candidateId,
+        entity_name: (candidate as any).name || candidateId,
+        outcome: 'Positive',
+        notes: 'Restored from disqualified',
+        event_type: 'restored',
+        created_at: now,
+      })
+      return NextResponse.json({ ok: true })
+    }
+
     if (action === 'launch') {
       if (candidate.status !== 'active') return NextResponse.json({ error: 'candidate not active' }, { status: 400 })
       const currentNotes = await freshNotes()
