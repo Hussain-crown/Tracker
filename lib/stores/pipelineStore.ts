@@ -10,6 +10,7 @@ interface PipelineStore {
   deleteLead: (id: string) => Promise<void>
   addContactLog: (log: ContactLog) => Promise<void>
   loadContactLogs: (entityId?: string) => Promise<void>
+  migrateLogsToCandidate: (leadId: string, candidateId: string) => Promise<void>
 }
 
 export const usePipelineStore = create<PipelineStore>((set, get) => ({
@@ -57,6 +58,16 @@ export const usePipelineStore = create<PipelineStore>((set, get) => ({
     if (error) { set({ contactLogs: prev }); throw error }
     // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
     if (!rows?.length) { set({ contactLogs: prev }); throw new Error('Contact log save was silently blocked. Session may have expired — please refresh.') }
+  },
+
+  // Re-points a lead's contact history onto a new candidate record instead of
+  // losing it — used when converting a lead so its logged notes survive.
+  migrateLogsToCandidate: async (leadId, candidateId) => {
+    const { error } = await sb.from('contact_logs').update({ entity_type: 'candidate', entity_id: candidateId }).eq('entity_id', leadId)
+    if (error) throw error
+    set(s => ({
+      contactLogs: s.contactLogs.map(l => l.entity_id === leadId ? { ...l, entity_type: 'candidate' as const, entity_id: candidateId } : l),
+    }))
   },
 
   loadContactLogs: async (entityId?) => {

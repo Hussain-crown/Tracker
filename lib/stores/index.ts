@@ -37,6 +37,7 @@ export function useStore() {
     contactLogs: pipeline.contactLogs,
     addContactLog: pipeline.addContactLog,
     loadContactLogs: pipeline.loadContactLogs,
+    migrateLogsToCandidate: pipeline.migrateLogsToCandidate,
 
     // Candidates
     candidates: candidate.candidates, loadCandidates: candidate.loadCandidates,

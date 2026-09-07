@@ -218,7 +218,7 @@ function MultiSelectDropdown({label,options,values,onChange,max,invalid}:{label:
 export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const {leads,userId,upsertLead,deleteLead,loadLeads,
          upsertCandidate,loadCandidates,candidates,
-         addContactLog,loadContactLogs,contactLogs,
+         addContactLog,loadContactLogs,contactLogs,migrateLogsToCandidate,
          habits,saveHabit,loadHabits} = useStore()
 
   const [view,setView]         = useState<View>('leads')
@@ -477,11 +477,15 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     const l=bookPFModal;if(!l||!userId)return
     if(converting)return
     setConverting(true)
+    const candidateId=uid()
     try{
       const ok=await safeWrite(async()=>{
-        await upsertCandidate({id:uid(),user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:JSON.stringify({}),status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
-        await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline to Candidate — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
-        await deleteLead(l.id)
+        await upsertCandidate({id:candidateId,user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:l.notes||'',status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
+        // Move the lead's contact history onto the candidate instead of losing it,
+        // then archive (not delete) the lead so its own record is kept too.
+        await migrateLogsToCandidate(l.id,candidateId)
+        await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:candidateId,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
+        await upsertLead({...l,archived:true,archived_reason:'Converted to candidate',updated_at:now()})
       },'Conversion failed')
       if(ok){await autoLogHabit('pre_filter');setBookPFModal(null)}
     }finally{setConverting(false)}
