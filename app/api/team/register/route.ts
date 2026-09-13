@@ -5,6 +5,7 @@ import { getSbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { notifyAdminError } from '@/lib/notify'
 import { sendPushToUser } from '@/lib/push'
+import { relinkUserData } from '@/lib/supabase/relink'
 
 // Registers or re-links a team member by IBO number, server-side with the
 // service-role client — the client-side equivalent of this (a direct
@@ -72,10 +73,25 @@ export async function POST(req: Request) {
       // relinking under a Google account that isn't actually theirs) gets noticed
       // instead of going unnoticed indefinitely.
       const subject = `Team tracker account re-linked — ${updated?.name || name || ibo}`
+
+      // A re-link means this IBO's whole history — leads, habits, contact
+      // logs, goals — still sits under their old auth id from before this
+      // project got its own database. Move it over now, in the same action,
+      // rather than leaving it invisible under RLS until someone notices
+      // and manually re-points it (the exact bug the admin himself hit).
+      const relinkResults = await relinkUserData(sb, existing.user_id as string, user.id)
+      const moved = relinkResults.filter(r => r.moved > 0)
+      const failed = relinkResults.filter(r => r.error)
+
       const bodyText = [
         `IBO ${ibo} (${updated?.name || name}) was just re-linked to a different login.`,
         `Previous account: ${existing.user_id}`,
         `New account: ${user.id}${user.email ? ' (' + user.email + ')' : ''}`,
+        '',
+        moved.length
+          ? `Historical data moved: ${moved.map(r => `${r.table} (${r.moved})`).join(', ')}`
+          : 'No historical data found under the previous account.',
+        failed.length ? `\nFAILED to move (needs manual SQL): ${failed.map(r => `${r.table}: ${r.error}`).join('; ')}` : '',
         '',
         "If this wasn't expected, check Team Tracker in the admin OS.",
       ].join('\n')
@@ -84,7 +100,7 @@ export async function POST(req: Request) {
         if (adminId) sendPushToUser(adminId, '🔄 Account re-linked', `${updated?.name || name} (IBO ${ibo}) switched accounts`).catch(() => {})
       }).catch(() => {})
 
-      return NextResponse.json({ ok: true, member: updated, relinked: true })
+      return NextResponse.json({ ok: true, member: updated, relinked: true, dataRelinked: moved.map(r => r.table) })
     }
 
     if (existing && existing.user_id === user.id) {
