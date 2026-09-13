@@ -256,6 +256,26 @@ export default function TrackPage(){
     </Shell>
   )
 
+  // A partner marked dropped-out in Operations has their team_members row
+  // set to 'inactive' via the bridge — until now this screen only checked
+  // for 'pending', so a deactivated account kept full app access (habits,
+  // pipeline, candidates, everything) with only new bookings actually
+  // blocked. Gate the whole app the same way pending does.
+  if(member&&member.status==='inactive')return(
+    <Shell>
+      <div style={{fontSize:36,marginBottom:16,textAlign:'center' as const}}>🔒</div>
+      <div style={{fontSize:20,fontWeight:800,color:'#fff',marginBottom:8,textAlign:'center' as const}}>Account Deactivated</div>
+      <div style={{fontSize:13,color:'#666',textAlign:'center' as const,lineHeight:1.6,marginBottom:24}}>
+        Your access to the tracker has been deactivated.<br/>
+        Contact your upline if you believe this is a mistake.
+      </div>
+      <div style={{background:'rgba(200,162,74,0.06)',border:'1px solid rgba(200,162,74,0.18)',borderRadius:10,padding:'12px 16px',marginBottom:20,fontSize:12,color:'#C8A24A',textAlign:'center' as const}}>
+        IBO {member.ibo_number} · {member.name}
+      </div>
+      <button style={{...btn,background:'transparent',border:'1px solid #222',color:'#555'}} onClick={signOut}>Sign out</button>
+    </Shell>
+  )
+
   if(member&&member.status==='pending')return(
     <Shell>
       <div style={{fontSize:36,marginBottom:16,textAlign:'center' as const}}>⏳</div>
