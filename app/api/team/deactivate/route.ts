@@ -53,10 +53,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, updated: false })
     }
 
+    // Guard the write with the status this decision was based on (optimistic
+    // concurrency) rather than a blind update. Operations fires both
+    // directions fire-and-forget, so a drop-out immediately followed by a
+    // restore (or vice versa) can otherwise interleave two reads before
+    // either write lands, and whichever write happens to finish last wins —
+    // silently leaving the account in the wrong final state. Scoping the
+    // update to .eq('status', existing.status) makes the second call's write
+    // a no-op instead: it re-reads a status that already moved and correctly
+    // sees nothing left to do.
     const { data: updated, error } = await sb
       .from('team_members')
       .update({ status: newStatus, updated_at: new Date().toISOString() })
       .eq('ibo_number', ibo)
+      .eq('status', existing.status)
       .select('user_id, name')
       .maybeSingle()
     if (error) {

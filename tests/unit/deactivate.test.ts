@@ -39,9 +39,13 @@ function mockExisting(status: string | null) {
 function mockUpdateChain(result: { data: any; error: any }) {
   const maybeSingle = vi.fn().mockResolvedValue(result)
   const select = vi.fn(() => ({ maybeSingle }))
-  const eq = vi.fn(() => ({ select }))
-  const update = vi.fn(() => ({ eq }))
+  // The route chains .eq() twice (ibo_number, then status — the optimistic
+  // concurrency guard) before .select().
+  const eq2 = vi.fn((..._args: any[]) => ({ select }))
+  const eq1 = vi.fn((..._args: any[]) => ({ eq: eq2 }))
+  const update = vi.fn((..._args: any[]) => ({ eq: eq1 }))
   fromMock.mockReturnValueOnce({ update })
+  return { update, eq1, eq2 }
 }
 
 describe('POST /api/team/deactivate', () => {
@@ -68,15 +72,27 @@ describe('POST /api/team/deactivate', () => {
     expect(res.status).toBe(400)
   })
 
-  it('sets status to inactive on deactivate', async () => {
+  it('sets status to inactive on deactivate, guarded on the status just read', async () => {
     mockExisting('active')
-    mockUpdateChain({ data: { user_id: 'u1', name: 'Test' }, error: null })
+    const { update, eq2 } = mockUpdateChain({ data: { user_id: 'u1', name: 'Test' }, error: null })
     const res = await POST(makeReq({ ibo: '12345', action: 'deactivate' }))
     const json = await res.json()
     expect(json).toEqual({ ok: true, updated: true, member: { user_id: 'u1', name: 'Test' } })
-    // update() was called with the inactive status
-    const updateCall = (fromMock.mock.results[1].value as any).update.mock.calls[0][0]
-    expect(updateCall.status).toBe('inactive')
+    expect(update.mock.calls[0][0].status).toBe('inactive')
+    // The optimistic-concurrency guard: only apply if status is still what we read
+    expect(eq2.mock.calls[0]).toEqual(['status', 'active'])
+  })
+
+  it('loses a concurrent race safely instead of clobbering the winning write', async () => {
+    // Simulates: this call read status='active', but a concurrent reactivate
+    // already flipped it to 'active' from 'inactive' before this write lands
+    // — the .eq('status', 'active') guard matches zero rows, so the DB call
+    // succeeds but updated no row, and the route must report that honestly.
+    mockExisting('active')
+    mockUpdateChain({ data: null, error: null })
+    const res = await POST(makeReq({ ibo: '12345', action: 'deactivate' }))
+    const json = await res.json()
+    expect(json).toEqual({ ok: true, updated: false, member: null })
   })
 
   it('restores an inactive member to active on reactivate', async () => {
