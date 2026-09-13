@@ -11,15 +11,23 @@ function getSb() {
   )
 }
 
-async function getAdminId(): Promise<string|null> {
-  if(process.env.ADMIN_USER_ID) return process.env.ADMIN_USER_ID
-  const { data } = await getSb().from('meta').select('user_id').in('key',[
-    'booking_availability','booking_rules',
-    'booking_display_name','booking_admin_email','booking_custom_type'
-  ]).order('updated_at',{ascending:false}).limit(1)
-  if(data?.[0]?.user_id) return data[0].user_id
-  const { data: t } = await getSb().from('google_tokens').select('user_id').limit(1)
-  return t?.[0]?.user_id ?? null
+// Admin's own IBO/partner data lives in Operations (the real source of truth for
+// partner org structure) — Tracker no longer keeps its own copy of `partners`/`meta`
+// for this check. We proxy to Operations' existing public, rate-limited endpoint
+// instead of duplicating the lookup logic here.
+async function verifyAgainstOperations(ibo: string): Promise<{ valid: boolean; partner?: any; error?: string }> {
+  const base = process.env.OPERATIONS_API_URL
+  if (!base) return { valid: false, error: 'Not configured' }
+  try {
+    const res = await fetch(`${base}/api/book/verify-ibo?ibo=${encodeURIComponent(ibo)}`, {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+    })
+    if (!res.ok) return { valid: false, error: 'Lookup failed' }
+    return await res.json()
+  } catch {
+    return { valid: false, error: 'Lookup failed' }
+  }
 }
 
 export async function GET(req: Request) {
@@ -32,76 +40,28 @@ export async function GET(req: Request) {
   if (!/^\d{4,12}$/.test(ibo)) return NextResponse.json({ valid: false, error: 'Invalid IBO format' })
 
   try {
-    const adminId = await getAdminId()
-    if (!adminId) return NextResponse.json({ valid: false, error: 'Not configured' })
+    // ── CHECK 1 + 2 (admin's own IBO, partners table) — bridged live from Operations ──
+    const opsResult = await verifyAgainstOperations(ibo)
+    if (opsResult.valid) return NextResponse.json(opsResult)
 
-    // ── CHECK 1: Admin's own IBO — always grant access ──
-    // Priority: ADMIN_IBO env var → NEXT_PUBLIC_ADMIN_IBO env var → meta key (set via Booking settings)
-    const { data: iboMeta } = await getSb().from('meta')
-      .select('value, updated_at').eq('user_id', adminId).eq('key', 'booking_admin_ibo')
-      .order('updated_at', { ascending: false }).limit(1)
-    const adminIbo = (process.env.ADMIN_IBO || process.env.NEXT_PUBLIC_ADMIN_IBO || iboMeta?.[0]?.value || '').trim()
-    if (adminIbo && ibo === adminIbo) {
-      // Get admin's display name
-      const { data: nameMeta } = await getSb().from('meta')
-        .select('value, updated_at').eq('user_id', adminId).eq('key', 'booking_display_name')
-        .order('updated_at', { ascending: false }).limit(1)
+    // ── CHECK 3: Tracker's own team_members table (people already registered here) ──
+    const { data: members } = await getSb()
+      .from('team_members')
+      .select('id, name, ibo_number')
+      .eq('ibo_number', ibo)
+      .eq('status', 'active')
+      .limit(1)
+    if (members?.length) {
+      const m = members[0]
       return NextResponse.json({
         valid: true,
-        partner: {
-          id: 'admin',
-          name: nameMeta?.[0]?.value || 'Hussain',
-          ibo_number: ibo,
-        }
+        partner: { id: m.id, name: m.name, ibo_number: m.ibo_number }
       })
     }
 
-    // ── CHECK 2: Partners table ──
-    const { data: partners } = await getSb()
-      .from('partners')
-      .select('id, name, ibo_number')
-      .eq('user_id', adminId)
-      .eq('ibo_number', ibo)
-      .not('archived', 'is', true)
-      .limit(1)
-
-    // ── CHECK 3: Team members table (fallback) ──
-    // Members who registered via the tracker (not added to `partners`) live only in
-    // team_members. Without this check, verify-ibo can never recognise their IBO on
-    // login/re-verification, permanently locking them out with "not recognised."
-    if (!partners?.length) {
-      // NOTE: team_members.user_id is each MEMBER's own auth id (not the admin's) —
-      // this is a single-tenant system with one admin owning the whole team, so no
-      // admin-scoping filter belongs here. Filtering by adminId (as a since-fixed
-      // bug once did) can never match a real member row and always falls through
-      // to "not recognised", even for a genuinely active member.
-      const { data: members } = await getSb()
-        .from('team_members')
-        .select('id, name, ibo_number')
-        .eq('ibo_number', ibo)
-        .eq('status', 'active')
-        .limit(1)
-      if (members?.length) {
-        const m = members[0]
-        return NextResponse.json({
-          valid: true,
-          partner: { id: m.id, name: m.name, ibo_number: m.ibo_number }
-        })
-      }
-      return NextResponse.json({ valid: false, error: 'IBO number not recognised. Contact your upline.' })
-    }
-
-    const p = partners[0]
-    // Return only name — email/phone are resolved server-side in submit/route.ts to prevent PII enumeration
-    return NextResponse.json({
-      valid: true,
-      partner: {
-        id: p.id,
-        name: p.name,
-        ibo_number: p.ibo_number,
-      }
-    })
+    return NextResponse.json({ valid: false, error: 'IBO number not recognised. Contact your upline.' })
   } catch (e: any) {
-    console.error('verify-ibo error:', e); return NextResponse.json({ valid: false, error: 'internal_error' }, { status: 500 })
+    console.error('verify-ibo error:', e)
+    return NextResponse.json({ valid: false, error: 'internal_error' }, { status: 500 })
   }
 }
