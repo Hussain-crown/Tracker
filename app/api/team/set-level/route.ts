@@ -15,7 +15,7 @@ function secretMatches(provided: string, expected: string): boolean {
 // Server-to-server only: Operations' admin UI sets a member's level here
 // since team_members lives exclusively in this project's database now.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(getClientIp(req), 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''

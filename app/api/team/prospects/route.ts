@@ -22,7 +22,7 @@ const STAGES = ['New', 'Connected', 'MPA', 'Catch-Up', 'DTM']
 // stage, claim a lead ahead of converting it to a candidate, dedup cleanup)
 // against the real data instead of Operations' own frozen copy.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 30, 60_000))
+  if (await isRateLimited(getClientIp(req), 90, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''
@@ -51,7 +51,10 @@ export async function POST(req: Request) {
         ])
         if (leadsRes.error) return NextResponse.json({ error: 'db_error' }, { status: 500 })
         if (logsRes.error) return NextResponse.json({ error: 'db_error' }, { status: 500 })
-        return NextResponse.json({ members: members || [], leads: leadsRes.data || [], logs: logsRes.data || [] })
+        // The 5000 cap above is a safety valve, not an expected ceiling — flag it
+        // explicitly rather than silently dropping leads past it with no signal.
+        const truncated = (leadsRes.data || []).length >= 5000
+        return NextResponse.json({ members: members || [], leads: leadsRes.data || [], logs: logsRes.data || [], truncated })
       }
 
       case 'validate_member': {

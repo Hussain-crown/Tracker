@@ -27,7 +27,7 @@ function checkAuth(req: Request): NextResponse | null {
 // members) can no longer read or write it directly — it proxies here.
 // GET — list members awaiting approval.
 export async function GET(req: Request) {
-  if (await isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(getClientIp(req), 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
   const authErr = checkAuth(req)
   if (authErr) return authErr
@@ -49,7 +49,7 @@ export async function GET(req: Request) {
 
 // POST — approve or reject a pending member.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(getClientIp(req), 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
   const authErr = checkAuth(req)
   if (authErr) return authErr

@@ -28,7 +28,7 @@ interface Filter {
 // changes) goes through here instead of Operations' own now-frozen copy —
 // the exact bug class already found and fixed for pending-members.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 30, 60_000))
+  if (await isRateLimited(getClientIp(req), 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''

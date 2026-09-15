@@ -21,7 +21,7 @@ function secretMatches(provided: string, expected: string): boolean {
 // Auth is a shared secret header, not a user session — there is no
 // logged-in Tracker user on the Operations side of this call.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(getClientIp(req), 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''

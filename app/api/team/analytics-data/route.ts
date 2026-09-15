@@ -17,7 +17,7 @@ function secretMatches(provided: string, expected: string): boolean {
 // database now — this bundles exactly what that dashboard aggregates, so
 // Operations doesn't need N separate round trips.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(getClientIp(req), 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''
