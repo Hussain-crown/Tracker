@@ -369,7 +369,6 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
             const daysRemaining=daysInMonth-dayOfMonth
             const goalField=coreGoals.goalField  // the ONE field they chose e.g. 'mpa', 'mg1'
             const goalLabel=FIELDS.find(f=>f.key===goalField)?.label??goalField
-            const goalColor=FIELDS.find(f=>f.key===goalField)?.color??GOLD
             const done=monthProgress[goalField]??0
             const goalTotal=coreGoals.goalMonthly
             const expectedByNow=Math.round(goalTotal*(dayOfMonth/daysInMonth)*10)/10

@@ -20,7 +20,6 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null;nextAction
 }
 const FU_STAGES: Stage[] = ['FU1','FU2','FU3']
 const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Ghosted','Chose another opportunity','Other']
-const OBJECTION_REASONS = ['No time','No money','Need to think','Partner not on board','Not sure about products','Other']
 
 // ── STYLE CONSTANTS ───────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
@@ -212,8 +211,6 @@ export default function Candidates({level=1}:{level?:number}={}){
     catch(e:any){alert('Restore failed: '+(e?.message||'Unknown error'))}
     finally{setActionLoading(false)}
   }
-
-  const todayStr=today()
 
   const active   = useMemo(()=>candidates.filter(c=>c.status==='active'),[candidates])
   const archived = useMemo(()=>candidates.filter(c=>c.status==='disqualified'),[candidates])

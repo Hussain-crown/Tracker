@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { supabase as sb } from '@/lib/supabase/client'
-import type { Resource, Audio, Task } from './types'
+import type { Resource } from './types'
 
 interface UIStore {
   page: string
@@ -10,8 +10,6 @@ interface UIStore {
   userId: string
   userEmail: string
   resources: Resource[]
-  audios: Audio[]
-  tasks: Task[]
   setPage: (p: string) => void
   setOnline: (v: boolean) => void
   syncNow: () => void
@@ -24,12 +22,6 @@ interface UIStore {
   loadResources: () => Promise<void>
   upsertResource: (r: Resource) => Promise<void>
   deleteResource: (id: string) => Promise<void>
-  loadAudios: () => Promise<void>
-  upsertAudio: (a: Audio) => Promise<void>
-  deleteAudio: (id: string) => Promise<void>
-  loadTasks: () => Promise<void>
-  upsertTask: (t: Task) => Promise<void>
-  deleteTask: (id: string) => Promise<void>
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -40,8 +32,6 @@ export const useUIStore = create<UIStore>((set) => ({
   userId: '',
   userEmail: '',
   resources: [],
-  audios: [],
-  tasks: [],
 
   setPage: (p) => set({ page: p }),
   setOnline: (v) => set({ online: v }),
@@ -111,61 +101,5 @@ export const useUIStore = create<UIStore>((set) => ({
     if (!user?.id) { set({ resources: prev }); throw new Error('not_authenticated') }
     const { error } = await sb.from('resources').delete().eq('id', id).eq('user_id', user.id)
     if (error) { set({ resources: prev }); throw error }
-  },
-
-  loadAudios: async () => {
-    const { data: { user } } = await sb.auth.getUser()
-    const userId = user?.id ?? ''
-    if (!userId) return
-    try {
-      const { data } = await sb.from('audios').select('*').eq('user_id', userId).order('created_at', { ascending: false })
-      set({ audios: (data ?? []) as Audio[] })
-    } catch (e) { console.error(e) }
-  },
-
-  upsertAudio: async (a) => {
-    let prev: Audio[] = []
-    set(s => { prev = s.audios; const idx = s.audios.findIndex(x => x.id === a.id); return { audios: idx >= 0 ? s.audios.map(x => x.id === a.id ? a : x) : [a, ...s.audios] } })
-    const { data: rows, error } = await sb.from('audios').upsert(a as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
-    if (error) { set({ audios: prev }); throw error }
-    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
-    if (!rows?.length) { set({ audios: prev }); throw new Error('Audio save was silently blocked. Session may have expired — please refresh.') }
-  },
-
-  deleteAudio: async (id) => {
-    let prev: Audio[] = []
-    set(s => { prev = s.audios; return { audios: s.audios.filter(a => a.id !== id) } })
-    const { data: { user } } = await sb.auth.getUser()
-    if (!user?.id) { set({ audios: prev }); throw new Error('not_authenticated') }
-    const { error } = await sb.from('audios').delete().eq('id', id).eq('user_id', user.id)
-    if (error) { set({ audios: prev }); throw error }
-  },
-
-  loadTasks: async () => {
-    const { data: { user } } = await sb.auth.getUser()
-    const userId = user?.id ?? ''
-    if (!userId) return
-    try {
-      const { data } = await sb.from('tasks').select('*').eq('user_id', userId).order('created_at', { ascending: false })
-      set({ tasks: (data ?? []) as Task[] })
-    } catch (e) { console.error(e) }
-  },
-
-  upsertTask: async (t) => {
-    let prev: Task[] = []
-    set(s => { prev = s.tasks; const idx = s.tasks.findIndex(x => x.id === t.id); return { tasks: idx >= 0 ? s.tasks.map(x => x.id === t.id ? t : x) : [t, ...s.tasks] } })
-    const { data: rows, error } = await sb.from('tasks').upsert(t as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
-    if (error) { set({ tasks: prev }); throw error }
-    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
-    if (!rows?.length) { set({ tasks: prev }); throw new Error('Task save was silently blocked. Session may have expired — please refresh.') }
-  },
-
-  deleteTask: async (id) => {
-    let prev: Task[] = []
-    set(s => { prev = s.tasks; return { tasks: s.tasks.filter(t => t.id !== id) } })
-    const { data: { user } } = await sb.auth.getUser()
-    if (!user?.id) { set({ tasks: prev }); throw new Error('not_authenticated') }
-    const { error } = await sb.from('tasks').delete().eq('id', id).eq('user_id', user.id)
-    if (error) { set({ tasks: prev }); throw error }
   },
 }))

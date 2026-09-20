@@ -6,20 +6,17 @@ export { useHabitStore }        from './habitStore'
 export { useUIStore }           from './uiStore'
 export { usePipelineStore }     from './pipelineStore'
 export { useCandidateStore }    from './candidateStore'
-export { usePartnerStore }      from './partnerStore'
 
 import { useHabitStore }        from './habitStore'
 import { useUIStore }           from './uiStore'
 import { usePipelineStore }     from './pipelineStore'
 import { useCandidateStore }    from './candidateStore'
-import { usePartnerStore }      from './partnerStore'
 
 export function useStore() {
   const habit        = useHabitStore()
   const ui           = useUIStore()
   const pipeline     = usePipelineStore()
   const candidate    = useCandidateStore()
-  const partner      = usePartnerStore()
 
   return {
     // UI / Auth
@@ -28,8 +25,6 @@ export function useStore() {
     getMeta: ui.getMeta, setMeta: ui.setMeta,
     resources: ui.resources, loadResources: ui.loadResources,
     upsertResource: ui.upsertResource, deleteResource: ui.deleteResource,
-    audios: ui.audios, loadAudios: ui.loadAudios,
-    upsertAudio: ui.upsertAudio, deleteAudio: ui.deleteAudio,
 
     // Pipeline (Habits creates leads from logged contacts)
     leads: pipeline.leads, loadLeads: pipeline.loadLeads,
@@ -42,14 +37,6 @@ export function useStore() {
     // Candidates
     candidates: candidate.candidates, loadCandidates: candidate.loadCandidates,
     upsertCandidate: candidate.upsertCandidate, deleteCandidate: candidate.deleteCandidate,
-
-    // Partners
-    partners: partner.partners, loadPartners: partner.loadPartners,
-    upsertPartner: partner.upsertPartner, deletePartner: partner.deletePartner,
-    partnerNotes: partner.partnerNotes,
-    loadPartnerNotes: partner.loadPartnerNotes,
-    addPartnerNote: partner.addPartnerNote,
-    deletePartnerNote: partner.deletePartnerNote,
 
     // Habits
     habits: habit.habits, loadHabits: habit.loadHabits, saveHabit: habit.saveHabit,
@@ -66,7 +53,7 @@ export function useStore() {
         sw(habit.loadHabits(), 'loadHabits'),
         sw(ui.loadResources(), 'loadResources'), sw(pipeline.loadLeads(), 'loadLeads'),
         sw(pipeline.loadContactLogs(), 'loadContactLogs'),
-        sw(candidate.loadCandidates(), 'loadCandidates'), sw(partner.loadPartners(), 'loadPartners'),
+        sw(candidate.loadCandidates(), 'loadCandidates'),
       ])
     },
   }

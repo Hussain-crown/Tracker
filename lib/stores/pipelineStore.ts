@@ -13,7 +13,7 @@ interface PipelineStore {
   migrateLogsToCandidate: (leadId: string, candidateId: string) => Promise<void>
 }
 
-export const usePipelineStore = create<PipelineStore>((set, get) => ({
+export const usePipelineStore = create<PipelineStore>((set) => ({
   leads: [],
   contactLogs: [],
 

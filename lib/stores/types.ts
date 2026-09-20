@@ -39,21 +39,6 @@ export interface ContactLog {
   objection?: string
 }
 
-export interface Partner {
-  id: string; user_id: string; name: string; ibo_number: string; phone: string
-  email: string; stage: string; gpv: number; ppv: number; bonus: number
-  group_size: number; sponsoring: number; gpv_goal?: number; notes?: string
-  last_contact: string; next_call: string
-  activation_done: string; archived: boolean; parent_id: string
-  autoship_done?: boolean; gpv_synced_at?: string
-  created_at: string; updated_at: string
-}
-
-export interface PartnerNote {
-  id: string; partner_id: string; user_id: string
-  text: string; date: string; created_at: string
-}
-
 export interface HabitEntry {
   id: string; user_id: string; date: string
   interruptions: number; convo: number; mpa: number; contact: number
@@ -86,16 +71,4 @@ export interface Resource {
   key_takeaway: string; date_completed: string; created_at: string; updated_at: string
 }
 
-export interface Audio {
-  id: string; user_id: string; title: string; speaker: string
-  duration: string; url: string; played: boolean; notes: string
-  created_at: string; updated_at: string
-}
-
-export interface Task {
-  id: string; user_id: string; title: string; due_date: string
-  done: boolean; auto_generated: boolean; priority: string
-  created_at: string; updated_at: string
-  entity_type?: string | null; entity_id?: string | null
-}
 

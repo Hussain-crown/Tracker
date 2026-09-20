@@ -42,7 +42,6 @@ function healthScore(l:Lead, lastContactDate:string):number{
 }
 function healthColor(s:number){return s>=70?'var(--green)':s>=50?'var(--gold)':'var(--red)'}
 function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime())/86400000):999}
-function isStale(l:Lead){return daysSince(l.updated_at)>=7}
 function isOverdue(l:Lead){return !!(l.next_action_date&&l.next_action_date<today())}
 function fmtDate(d:string){return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'})}
 function blankLead():Partial<Lead>{return{name:'',phone:'',email:'',instagram:'',contact:'',source:'',stage:'Contact',hunger:5,looking:5,relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:'',archived:false,archived_reason:'',notes:'',score:0}}
@@ -68,12 +67,11 @@ const CSV_FIELD_MAP:Record<string,keyof Lead>={
   'pain point':'pain_point',pain_point:'pain_point','their why':'pain_point',
 }
 
-function todayStr(){return today()}
 function daysFromNow(n:number){const d=new Date();d.setDate(d.getDate()+n);return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
 
 // ── STYLES ─────────────────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
-const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
+const BLUE='var(--blue)';const TEAL='var(--teal)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px'}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:6}
 const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box' as const}
@@ -332,11 +330,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   },[contactLogs])
 
   // ── stats strip ──
-  const today=todayStr()
   const weekAgo=daysFromNow(-7)
-  const weekAhead=daysFromNow(7)
 
-  const statsOverdue  = useMemo(()=>active.filter(l=>l.next_action_date&&l.next_action_date<today),[active,today])
   const statsDTM      = useMemo(()=>active.filter(l=>l.stage==='DTM'),[active])
   const statsHot      = useMemo(()=>active.filter(l=>hxl(l.hunger,l.looking)>=70),[active])
 
