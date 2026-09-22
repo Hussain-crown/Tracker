@@ -6,7 +6,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 const GOLD='var(--gold)';const GREEN='var(--green)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px',marginBottom:8}
 
-interface Part { id:string; module_id:string; title:string; description:string; video_url:string; body:string; order_index:number }
+interface Part { id:string; module_id:string; title:string; description:string; video_url:string; image_url:string; body:string; order_index:number }
 interface Module { id:string; title:string; description:string; order_index:number; parts:Part[] }
 
 // Turns a Vimeo/YouTube share URL into an embeddable player src. Vimeo's
@@ -121,6 +121,7 @@ export default function Training(){
                           {p.description && <div style={{fontSize:11,color:'var(--text4)',marginTop:1}}>{p.description}</div>}
                         </div>
                         {p.video_url && <div style={{fontSize:14,flexShrink:0}}>🎬</div>}
+                        {!p.video_url && p.image_url && <div style={{fontSize:14,flexShrink:0}}>🖼️</div>}
                       </div>
                     )
                   })}
@@ -140,6 +141,9 @@ export default function Training(){
                 <iframe src={embedSrc(openPart.video_url)!} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
                   style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
               </div>
+            )}
+            {openPart.image_url && (
+              <img src={openPart.image_url} alt={openPart.title} style={{width:'100%',display:'block'}}/>
             )}
             <div style={{padding:24}}>
               <div style={{fontSize:17,fontWeight:700,color:'var(--text)',marginBottom:4}}>{openPart.title}</div>
