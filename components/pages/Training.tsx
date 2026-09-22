@@ -6,7 +6,25 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 const GOLD='var(--gold)';const GREEN='var(--green)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'14px',marginBottom:8}
 
-interface Part { id:string; module_id:string; title:string; description:string; video_url:string; image_url:string; body:string; order_index:number }
+interface Part { id:string; module_id:string; title:string; description:string; video_urls:string[]; image_url:string; body:string; order_index:number }
+
+const URL_RE = /https?:\/\/[^\s]+/g
+// Renders plain text with any http(s) URLs turned into clickable links --
+// part bodies often reference an external template/catalogue/rewards link.
+function linkedText(text:string){
+  const parts:React.ReactNode[]=[]
+  let last=0; let m:RegExpExecArray|null
+  URL_RE.lastIndex=0
+  while((m=URL_RE.exec(text))){
+    if(m.index>last)parts.push(text.slice(last,m.index))
+    const url=m[0].replace(/[.,)]+$/,'')
+    parts.push(<a key={m.index} href={url} target="_blank" rel="noopener noreferrer" style={{color:GOLD,wordBreak:'break-all' as const}}>{url}</a>)
+    if(url.length<m[0].length)parts.push(m[0].slice(url.length))
+    last=m.index+m[0].length
+  }
+  if(last<text.length)parts.push(text.slice(last))
+  return parts
+}
 interface Module { id:string; title:string; description:string; order_index:number; parts:Part[] }
 
 // Turns a Vimeo/YouTube share URL into an embeddable player src. Vimeo's
@@ -120,8 +138,8 @@ export default function Training(){
                           <div style={{fontSize:13,fontWeight:600,color:'var(--text)'}}>{p.title}</div>
                           {p.description && <div style={{fontSize:11,color:'var(--text4)',marginTop:1}}>{p.description}</div>}
                         </div>
-                        {p.video_url && <div style={{fontSize:14,flexShrink:0}}>🎬</div>}
-                        {!p.video_url && p.image_url && <div style={{fontSize:14,flexShrink:0}}>🖼️</div>}
+                        {p.video_urls?.length>0 && <div style={{fontSize:14,flexShrink:0}}>🎬</div>}
+                        {!p.video_urls?.length && p.image_url && <div style={{fontSize:14,flexShrink:0}}>🖼️</div>}
                       </div>
                     )
                   })}
@@ -136,19 +154,19 @@ export default function Training(){
       {openPart && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)',overflowY:'auto'}} onClick={e=>{if(e.target===e.currentTarget)setOpenPart(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,margin:'auto',overflow:'hidden'}}>
-            {openPart.video_url && embedSrc(openPart.video_url) && (
-              <div style={{position:'relative',paddingTop:'56.25%',background:'#000'}}>
-                <iframe src={embedSrc(openPart.video_url)!} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
+            {openPart.video_urls?.filter(v=>embedSrc(v)).map((v,i)=>(
+              <div key={i} style={{position:'relative',paddingTop:'56.25%',background:'#000',borderBottom:i<openPart.video_urls.length-1?'1px solid var(--br)':'none'}}>
+                <iframe src={embedSrc(v)!} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
                   style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
               </div>
-            )}
+            ))}
             {openPart.image_url && (
               <img src={openPart.image_url} alt={openPart.title} style={{width:'100%',display:'block'}}/>
             )}
             <div style={{padding:24}}>
               <div style={{fontSize:17,fontWeight:700,color:'var(--text)',marginBottom:4}}>{openPart.title}</div>
               {openPart.description && <div style={{fontSize:12,color:'var(--text4)',marginBottom:14}}>{openPart.description}</div>}
-              {openPart.body && <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.7,whiteSpace:'pre-wrap' as const,marginBottom:20}}>{openPart.body}</div>}
+              {openPart.body && <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.7,whiteSpace:'pre-wrap' as const,marginBottom:20}}>{linkedText(openPart.body)}</div>}
               <div style={{display:'flex',gap:8}}>
                 <button onClick={()=>toggleComplete(openPart.id,!completed.has(openPart.id))} disabled={marking}
                   style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',cursor:marking?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontWeight:700,fontSize:13,
