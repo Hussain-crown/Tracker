@@ -6,6 +6,7 @@ import { uid, now, today } from '@/lib/utils'
 import { buildPreCallBrief } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { authFetch } from '@/lib/authFetch'
 
 // ── CONSTANTS ─────────────────────────────────────────────
 const STAGES = ['Interruption','Convo','Contact','MPA','Catch-Up','DTM'] as const
@@ -216,7 +217,7 @@ function MultiSelectDropdown({label,options,values,onChange,max,invalid}:{label:
 export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const {leads,userId,upsertLead,deleteLead,loadLeads,
          upsertCandidate,loadCandidates,candidates,
-         addContactLog,loadContactLogs,contactLogs,migrateLogsToCandidate,
+         addContactLog,loadContactLogs,contactLogs,
          habits,saveHabit,loadHabits} = useStore()
 
   const [view,setView]         = useState<View>('leads')
@@ -476,10 +477,17 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     try{
       const ok=await safeWrite(async()=>{
         await upsertCandidate({id:candidateId,user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:l.notes||'',status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()},{create:true})
-        // Move the lead's contact history onto the candidate instead of losing it,
-        // then archive (not delete) the lead so its own record is kept too.
-        await migrateLogsToCandidate(l.id,candidateId)
-        await addContactLog({id:uid(),user_id:userId,entity_type:'candidate',entity_id:candidateId,entity_name:l.name,event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',created_at:new Date().toISOString()})
+        // Copy the lead's existing contact history onto the candidate, plus a
+        // "converted" entry, via the bridge -- both apps' Candidates views only
+        // ever read contact_logs from Operations' database, so writing these
+        // to Tracker's own local DB (like addContactLog/migrateLogsToCandidate
+        // do for leads) would leave the new candidate showing zero history.
+        const migratedLogs=leadLogs(l.id).map(log=>({event_type:log.event_type,outcome:log.outcome,notes:log.notes,fathom_link:log.fathom_link,next_action:log.next_action,next_date:log.next_date,objection:log.objection,created_at:log.created_at}))
+        migratedLogs.push({event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',objection:undefined,created_at:new Date().toISOString()})
+        const migrateRes=await authFetch('/api/team/candidates/migrate-logs',{method:'POST',body:JSON.stringify({candidateId,logs:migratedLogs})})
+        if(!migrateRes.ok)throw new Error('Failed to migrate contact history: '+(await migrateRes.text()))
+        // Then archive (not delete) the lead so its own record — and its local
+        // history, still intact there — is kept too.
         await upsertLead({...l,archived:true,archived_reason:'Converted to candidate',updated_at:now()})
       },'Conversion failed')
       if(ok){await autoLogHabit('pre_filter');setBookPFModal(null)}
