@@ -8,7 +8,7 @@ interface CandidateStore {
   isError: boolean
   errorMessage: string | null
   loadCandidates: () => Promise<void>
-  upsertCandidate: (c: Candidate) => Promise<void>
+  upsertCandidate: (c: Candidate, opts?: { create?: boolean }) => Promise<void>
   deleteCandidate: (id: string) => Promise<void>
   addContactLog: (log: ContactLog) => Promise<void>
 }
@@ -34,14 +34,14 @@ export const useCandidateStore = create<CandidateStore>((set) => ({
     }
   },
 
-  upsertCandidate: async (c) => {
+  upsertCandidate: async (c, opts) => {
     let prev: Candidate[] = []
     set(s => {
       prev = s.candidates
       const idx = s.candidates.findIndex(x => x.id === c.id)
       return { candidates: idx >= 0 ? s.candidates.map(x => x.id === c.id ? c : x) : [c, ...s.candidates] }
     })
-    const res = await authFetch('/api/team/candidates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
+    const res = await authFetch('/api/team/candidates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(opts?.create ? { ...c, create: true } : c) })
     if (!res.ok) { set({ candidates: prev }); throw new Error(await res.text()) }
   },
 

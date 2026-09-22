@@ -475,7 +475,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     const candidateId=uid()
     try{
       const ok=await safeWrite(async()=>{
-        await upsertCandidate({id:candidateId,user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:l.notes||'',status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()})
+        await upsertCandidate({id:candidateId,user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:l.notes||'',status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()},{create:true})
         // Move the lead's contact history onto the candidate instead of losing it,
         // then archive (not delete) the lead so its own record is kept too.
         await migrateLogsToCandidate(l.id,candidateId)

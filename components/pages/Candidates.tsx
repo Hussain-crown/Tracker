@@ -34,7 +34,12 @@ function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime
 function fmtDate(d:string){return new Date(d).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:'Australia/Brisbane'})}
 function normaliseStage(s:string):Stage{
   const map:Record<string,Stage>={'Pre-Filter':'Pre-Filter','PF Completed':'Pre-Filter','MG1 Booked':'MG1','MG1 Completed':'MG1','MG1':'MG1','MG2 Booked':'MG2','MG2 Completed':'MG2','MG2':'MG2','FU1':'FU1','FU2':'FU2','FU3':'FU3','Follow-Up':'FU1','Offer Questions':'Offer','Offer':'Offer','Offer Call':'Offer','Review':'Offer'}
-  return map[s]??'Pre-Filter'
+  const mapped=map[s]
+  if(mapped)return mapped
+  // See Operations' Candidates.tsx normaliseStage for why this used to
+  // silently default to 'Pre-Filter' instead of surfacing the mismatch.
+  console.error(`normaliseStage: unrecognized stage "${s}" — defaulting to Pre-Filter`)
+  return 'Pre-Filter'
 }
 function getNotes(c:Candidate):string{try{const p=JSON.parse(c.interview_notes||'{}');return p.__notes??''}catch{return c.interview_notes||''}}
 function getLaunchedAt(c:Candidate):string{try{return JSON.parse(c.interview_notes||'{}')._launched_at??''}catch{return''}}

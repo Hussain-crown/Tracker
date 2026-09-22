@@ -23,6 +23,13 @@ export async function POST(req: Request) {
     let body: any
     try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
 
+    // `create` opts this write into the bridge's one allowed non-booking
+    // creation path (used by Pipeline's "Convert to Candidate") -- it's a
+    // sibling of `payload`, not a candidate field, so it's read here and
+    // stripped before forwarding rather than passed through as data.
+    const create = body?.create === true
+    if ('create' in body) delete body.create
+
     const base = process.env.OPERATIONS_API_URL
     const secret = process.env.INTERNAL_BRIDGE_SECRET
     if (!base || !secret) return NextResponse.json({ error: 'bridge_not_configured' }, { status: 503 })
@@ -30,7 +37,7 @@ export async function POST(req: Request) {
     const res = await fetch(`${base}/api/team/candidates-bridge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
-      body: JSON.stringify({ op: 'upsert', ibo: member.ibo_number, payload: body }),
+      body: JSON.stringify({ op: 'upsert', ibo: member.ibo_number, payload: body, create }),
       cache: 'no-store',
       signal: AbortSignal.timeout(10_000),
     })
