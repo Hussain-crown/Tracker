@@ -34,7 +34,7 @@ export async function POST(req: Request) {
       signal: AbortSignal.timeout(10_000),
     })
     const d = await res.json().catch(() => ({}))
-    if (!res.ok) return NextResponse.json({ error: d?.error || 'bridge_error' }, { status: res.status === 404 ? 404 : 502 })
+    if (!res.ok) return NextResponse.json({ error: d?.error || 'bridge_error', message: d?.message }, { status: [403, 404].includes(res.status) ? res.status : 502 })
     return NextResponse.json(d)
   } catch (e: any) {
     console.error('track/team/training/complete error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })
