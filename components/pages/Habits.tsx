@@ -151,7 +151,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   },[goalOverride]) // eslint-disable-line
   useEffect(()=>{
     const h=habits[selDate] as HabitEntry|undefined
-    if(h) setForm({convo:h.convo??0,mg1:h.mg1??0,mpa:h.mpa??0,catch_up:h.catch_up??0,dtm:h.dtm??0,pre_filter:h.pre_filter??0,launch:h.launch??0,interruptions:h.interruptions??0,contact:(h as any).contact??0})
+    if(h) setForm({convo:h.convo??0,mg1:h.mg1??0,mpa:h.mpa??0,catch_up:h.catch_up??0,dtm:h.dtm??0,pre_filter:h.pre_filter??0,launch:h.launch??0,interruptions:h.interruptions??0,contact:h.contact??0})
     else  setForm({convo:0,mg1:0,mpa:0,catch_up:0,dtm:0,pre_filter:0,launch:0,interruptions:0,contact:0})
   },[selDate,habits])
 
@@ -276,15 +276,15 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const calcScore=useCallback((h:Record<FieldKey,number>,checkBonus=0):number=>{
     const maxScore=FIELDS.filter(f=>f.key!=='interruptions').reduce((s,f)=>s+f.weight*15,0)
     const score=FIELDS.filter(f=>f.key!=='interruptions').reduce((s,f)=>{
-      const t=dailyTargets[f.key]??0;const v=(h as any)[f.key]??0
+      const t=dailyTargets[f.key]??0;const v=h[f.key]??0
       if(!t)return s+(v>0?f.weight*8:0);return s+Math.min(1,v/t)*f.weight*15
     },0)
-    return Math.max(0,Math.min(100,Math.round((score/maxScore)*100)-Math.min(20,((h as any).interruptions??0)*4)+checkBonus))
+    return Math.max(0,Math.min(100,Math.round((score/maxScore)*100)-Math.min(20,(h.interruptions??0)*4)+checkBonus))
   },[dailyTargets])
   const checklistBonus=useMemo(()=>(checklist.reading?3:0)+(checklist.audio?3:0),[checklist])
   const todayScore=useMemo(()=>calcScore(form,checklistBonus),[form,calcScore,checklistBonus])
   const streak=useMemo(()=>{
-    const isActive=(ds:string)=>{const h=habits[ds] as HabitEntry|undefined;return !!h&&FIELDS.some(f=>f.key!=='interruptions'&&((h as any)[f.key]??0)>0)}
+    const isActive=(ds:string)=>{const h=habits[ds] as HabitEntry|undefined;return !!h&&FIELDS.some(f=>f.key!=='interruptions'&&(h[f.key]??0)>0)}
     const d=new Date()
     const todayDs=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
     // If today has no activity yet, start counting from yesterday instead of
@@ -296,7 +296,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   },[habits,FIELDS])
   const consistency=useMemo(()=>{
     const last30:string[]=[];for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
-    return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>f.key!=='interruptions'&&(h as any)[f.key]>0)}).length/30*100)
+    return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>f.key!=='interruptions'&&h[f.key]>0)}).length/30*100)
   },[habits,FIELDS])
   const conv=useMemo(()=>({
     mg1Rate:allTimeTotals.convo>0?Math.round((allTimeTotals.mg1??0)/allTimeTotals.convo*100):0,

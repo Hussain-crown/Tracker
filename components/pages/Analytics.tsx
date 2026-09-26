@@ -46,7 +46,7 @@ export default function Analytics({level=1}:{level?:number}={}){
     return months.map(mo=>{
       const days=Object.keys(habits).filter((dd:string)=>dd.startsWith(mo))
       const t:{[k:string]:number}={convo:0,mpa:0,mg1:0,catch_up:0,dtm:0,pre_filter:0,contact:0,interruptions:0}
-      days.forEach(dd=>{const h=(habits as any)[dd] as any;if(h)Object.keys(t).forEach(k=>{t[k]+=(h[k]??0)})})
+      days.forEach(dd=>{const h=habits[dd] as any;if(h)Object.keys(t).forEach(k=>{t[k]+=(h[k]??0)})})
       return{mo,total:t.convo+t.mpa+t.mg1+t.catch_up+t.dtm+t.pre_filter+t.contact,...t}
     })
   },[habits])
@@ -69,7 +69,7 @@ export default function Analytics({level=1}:{level?:number}={}){
             const days:string[]=[]
             for(let i=29;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
             return days.map(d=>{
-              const hasHabit=!!(habits[d] as any)
+              const hasHabit=!!habits[d]
               const isToday=d===todayStr
               const both=isToday&&checklist.reading&&checklist.audio
               const partial=isToday&&(checklist.reading||checklist.audio)
@@ -236,7 +236,7 @@ export default function Analytics({level=1}:{level?:number}={}){
                 const days=Object.keys(habits).filter((d:string)=>d.startsWith(mo))
                 if(days.length===0)return null
                 const totals={convo:0,mg1:0,mpa:0,dtm:0,contact:0}
-                days.forEach(d=>{const h=(habits as any)[d] as any;if(h){totals.convo+=h.convo??0;totals.mg1+=h.mg1??0;totals.mpa+=h.mpa??0;totals.dtm+=h.dtm??0;totals.contact+=(h as any).contact??0}})
+                days.forEach(d=>{const h=habits[d];if(h){totals.convo+=h.convo??0;totals.mg1+=h.mg1??0;totals.mpa+=h.mpa??0;totals.dtm+=h.dtm??0;totals.contact+=h.contact??0}})
                 const isCurrent=mo===currMo
                 const rowVals = level >= 2 ? [mo,totals.convo,totals.mg1,totals.mpa,totals.dtm,totals.contact] : [mo,totals.mg1,totals.mpa,totals.dtm]
                 return(

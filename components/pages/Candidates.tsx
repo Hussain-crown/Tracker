@@ -636,7 +636,7 @@ export default function Candidates({level=1}:{level?:number}={}){
                         <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
                           <div style={{display:'flex',gap:6,alignItems:'center'}}>
                             <span style={{fontSize:11,fontWeight:600,color:({Positive:GREEN,Negative:RED,Neutral:GOLD,'No Show':RED,'Not Yet':'var(--text4)'}[log.outcome]??'var(--text4)')}}>{log.outcome||log.event_type.replace(/_/g,' ')}</span>
-                            {(log as any).objection&&(log as any).objection!=='None'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:6,background:'rgba(224,85,85,0.1)',color:RED}}>{(log as any).objection}</span>}
+                            {log.objection&&log.objection!=='None'&&<span style={{fontSize:9,padding:'1px 6px',borderRadius:6,background:'rgba(224,85,85,0.1)',color:RED}}>{log.objection}</span>}
                           </div>
                           <span style={{fontSize:9,color:'var(--text4)'}}>{log.created_at.slice(0,10)}</span>
                         </div>
