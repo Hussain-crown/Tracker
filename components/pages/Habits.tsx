@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/stores'
-import { uid, now, today as brisbaneToday } from '@/lib/utils'
+import { uid, now, today as brisbaneToday, calcStreak, isHabitDayActive } from '@/lib/utils'
 import type { HabitEntry } from '@/lib/stores'
 import Analytics from './Analytics'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -284,20 +284,13 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const checklistBonus=useMemo(()=>(checklist.reading?3:0)+(checklist.audio?3:0),[checklist])
   const todayScore=useMemo(()=>calcScore(form,checklistBonus),[form,calcScore,checklistBonus])
   const streak=useMemo(()=>{
-    const isActive=(ds:string)=>{const h=habits[ds] as HabitEntry|undefined;return !!h&&FIELDS.some(f=>f.key!=='interruptions'&&(h[f.key]??0)>0)}
-    const d=new Date()
-    const todayDs=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
-    // If today has no activity yet, start counting from yesterday instead of
-    // reading the streak as broken before the day is even over.
-    if(!isActive(todayDs))d.setDate(d.getDate()-1)
-    let s=0
-    while(s<1825){const ds=d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'});if(!isActive(ds))break;s++;d.setDate(d.getDate()-1)}
-    return s
-  },[habits,FIELDS])
+    const dAgo=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
+    return calcStreak(habits,dAgo,1825)
+  },[habits])
   const consistency=useMemo(()=>{
     const last30:string[]=[];for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
-    return Math.round(last30.filter(d=>{const h=habits[d] as HabitEntry|undefined;return h&&FIELDS.some(f=>f.key!=='interruptions'&&h[f.key]>0)}).length/30*100)
-  },[habits,FIELDS])
+    return Math.round(last30.filter(d=>isHabitDayActive(habits[d])).length/30*100)
+  },[habits])
   const conv=useMemo(()=>({
     mg1Rate:allTimeTotals.convo>0?Math.round((allTimeTotals.mg1??0)/allTimeTotals.convo*100):0,
     convoToMpa:allTimeTotals.convo>0?Math.round((allTimeTotals.mpa??0)/allTimeTotals.convo*100):0,

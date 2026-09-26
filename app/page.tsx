@@ -1,12 +1,12 @@
 'use client'
 import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { useStore, useHabitStore } from '@/lib/stores'
+import { useStore, useHabitStore, usePipelineStore } from '@/lib/stores'
 import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
 import Training from '@/components/pages/Training'
-import { now, today as brisbaneToday } from '@/lib/utils'
+import { now, today as brisbaneToday, calcStreak } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
 import { usePushSubscription } from '@/lib/usePush'
 
@@ -97,12 +97,13 @@ export default function TrackPage(){
 
   usePushSubscription(userId)
 
-  // Supabase Realtime — live habit updates without page refresh.
+  // Supabase Realtime — live habit/lead/contact-log updates without page refresh.
   // NOTE: Supabase Realtime must be enabled on the project for these subscriptions to work.
   useEffect(()=>{
     if(!userId)return
-    const unsub=useHabitStore.getState().subscribeRealtime(userId)
-    return()=>{ unsub() }
+    const unsubHabits=useHabitStore.getState().subscribeRealtime(userId)
+    const unsubPipeline=usePipelineStore.getState().subscribeRealtime(userId)
+    return()=>{ unsubHabits(); unsubPipeline() }
   },[userId])
 
   useEffect(()=>{
@@ -133,20 +134,7 @@ export default function TrackPage(){
       })
   },[userId]) // eslint-disable-line
 
-  const streak=useMemo(()=>{
-    const isActive=(h:any)=>!!h&&(h.convo>0||h.mg1>0||h.mpa>0||h.contact>0||h.catch_up>0||h.dtm>0||h.pre_filter>0||h.launch>0)
-    // Start counting from today if it's already active; otherwise start from yesterday
-    // so the streak doesn't drop to 0 the instant a new day begins, before anything's
-    // been logged yet — it should only break once a full day passes with no activity.
-    const todayActive=isActive(habits[daysAgo(0)])
-    const start=todayActive?0:1
-    let s=0
-    for(let i=start;i<90;i++){
-      if(isActive(habits[daysAgo(i)]))s++
-      else break
-    }
-    return s
-  },[habits])
+  const streak=useMemo(()=>calcStreak(habits,daysAgo),[habits])
 
   useEffect(()=>{
     if(!member||!userId)return

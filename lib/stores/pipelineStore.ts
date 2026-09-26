@@ -17,6 +17,8 @@ interface PipelineStore {
   addContactLog: (log: ContactLog) => Promise<void>
   loadContactLogs: (entityId?: string) => Promise<void>
   migrateLogsToCandidate: (leadId: string, candidateId: string) => Promise<void>
+  // NOTE: Supabase Realtime must be enabled on the project for live updates to work.
+  subscribeRealtime: (userId: string) => () => void
 }
 
 export const usePipelineStore = create<PipelineStore>((set) => ({
@@ -97,5 +99,39 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
         }
       }
     } catch (e) { console.error(e) }
+  },
+
+  subscribeRealtime: (userId) => {
+    const leadsChannel = sb.channel(`leads:${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads', filter: `user_id=eq.${userId}` }, (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          const lead = payload.new as Lead
+          set(s => { const idx = s.leads.findIndex(l => l.id === lead.id); return { leads: idx >= 0 ? s.leads.map(l => l.id === lead.id ? lead : l) : [lead, ...s.leads] } })
+        } else if (payload.eventType === 'DELETE') {
+          // payload.old on a DELETE only contains replica-identity columns
+          // (the primary key by default), same gotcha as habitStore's
+          // subscribeRealtime -- match by id, not any other column.
+          const deletedId = (payload.old as { id?: string })?.id
+          if (!deletedId) return
+          set(s => ({ leads: s.leads.filter(l => l.id !== deletedId) }))
+        }
+      })
+      .subscribe()
+    const logsChannel = sb.channel(`contact_logs:${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contact_logs', filter: `user_id=eq.${userId}` }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const log = payload.new as ContactLog
+          set(s => (s.contactLogs.some(l => l.id === log.id) ? s : { contactLogs: [log, ...s.contactLogs] }))
+        } else if (payload.eventType === 'UPDATE') {
+          const log = payload.new as ContactLog
+          set(s => ({ contactLogs: s.contactLogs.map(l => l.id === log.id ? log : l) }))
+        } else if (payload.eventType === 'DELETE') {
+          const deletedId = (payload.old as { id?: string })?.id
+          if (!deletedId) return
+          set(s => ({ contactLogs: s.contactLogs.filter(l => l.id !== deletedId) }))
+        }
+      })
+      .subscribe()
+    return () => { sb.removeChannel(leadsChannel); sb.removeChannel(logsChannel) }
   },
 }))
