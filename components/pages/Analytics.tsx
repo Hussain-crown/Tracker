@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { today as brisbaneToday } from '@/lib/utils'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -12,8 +13,6 @@ const BDFIELDS=[
   {k:'convo',c:GOLD,l:'Convos'},{k:'mpa',c:BLUE,l:'MPA'},{k:'contact',c:'#5B9BD5',l:'Contacts'},
   {k:'catch_up',c:PURPLE,l:'CatchUp'},{k:'dtm',c:TEAL,l:'DTM'},{k:'pre_filter',c:'#E8913A',l:'PF'},{k:'mg1',c:GREEN,l:'MG1'},
 ] as const
-
-function brisbaneToday(){return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
 
 const LEVEL1_HIDDEN = ['interruptions','convo','contact'] as const
 

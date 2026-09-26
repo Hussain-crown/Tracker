@@ -5,6 +5,12 @@ import type { Lead, ContactLog } from './types'
 interface PipelineStore {
   leads: Lead[]
   contactLogs: ContactLog[]
+  // True when loadContactLogs() hit its 1000-row cap -- an active pipeline
+  // older than a few months can silently have older history missing from
+  // `contactLogs` with no indication anything was cut off. Mirrors the
+  // `truncated` flag app/api/team/prospects/route.ts already exposes for
+  // the same reason on its own 5000-row leads cap.
+  contactLogsTruncated: boolean
   loadLeads: () => Promise<void>
   upsertLead: (l: Lead) => Promise<void>
   deleteLead: (id: string) => Promise<void>
@@ -16,6 +22,7 @@ interface PipelineStore {
 export const usePipelineStore = create<PipelineStore>((set) => ({
   leads: [],
   contactLogs: [],
+  contactLogsTruncated: false,
 
   loadLeads: async () => {
     const { data: { user } } = await sb.auth.getUser()
@@ -79,6 +86,10 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
       if (entityId) q = (q as any).eq('entity_id', entityId)
       const { data } = await q
       if (data) {
+        // Only meaningful for the unscoped (whole-pipeline) load -- an
+        // entity-scoped load hitting 1000 rows for one lead/candidate would
+        // be a different, much less likely problem.
+        if (!entityId) set({ contactLogsTruncated: data.length >= 1000 })
         if (entityId) {
           set(s => ({ contactLogs: [...data as ContactLog[], ...s.contactLogs.filter(l => l.entity_id !== entityId)] }))
         } else {

@@ -52,8 +52,15 @@ self.addEventListener('fetch', (event) => {
       caches.match(event.request).then((cached) => {
         if (cached) return cached
         return fetch(event.request).then((response) => {
-          const toCache = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache))
+          // A deploy rotates chunk hashes -- a stale cached HTML page can
+          // reference a chunk that no longer exists, 404s, and (with no
+          // .ok check) that 404 would get cached forever, permanently
+          // white-screening the app for that client until they manually
+          // clear site data. Only cache real, successful responses.
+          if (response.ok) {
+            const toCache = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, toCache))
+          }
           return response
         })
       })
@@ -115,53 +122,15 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
-// Background sync — flush queued habit writes when back online
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-habits') {
-    event.waitUntil(syncHabits())
-  }
-})
-
-async function syncHabits() {
-  try {
-    const db = await openDB()
-    const queued = await getAllFromStore(db, 'habit-queue')
-    for (const item of queued) {
-      try {
-        await fetch('/api/habits/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item.data),
-        })
-        await deleteFromStore(db, 'habit-queue', item.id)
-      } catch {}
-    }
-  } catch {}
-}
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('growth-tracker', 1)
-    req.onupgradeneeded = (e) => {
-      e.target.result.createObjectStore('habit-queue', { keyPath: 'id', autoIncrement: true })
-    }
-    req.onsuccess = (e) => resolve(e.target.result)
-    req.onerror = reject
-  })
-}
-function getAllFromStore(db, store) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readonly')
-    const req = tx.objectStore(store).getAll()
-    req.onsuccess = (e) => resolve(e.target.result)
-    req.onerror = reject
-  })
-}
-function deleteFromStore(db, store, id) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite')
-    const req = tx.objectStore(store).delete(id)
-    req.onsuccess = resolve
-    req.onerror = reject
-  })
-}
+// A 'sync' handler used to live here, flushing an IndexedDB store called
+// 'habit-queue' to a route, /api/habits/sync, that has never existed in
+// this codebase. fetch() resolves (doesn't throw) on a 404, so the queued
+// item was deleted from IndexedDB immediately after the failed POST --
+// silent, permanent data loss on every single sync attempt. Nothing in the
+// app ever wrote to 'habit-queue' either: Habits.tsx's real offline queue
+// lives in localStorage('habits_offline_queue') and is flushed by the page
+// itself on the browser's 'online' event, not through this handler. Removed
+// entirely rather than "fixed" -- implementing this endpoint for real would
+// mean duplicating the offline-queue mechanism the app already has working,
+// for a benefit (background sync while the tab is closed) this app doesn't
+// currently rely on anywhere.

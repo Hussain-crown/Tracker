@@ -1,22 +1,7 @@
 import { NextResponse } from 'next/server'
-import { sbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { sbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
-
-async function resolveAdminId(): Promise<string> {
-  if (process.env.ADMIN_USER_ID) return process.env.ADMIN_USER_ID
-  const adminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim()
-  if (!adminEmail) return ''
-  let page = 1
-  while (page <= 200) {
-    const { data } = await sbAdmin.auth.admin.listUsers({ page, perPage: 50 })
-    const found = (data?.users || []).find((u: any) => (u.email || '').toLowerCase() === adminEmail)
-    if (found) return found.id
-    if ((data?.users || []).length < 50) break
-    page++
-  }
-  return ''
-}
 
 async function getMemberLevel(userId: string): Promise<number> {
   const { data } = await sbAdmin.from('team_members').select('level').eq('user_id', userId).maybeSingle()

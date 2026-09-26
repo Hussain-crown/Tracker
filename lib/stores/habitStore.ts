@@ -7,6 +7,9 @@ interface HabitStore {
   wins: Win[]
   weeklyReviews: WeeklyReview[]
   moodEntries: MoodEntry[]
+  // Same reasoning as pipelineStore's contactLogsTruncated -- loadMoodEntries
+  // caps at 90 rows with no indication when that cap is actually hit.
+  moodEntriesTruncated: boolean
   loadHabits: () => Promise<void>
   saveHabit: (e: HabitEntry) => Promise<void>
   loadWins: () => Promise<void>
@@ -25,6 +28,7 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
   wins: [],
   weeklyReviews: [],
   moodEntries: [],
+  moodEntriesTruncated: false,
 
   loadHabits: async () => {
     const { data: { user } } = await sb.auth.getUser()
@@ -101,7 +105,7 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
     if (!userId) return
     try {
       const { data } = await sb.from('mood_entries').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(90)
-      set({ moodEntries: (data ?? []) as MoodEntry[] })
+      set({ moodEntries: (data ?? []) as MoodEntry[], moodEntriesTruncated: (data ?? []).length >= 90 })
     } catch (e) { console.error(e) }
   },
 
@@ -121,8 +125,21 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
           const entry = payload.new as HabitEntry
           set(s => ({ habits: { ...s.habits, [entry.date]: entry } }))
         } else if (payload.eventType === 'DELETE') {
-          const entry = payload.old as HabitEntry
-          set(s => { const h = { ...s.habits }; delete h[entry.date]; return { habits: h } })
+          // Supabase Realtime's payload.old on a DELETE only ever contains
+          // the table's replica identity columns -- by default just the
+          // primary key (habits.id), not every column. `entry.date` was
+          // always undefined here, so this deleted habits['undefined'] (a
+          // no-op) instead of the row that was actually removed, which then
+          // lingered in the store until the next full reload. Look the
+          // entry up by id instead, since that's the only column payload.old
+          // is guaranteed to actually have.
+          const deletedId = (payload.old as { id?: string })?.id
+          if (!deletedId) return
+          set(s => {
+            const dateKey = Object.keys(s.habits).find(d => (s.habits[d] as any)?.id === deletedId)
+            if (!dateKey) return s
+            const h = { ...s.habits }; delete h[dateKey]; return { habits: h }
+          })
         }
       })
       .subscribe()

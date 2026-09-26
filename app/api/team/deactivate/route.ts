@@ -1,19 +1,9 @@
 import { NextResponse } from 'next/server'
-import { timingSafeEqual } from 'crypto'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
+import { secretMatches } from '@/lib/internalAuth'
 
 export const dynamic = 'force-dynamic'
-
-function secretMatches(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided)
-  const b = Buffer.from(expected)
-  // Buffers of different length would throw in timingSafeEqual — pad instead
-  // of early-returning on a length mismatch, so a wrong-length guess takes
-  // the same time as a right-length one.
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 // Server-to-server only: called by Operations when a partner is marked
 // "dropped out" (or restored) there, so their Tracker access follows in the

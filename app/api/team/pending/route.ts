@@ -1,17 +1,10 @@
 import { NextResponse } from 'next/server'
-import { timingSafeEqual } from 'crypto'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { sendPushToUser } from '@/lib/push'
+import { secretMatches } from '@/lib/internalAuth'
 
 export const dynamic = 'force-dynamic'
-
-function secretMatches(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 function checkAuth(req: Request): NextResponse | null {
   const provided = req.headers.get('x-internal-secret') || ''

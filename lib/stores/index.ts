@@ -30,6 +30,7 @@ export function useStore() {
     leads: pipeline.leads, loadLeads: pipeline.loadLeads,
     upsertLead: pipeline.upsertLead, deleteLead: pipeline.deleteLead,
     contactLogs: pipeline.contactLogs,
+    contactLogsTruncated: pipeline.contactLogsTruncated,
     addContactLog: pipeline.addContactLog,
     loadContactLogs: pipeline.loadContactLogs,
     migrateLogsToCandidate: pipeline.migrateLogsToCandidate,
@@ -44,7 +45,7 @@ export function useStore() {
     upsertWin: habit.upsertWin, deleteWin: habit.deleteWin,
     weeklyReviews: habit.weeklyReviews, loadWeeklyReviews: habit.loadWeeklyReviews,
     upsertWeeklyReview: habit.upsertWeeklyReview,
-    moodEntries: habit.moodEntries, loadMoodEntries: habit.loadMoodEntries,
+    moodEntries: habit.moodEntries, moodEntriesTruncated: habit.moodEntriesTruncated, loadMoodEntries: habit.loadMoodEntries,
     addMoodEntry: habit.addMoodEntry,
 
     loadAll: async () => {

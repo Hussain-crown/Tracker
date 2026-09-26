@@ -1,16 +1,9 @@
 import { NextResponse } from 'next/server'
-import { timingSafeEqual } from 'crypto'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
+import { secretMatches } from '@/lib/internalAuth'
 
 export const dynamic = 'force-dynamic'
-
-function secretMatches(provided: string, expected: string): boolean {
-  const a = Buffer.from(provided)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length) return false
-  return timingSafeEqual(a, b)
-}
 
 // Server-to-server only: Operations' team/analytics dashboard needs per-
 // member habits/leads/goal data that lives exclusively in this project's

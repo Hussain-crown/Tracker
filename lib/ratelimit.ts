@@ -48,6 +48,14 @@ export function getClientIp(req: Request): string {
   const r = req as any
   const h = (name: string): string => r.headers?.get?.(name) ?? ''
   return (
+    // Vercel's own edge sets this and strips/overwrites any client-supplied
+    // copy -- it cannot be spoofed by the request, unlike every other header
+    // read below. Checked first because none of the others give that
+    // guarantee: x-forwarded-for's LAST entry (below) is the nearest proxy
+    // hop, not the original client, so trusting it collapses every request
+    // behind the same infra path into one rate-limit bucket and lets a
+    // client pad its own XFF to influence which bucket it lands in.
+    h('x-vercel-forwarded-for') ||
     r.ip ||
     h('x-real-ip') ||
     h('cf-connecting-ip') ||

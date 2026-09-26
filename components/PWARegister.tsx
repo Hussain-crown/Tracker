@@ -6,26 +6,20 @@ export default function PWARegister() {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator)) return
 
-    // Purge any cache left over from a previous service worker name.
-    const CURRENT_CACHE = 'track-pwa-v1'
-    caches.keys().then((keys) => {
-      keys.forEach((key) => {
-        if (key !== CURRENT_CACHE) caches.delete(key)
-      })
-    }).catch(() => {})
-
+    // Cache cleanup lives solely in sw.js's own 'activate' handler (it
+    // already deletes every cache that isn't its current CACHE_NAME on
+    // every activation) -- this used to duplicate that logic with its own
+    // hardcoded copy of the cache name, and the two had no way to stay in
+    // sync: bump the version in sw.js without also updating this constant
+    // and the app deletes its own active cache on the very next load.
+    // Removing the second copy removes the two-sources-of-truth problem
+    // instead of trying to keep them synchronized.
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
       .then((reg) => setInterval(() => reg.update(), 60000))
       .catch(() => {})
 
     // Listen for online/offline events
     const handleOnline = () => {
-      // Trigger background sync when coming back online
-      if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
-        navigator.serviceWorker.ready.then((sw) => {
-          return (sw as any).sync.register('sync-habits')
-        }).catch(() => {})
-      }
       // Dispatch custom event for the app to react to
       window.dispatchEvent(new CustomEvent('app-online'))
     }

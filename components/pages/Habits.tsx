@@ -1,7 +1,7 @@
 'use client'
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useStore } from '@/lib/stores'
-import { uid, now } from '@/lib/utils'
+import { uid, now, today as brisbaneToday } from '@/lib/utils'
 import type { HabitEntry } from '@/lib/stores'
 import Analytics from './Analytics'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
@@ -31,7 +31,6 @@ const CONV = { mg1PerConvo:0.034, mpaPerConvo:0.83, mg1PerMpa:0.041, dtmPerConvo
 
 function getV(h:HabitEntry|undefined,k:string):number{ return h?(h as any)[k]??0:0 }
 function fmtDate(d:string){ return new Date(d+'T00:00:00').toLocaleDateString('en-AU',{day:'numeric',month:'short'}) }
-function brisbaneToday(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}) }
 function daysLeft(deadline:string):number{
   const tl=new Date(brisbaneToday()+'T12:00:00')
   const en=new Date(deadline+'T12:00:00')
@@ -164,8 +163,15 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const [isOffline,setIsOffline]=useState(typeof navigator!=='undefined'&&!navigator.onLine)
   const [queueCount,setQueueCount]=useState(0)
 
+  // If sync keeps failing (expired session, RLS) entries never get flushed
+  // and this queue would otherwise grow without limit -- cap it so a
+  // long-stuck queue degrades to "oldest entries silently drop" instead of
+  // unbounded localStorage growth. 90 covers three months of daily entries,
+  // far beyond how long anyone would plausibly stay offline/broken before
+  // noticing the queue badge (which is already shown above) and refreshing.
+  const OFFLINE_QUEUE_CAP=90
   function getOfflineQueue():any[]{try{return JSON.parse(localStorage.getItem('habits_offline_queue')||'[]')}catch{return[]}}
-  function setOfflineQueue(q:any[]){localStorage.setItem('habits_offline_queue',JSON.stringify(q));setQueueCount(q.length)}
+  function setOfflineQueue(q:any[]){const capped=q.slice(-OFFLINE_QUEUE_CAP);localStorage.setItem('habits_offline_queue',JSON.stringify(capped));setQueueCount(capped.length)}
 
   async function flushQueue(){
     if(!userId)return

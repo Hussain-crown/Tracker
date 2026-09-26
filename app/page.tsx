@@ -6,7 +6,7 @@ import Habits from '@/components/pages/Habits'
 import Pipeline from '@/components/pages/Pipeline'
 import Candidates from '@/components/pages/Candidates'
 import Training from '@/components/pages/Training'
-import { now } from '@/lib/utils'
+import { now, today as brisbaneToday } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
 import { usePushSubscription } from '@/lib/usePush'
 
@@ -35,10 +35,6 @@ function daysAgo(n:number){
   const d=new Date(); d.setDate(d.getDate()-n)
   return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
-function brisbaneToday(){
-  return new Date().toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
-}
-
 export default function TrackPage(){
   const {userId,userEmail,setUser,loadAll,habits}=useStore()
   const [ready,setReady]             = useState(false)
