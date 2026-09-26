@@ -1,7 +1,16 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const postBodySchema = z.object({
+  resource: z.object({}).passthrough().optional(),
+})
+const deleteBodySchema = z.object({
+  id: z.string(),
+})
 
 async function getMemberLevel(userId: string): Promise<number> {
   const { data } = await sbAdmin.from('team_members').select('level').eq('user_id', userId).maybeSingle()
@@ -28,9 +37,9 @@ export async function POST(req: Request) {
     if (level < 2) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     const adminId = await resolveAdminId()
     if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-    const r = body.resource || {}
+    const parsed = await parseBody(req, postBodySchema)
+    if (parsed.res) return parsed.res
+    const r = (parsed.data.resource || {}) as any
     const resource = {
       ...(r.id ? { id: r.id } : {}),
       title: String(r.title || '').slice(0, 200),
@@ -59,12 +68,11 @@ export async function DELETE(req: Request) {
     if (!requester) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     const level = await getMemberLevel(requester.id)
     if (level < 2) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-    if (!body.id || typeof body.id !== 'string') return NextResponse.json({ error: 'id required' }, { status: 400 })
+    const parsed = await parseBody(req, deleteBodySchema)
+    if (parsed.res) return parsed.res
     const adminId = await resolveAdminId()
     if (!adminId) return NextResponse.json({ error: 'admin not found' }, { status: 404 })
-    const { error } = await sbAdmin.from('team_resources').delete().eq('id', body.id).eq('admin_id', adminId)
+    const { error } = await sbAdmin.from('team_resources').delete().eq('id', parsed.data.id).eq('admin_id', adminId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
   } catch (e: any) { console.error('shared-resources error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 }) }

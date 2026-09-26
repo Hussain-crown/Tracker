@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({
+  memberIds: z.array(z.unknown()).optional(),
+  sinceDate: z.unknown().optional(),
+})
 
 // Server-to-server only: Operations' team/analytics dashboard needs per-
 // member habits/leads/goal data that lives exclusively in this project's
@@ -19,10 +26,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const memberIds: string[] = Array.isArray(body?.memberIds) ? body.memberIds.filter((x: any) => typeof x === 'string').slice(0, 1000) : []
-  const sinceDate = String(body?.sinceDate || '')
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const memberIds: string[] = Array.isArray(parsed.data.memberIds) ? parsed.data.memberIds.filter((x: any) => typeof x === 'string').slice(0, 1000) : []
+  const sinceDate = String(parsed.data.sinceDate || '')
   if (!memberIds.length) return NextResponse.json({ habits: [], leads: [], metas: [] })
 
   try {

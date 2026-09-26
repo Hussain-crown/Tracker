@@ -1,11 +1,18 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { notifyAdminError } from '@/lib/notify'
 import { sendPushToUser } from '@/lib/push'
 import { relinkUserData } from '@/lib/supabase/relink'
+import { parseBody } from '@/lib/validate'
+
+const bodySchema = z.object({
+  ibo: z.string(),
+  name: z.string().optional(),
+})
 
 // Registers or re-links a team member by IBO number, server-side with the
 // service-role client — the client-side equivalent of this (a direct
@@ -24,10 +31,10 @@ export async function POST(req: Request) {
   const user = await verifyUser(req)
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const ibo = String(body?.ibo || '').trim()
-  const name = String(body?.name || '').trim().slice(0, 200)
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const ibo = parsed.data.ibo.trim()
+  const name = String(parsed.data.name || '').trim().slice(0, 200)
   if (!/^\d{4,12}$/.test(ibo)) return NextResponse.json({ error: 'invalid_ibo' }, { status: 400 })
 
   const sb = getSbAdmin()

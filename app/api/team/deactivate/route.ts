@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({
+  ibo: z.string(),
+  action: z.string().optional(),
+})
 
 // Server-to-server only: called by Operations when a partner is marked
 // "dropped out" (or restored) there, so their Tracker access follows in the
@@ -20,10 +27,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const ibo = String(body?.ibo || '').trim()
-  const action = body?.action === 'reactivate' ? 'reactivate' : 'deactivate'
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const ibo = parsed.data.ibo.trim()
+  const action = parsed.data.action === 'reactivate' ? 'reactivate' : 'deactivate'
   if (!/^\d{4,12}$/.test(ibo)) return NextResponse.json({ error: 'invalid_ibo' }, { status: 400 })
 
   try {

@@ -1,12 +1,21 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { sendPushToUser } from '@/lib/push'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
 
 const STAGES = ['New', 'Connected', 'MPA', 'Catch-Up', 'DTM']
+
+// This route multiplexes many ops with their own per-field requirements
+// (each already enforced inline below), so the schema only pins down the
+// shape every op shares -- a JSON object with a string `op` -- rather than
+// re-encoding every op's fields twice and risking the two definitions
+// drifting apart.
+const bodySchema = z.object({ op: z.string() }).passthrough()
 
 // Server-to-server only: backs Operations' team/all-prospects admin feature.
 // Team members' own `leads` and `contact_logs` (entity_type='lead') live
@@ -24,9 +33,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const op = String(body?.op || '')
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const body = parsed.data as any
+  const op = body.op as string
   const sb = getSbAdmin()
 
   try {

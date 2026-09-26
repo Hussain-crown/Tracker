@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({
+  partId: z.string(),
+  completed: z.boolean().optional(),
+})
 
 // POST { partId, completed } — mark/unmark a training part complete for the caller.
 export async function POST(req: Request) {
@@ -17,10 +24,10 @@ export async function POST(req: Request) {
       .maybeSingle()
     if (!member?.ibo_number) return NextResponse.json({ error: 'not a team member' }, { status: 403 })
 
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-    const partId = String(body?.partId || '')
-    if (!partId) return NextResponse.json({ error: 'missing partId' }, { status: 400 })
+    const parsed = await parseBody(req, bodySchema)
+    if (parsed.res) return parsed.res
+    const partId = parsed.data.partId
+    const body = parsed.data
 
     const base = process.env.OPERATIONS_API_URL
     const secret = process.env.INTERNAL_BRIDGE_SECRET

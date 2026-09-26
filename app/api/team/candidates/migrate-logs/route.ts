@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({}).passthrough()
 
 // Copies a lead's existing local contact history (plus the "converted" log
 // entry) onto its new candidate row in Operations' database. Ungated by
@@ -21,8 +25,9 @@ export async function POST(req: Request) {
 
     if (!member) return NextResponse.json({ error: 'not a team member' }, { status: 403 })
 
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+    const parsed = await parseBody(req, bodySchema)
+    if (parsed.res) return parsed.res
+    const body = parsed.data as any
 
     const base = process.env.OPERATIONS_API_URL
     const secret = process.env.INTERNAL_BRIDGE_SECRET

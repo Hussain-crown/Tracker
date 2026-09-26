@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +16,11 @@ interface Filter {
   ibo_numbers?: string[]
   email?: string
 }
+
+const bodySchema = z.object({
+  filter: z.object({}).passthrough().optional(),
+  includeAuthStatus: z.unknown().optional(),
+})
 
 // Server-to-server only: team_members now lives exclusively in this
 // project's database, so every place Operations' admin UI/crons need to
@@ -30,10 +37,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const filter: Filter = body?.filter || {}
-  const includeAuthStatus = !!body?.includeAuthStatus
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const filter: Filter = (parsed.data.filter || {}) as Filter
+  const includeAuthStatus = !!parsed.data.includeAuthStatus
 
   try {
     const sb = getSbAdmin()

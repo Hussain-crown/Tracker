@@ -1,18 +1,22 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sbAdmin, verifyUser, resolveAdminId } from '@/lib/supabase/admin'
 import { notifyAdminError } from '@/lib/notify'
 import { sendPushToUser } from '@/lib/push'
 
 export const dynamic = 'force-dynamic'
 
+const bodySchema = z.object({ userId: z.string() })
+
 // POST — called fire-and-forget after a member registers; notifies admin via email + push.
 // Requires the caller to be authenticated as the registering member.
 export async function POST(req: Request) {
   try {
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ ok: true }) }
-    const { userId } = body || {}
-    if (!userId || typeof userId !== 'string') return NextResponse.json({ ok: true })
+    let json: unknown
+    try { json = await req.json() } catch { return NextResponse.json({ ok: true }) }
+    const parsed = bodySchema.safeParse(json)
+    if (!parsed.success) return NextResponse.json({ ok: true })
+    const { userId } = parsed.data
 
     const caller = await verifyUser(req)
     if (!caller || caller.id !== userId) return NextResponse.json({ ok: true })

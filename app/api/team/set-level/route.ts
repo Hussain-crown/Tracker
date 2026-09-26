@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({
+  userId: z.string(),
+  level: z.union([z.number(), z.string()]),
+})
 
 // Server-to-server only: Operations' admin UI sets a member's level here
 // since team_members lives exclusively in this project's database now.
@@ -17,10 +24,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const userId = String(body?.userId || '').trim()
-  const level = Number(body?.level)
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const userId = String(parsed.data.userId || '').trim()
+  const level = Number(parsed.data.level)
   if (!userId || !Number.isFinite(level) || level < 1 || level > 10) {
     return NextResponse.json({ error: 'invalid_input' }, { status: 400 })
   }

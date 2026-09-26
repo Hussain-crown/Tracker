@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { sendPushToUser } from '@/lib/push'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({
+  userId: z.string(),
+  action: z.enum(['approve', 'reject']),
+})
 
 function checkAuth(req: Request): NextResponse | null {
   const provided = req.headers.get('x-internal-secret') || ''
@@ -47,12 +54,9 @@ export async function POST(req: Request) {
   const authErr = checkAuth(req)
   if (authErr) return authErr
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const { userId, action } = body ?? {}
-  if (!userId || !['approve', 'reject'].includes(action)) {
-    return NextResponse.json({ error: 'userId and action (approve|reject) required' }, { status: 400 })
-  }
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const { userId, action } = parsed.data
 
   try {
     const sb = getSbAdmin()

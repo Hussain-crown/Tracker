@@ -1,9 +1,15 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin } from '@/lib/supabase/admin'
 import { isRateLimited, getClientIp } from '@/lib/ratelimit'
 import { secretMatches } from '@/lib/internalAuth'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({
+  ibos: z.array(z.unknown()),
+})
 
 // Server-to-server only: read-only status lookup used by Operations'
 // reconciliation check — lets it verify the deactivate/reactivate bridge
@@ -19,9 +25,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  let body: any
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
-  const ibos = Array.isArray(body?.ibos) ? body.ibos.map((x: any) => String(x).trim()).filter((x: string) => /^\d{4,12}$/.test(x)) : []
+  const parsed = await parseBody(req, bodySchema)
+  if (parsed.res) return parsed.res
+  const ibos = parsed.data.ibos.map((x) => String(x).trim()).filter((x: string) => /^\d{4,12}$/.test(x))
   if (!ibos.length || ibos.length > 200) return NextResponse.json({ error: 'invalid_ibos' }, { status: 400 })
 
   try {

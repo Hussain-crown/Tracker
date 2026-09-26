@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+// Forwarded to Operations' candidates-bridge as-is, which owns the real
+// field validation for a candidate payload -- this only pins the body down
+// to a JSON object.
+const bodySchema = z.object({}).passthrough()
 
 // Candidates live in Operations' own database now — this resolves the
 // caller's real membership locally (team_members lives here), then proxies
@@ -20,8 +27,9 @@ export async function POST(req: Request) {
 
     if (!member) return NextResponse.json({ error: 'not a team member' }, { status: 403 })
 
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+    const parsed = await parseBody(req, bodySchema)
+    if (parsed.res) return parsed.res
+    const body = parsed.data as any
 
     // `create` opts this write into the bridge's one allowed non-booking
     // creation path (used by Pipeline's "Convert to Candidate") -- it's a

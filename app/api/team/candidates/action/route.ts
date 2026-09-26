@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { getSbAdmin, verifyUser } from '@/lib/supabase/admin'
+import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
+
+const bodySchema = z.object({ candidateId: z.string() }).passthrough()
 
 // Candidates live in Operations' own database now — the Level-2 gate and
 // membership/ibo resolution still happen here (team_members is real here),
@@ -26,10 +30,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Level 2 required' }, { status: 403 })
     }
 
-    let body: any
-    try { body = await req.json() } catch { return NextResponse.json({ error: 'invalid_json' }, { status: 400 }) }
+    const parsed = await parseBody(req, bodySchema)
+    if (parsed.res) return parsed.res
+    const body = parsed.data as any
     const { candidateId } = body
-    if (!candidateId) return NextResponse.json({ error: 'missing candidateId' }, { status: 400 })
 
     const base = process.env.OPERATIONS_API_URL
     const secret = process.env.INTERNAL_BRIDGE_SECRET
