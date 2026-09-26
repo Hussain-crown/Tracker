@@ -71,8 +71,14 @@ export const useUIStore = create<UIStore>((set) => ({
       if (iErr || !iRows?.length) {
         let restoreFailed = false
         if (oldValue !== undefined) {
-          try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) }
-          catch (e) { console.error(e); restoreFailed = true }
+          // supabase-js resolves with {error} on a normal DB/RLS failure --
+          // it does not throw -- so only a try/catch here would miss the
+          // common case entirely (it only catches a thrown network
+          // exception, not a returned error). Check the result explicitly.
+          try {
+            const { error: restoreErr } = await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now })
+            if (restoreErr) { console.error(restoreErr); restoreFailed = true }
+          } catch (e) { console.error(e); restoreFailed = true }
         }
         // Surface a lost restore rather than only logging it -- this fallback
         // path exists specifically to avoid silent data loss, so swallowing
