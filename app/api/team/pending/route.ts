@@ -9,7 +9,7 @@ import { parseBody } from '@/lib/validate'
 export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({
-  userId: z.string(),
+  userId: z.string().min(1),
   action: z.enum(['approve', 'reject']),
 })
 

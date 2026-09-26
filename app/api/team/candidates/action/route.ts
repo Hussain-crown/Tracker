@@ -5,7 +5,7 @@ import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
 
-const bodySchema = z.object({ candidateId: z.string() }).passthrough()
+const bodySchema = z.object({ candidateId: z.string().min(1) }).passthrough()
 
 // Candidates live in Operations' own database now — the Level-2 gate and
 // membership/ibo resolution still happen here (team_members is real here),

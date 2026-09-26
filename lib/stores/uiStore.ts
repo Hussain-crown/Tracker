@@ -69,8 +69,16 @@ export const useUIStore = create<UIStore>((set) => ({
       const now = new Date().toISOString()
       const { data: iRows, error: iErr } = await sb.from('meta').insert({ key, user_id: userId, value, updated_at: now }).select('id')
       if (iErr || !iRows?.length) {
-        if (oldValue !== undefined) try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) } catch (e) { console.error(e) }
-        throw iErr ?? new Error('Setting save was silently blocked. Session may have expired — please refresh.')
+        let restoreFailed = false
+        if (oldValue !== undefined) {
+          try { await sb.from('meta').insert({ key, user_id: userId, value: oldValue, updated_at: now }) }
+          catch (e) { console.error(e); restoreFailed = true }
+        }
+        // Surface a lost restore rather than only logging it -- this fallback
+        // path exists specifically to avoid silent data loss, so swallowing
+        // its own failure into a console.error defeats the point.
+        const baseMsg = 'Setting save was silently blocked. Session may have expired — please refresh.'
+        throw iErr ?? new Error(restoreFailed ? `${baseMsg} The previous value could not be restored either — please re-check this setting.` : baseMsg)
       }
     }
   },

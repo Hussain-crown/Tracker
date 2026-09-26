@@ -6,7 +6,7 @@ import { parseBody } from '@/lib/validate'
 export const dynamic = 'force-dynamic'
 
 const bodySchema = z.object({
-  partId: z.string(),
+  partId: z.string().min(1),
   completed: z.boolean().optional(),
 })
 
