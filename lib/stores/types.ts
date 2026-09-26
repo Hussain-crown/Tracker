@@ -63,10 +63,4 @@ export interface MoodEntry {
   energy: number; tags: string; created_at: string
 }
 
-export interface Resource {
-  id: string; user_id: string; title: string; type: string; category: string
-  author: string; url: string; status: string; rating: number
-  key_takeaway: string; date_completed: string; created_at: string; updated_at: string
-}
-
 

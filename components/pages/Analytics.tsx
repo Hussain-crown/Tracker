@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useStore } from '@/lib/stores'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { today as brisbaneToday } from '@/lib/utils'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -18,14 +17,11 @@ const LEVEL1_HIDDEN = ['interruptions','convo','contact'] as const
 
 export default function Analytics({level=1}:{level?:number}={}){
   const {habits,getMeta,loadHabits}=useStore()
-  const todayStr=brisbaneToday()
   const [baselineTotals,setBaselineTotals]=useState<Record<string,number>>({})
-  const [checklist,setChecklist]=useState<{reading:boolean;audio:boolean}>({reading:false,audio:false})
 
   useEffect(()=>{loadHabits()},[]) // eslint-disable-line
   useEffect(()=>{
     getMeta('historical_baseline').then(b=>{if(b)try{setBaselineTotals(JSON.parse(b))}catch{}}).catch(e=>console.error('getMeta historical_baseline',e))
-    getMeta('checklist_'+todayStr).then(v=>{if(v)try{setChecklist(JSON.parse(v))}catch{}}).catch(e=>console.error('getMeta checklist',e))
   },[]) // eslint-disable-line
 
   const allDates=useMemo(()=>Object.keys(habits).sort(),[habits])
@@ -59,33 +55,6 @@ export default function Analytics({level=1}:{level?:number}={}){
       <div style={{marginBottom:16}}>
         <div style={{fontSize:9,color:'var(--text4)',letterSpacing:'2px',textTransform:'uppercase' as const,fontWeight:700,marginBottom:4}}>Analytics</div>
         <div style={{fontSize:18,fontWeight:800,color:'var(--text)'}}>Activity Trends</div>
-      </div>
-
-      {/* Daily Accountability Grid */}
-      <div style={CARD}>
-        <div style={SL}>Daily Accountability — Last 30 Days</div>
-        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:8}}>
-          {(()=>{
-            const days:string[]=[]
-            for(let i=29;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
-            return days.map(d=>{
-              const hasHabit=!!habits[d]
-              const isToday=d===todayStr
-              const both=isToday&&checklist.reading&&checklist.audio
-              const partial=isToday&&(checklist.reading||checklist.audio)
-              const color=both?GREEN:partial?GOLD:hasHabit?'var(--s3)':'var(--s2)'
-              return(
-                <div key={d} title={d} style={{width:20,height:20,borderRadius:4,background:color,border:isToday?`2px solid ${GOLD}`:'1px solid var(--br)',flexShrink:0}}/>
-              )
-            })
-          })()}
-        </div>
-        <div style={{display:'flex',gap:12,fontSize:9,color:'var(--text4)'}}>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:GREEN,display:'inline-block'}}/>Both done</span>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:GOLD,display:'inline-block'}}/>Partial</span>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:'var(--s3)',display:'inline-block'}}/>Habit logged</span>
-        </div>
-        <div style={{marginTop:8,fontSize:10,color:'var(--text4)'}}>+3 score per checklist item completed</div>
       </div>
 
       {/* Conversion Funnel */}

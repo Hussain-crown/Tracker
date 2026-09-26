@@ -23,8 +23,6 @@ export function useStore() {
     userId: ui.userId, userEmail: ui.userEmail,
     setUser: ui.setUser, setUserId: ui.setUserId,
     getMeta: ui.getMeta, setMeta: ui.setMeta,
-    resources: ui.resources, loadResources: ui.loadResources,
-    upsertResource: ui.upsertResource, deleteResource: ui.deleteResource,
 
     // Pipeline (Habits creates leads from logged contacts)
     leads: pipeline.leads, loadLeads: pipeline.loadLeads,
@@ -52,7 +50,7 @@ export function useStore() {
       const sw = (p: Promise<void>, name: string) => p.catch(e => console.error(`${name} failed:`, e))
       await Promise.all([
         sw(habit.loadHabits(), 'loadHabits'),
-        sw(ui.loadResources(), 'loadResources'), sw(pipeline.loadLeads(), 'loadLeads'),
+        sw(pipeline.loadLeads(), 'loadLeads'),
         sw(pipeline.loadContactLogs(), 'loadContactLogs'),
         sw(candidate.loadCandidates(), 'loadCandidates'),
       ])

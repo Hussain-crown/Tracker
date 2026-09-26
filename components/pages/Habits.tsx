@@ -95,7 +95,7 @@ function deriveTargets(goals:CoreGoals):Partial<Record<FieldKey,number>>{
 
 
 export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
-  const {userId,habits,loadHabits,saveHabit,getMeta,setMeta,resources,loadResources}=useStore()
+  const {userId,habits,loadHabits,saveHabit,getMeta,setMeta}=useStore()
   const todayStr=brisbaneToday()
   // Level 1 (Training): interruptions/convo/contact hidden — these are noise at this stage.
   // Level 2+ (Active): full field set is shown.
@@ -112,7 +112,6 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const [coreGoals,setCoreGoals] =useState<CoreGoals>(EMPTY_CORE)
   const [editCore,setEditCore]   =useState(false)
   const [coreForm,setCoreForm]   =useState<{goalField:FieldKey;goal:string;deadline:string;overrides:Partial<Record<FieldKey,string>>}>({goalField:'mg1',goal:'3',deadline:defaultDeadline(),overrides:{}})
-  const [checklist,setChecklist] =useState<{reading:boolean;audio:boolean}>({reading:false,audio:false})
   const [pdGoals,setPdGoals]     =useState<{id:string;text:string;done?:boolean;action_steps:{id:string;text:string}[]}[]>([])
   const [actionCheckins,setActionCheckins]=useState<Record<string,Record<string,boolean>>>({})
   const [baselineTotals,setBaselineTotals]=useState<Record<string,number>>({})
@@ -121,7 +120,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
   const [onboardingSaving,setOnboardingSaving]=useState(false)
 
   useEffect(()=>{
-    loadHabits();loadResources()
+    loadHabits()
     getMeta('pd_goals').then(v=>{if(v)try{setPdGoals(JSON.parse(v))}catch{}}).catch(e=>console.error('getMeta pd_goals',e))
     getMeta('pd_action_checkins').then(v=>{if(v)try{setActionCheckins(JSON.parse(v))}catch{}}).catch(e=>console.error('getMeta pd_action_checkins',e))
   },[]) // eslint-disable-line
@@ -132,12 +131,6 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
       else setShowOnboarding(true)
     }).catch(e=>console.error('getMeta historical_baseline',e))
   },[userId]) // eslint-disable-line
-  useEffect(()=>{
-    if(!selDate)return
-    getMeta('checklist_'+selDate).then(v=>{
-      if(v){try{setChecklist(JSON.parse(v))}catch{}} else setChecklist({reading:false,audio:false})
-    }).catch(e=>console.error('getMeta checklist',e))
-  },[selDate]) // eslint-disable-line
   useEffect(()=>{
     if(goalOverride){
       // Use admin's goals passed from parent (tracker page)
@@ -222,11 +215,6 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     },800)
   },[userId,habits,saveHabit])
 
-  async function saveChecklist(key:'reading'|'audio',val:boolean){
-    const prev=checklist
-    const next={...checklist,[key]:val};setChecklist(next)
-    try{await setMeta('checklist_'+selDate,JSON.stringify(next))}catch(e){setChecklist(prev);console.error('saveChecklist error:',e)}
-  }
   async function saveActionCheckin(stepId:string,val:boolean){
     const prev=actionCheckins
     const next={...actionCheckins,[selDate]:{...(actionCheckins[selDate]||{}),[stepId]:val}}
@@ -273,16 +261,15 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     const days=allDates.filter(d=>d>=mS);const result:Record<string,number>={}
     FIELDS.forEach(f=>{result[f.key]=days.reduce((s,d)=>s+getV(habits[d] as HabitEntry|undefined,f.key),0)});return result
   },[habits,allDates,FIELDS])
-  const calcScore=useCallback((h:Record<FieldKey,number>,checkBonus=0):number=>{
+  const calcScore=useCallback((h:Record<FieldKey,number>):number=>{
     const maxScore=FIELDS.filter(f=>f.key!=='interruptions').reduce((s,f)=>s+f.weight*15,0)
     const score=FIELDS.filter(f=>f.key!=='interruptions').reduce((s,f)=>{
       const t=dailyTargets[f.key]??0;const v=h[f.key]??0
       if(!t)return s+(v>0?f.weight*8:0);return s+Math.min(1,v/t)*f.weight*15
     },0)
-    return Math.max(0,Math.min(100,Math.round((score/maxScore)*100)-Math.min(20,(h.interruptions??0)*4)+checkBonus))
+    return Math.max(0,Math.min(100,Math.round((score/maxScore)*100)-Math.min(20,(h.interruptions??0)*4)))
   },[dailyTargets])
-  const checklistBonus=useMemo(()=>(checklist.reading?3:0)+(checklist.audio?3:0),[checklist])
-  const todayScore=useMemo(()=>calcScore(form,checklistBonus),[form,calcScore,checklistBonus])
+  const todayScore=useMemo(()=>calcScore(form),[form,calcScore])
   const streak=useMemo(()=>{
     const dAgo=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
     return calcStreak(habits,dAgo,1825)
@@ -440,38 +427,6 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
             {!saving&&saved&&<span style={{fontSize:11,color:'var(--green)',fontWeight:600}}>✓ saved</span>}
             {!saving&&!saved&&<span style={{fontSize:10,color:'var(--text4)'}}>changes save automatically</span>}
           </div>
-
-          {/* Daily checklist */}
-          {(()=>{
-            const currentBook=(resources as any[]).find((r:any)=>r.status==='reading'&&r.type==='Book')
-            return(
-              <div style={{...CARD,marginBottom:10}}>
-                <div style={SL}>Daily Accountability</div>
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  <div onClick={()=>saveChecklist('reading',!checklist.reading)}
-                    style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:checklist.reading?'rgba(76,175,125,0.06)':'var(--s2)',border:'1px solid '+(checklist.reading?'rgba(76,175,125,0.3)':'var(--br2)'),borderRadius:'var(--r)',cursor:'pointer',transition:'all 0.2s'}}>
-                    <div style={{width:22,height:22,borderRadius:6,border:'2px solid '+(checklist.reading?GREEN:'var(--br2)'),background:checklist.reading?GREEN:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.2s'}}>
-                      {checklist.reading&&<span style={{color:'#000',fontSize:12,fontWeight:700}}>✓</span>}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:checklist.reading?GREEN:'var(--text2)'}}>📖 Read today</div>
-                      {currentBook?<div style={{fontSize:10,color:'var(--text4)',marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{currentBook.title}</div>:<div style={{fontSize:10,color:'var(--text4)',marginTop:1}}>No book currently being tracked</div>}
-                    </div>
-                  </div>
-                  <div onClick={()=>saveChecklist('audio',!checklist.audio)}
-                    style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:checklist.audio?'rgba(76,175,125,0.06)':'var(--s2)',border:'1px solid '+(checklist.audio?'rgba(76,175,125,0.3)':'var(--br2)'),borderRadius:'var(--r)',cursor:'pointer',transition:'all 0.2s'}}>
-                    <div style={{width:22,height:22,borderRadius:6,border:'2px solid '+(checklist.audio?GREEN:'var(--br2)'),background:checklist.audio?GREEN:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all 0.2s'}}>
-                      {checklist.audio&&<span style={{color:'#000',fontSize:12,fontWeight:700}}>✓</span>}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:600,color:checklist.audio?GREEN:'var(--text2)'}}>🎧 Listen to audio training</div>
-                      <div style={{fontSize:10,color:'var(--text4)',marginTop:1}}>Podcast, training call, or keynote</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
 
           {/* Goal Actions */}
           {pdGoals.filter(g=>!g.done&&(g.action_steps||[]).length>0).length>0&&(
