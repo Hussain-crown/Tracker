@@ -9,6 +9,7 @@ import Training from '@/components/pages/Training'
 import { now, today as brisbaneToday, calcStreak } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
 import { usePushSubscription } from '@/lib/usePush'
+import { exportAsCsv, exportAsJson } from '@/lib/exportData'
 
 const GOLD='#C8A24A'
 
@@ -36,7 +37,7 @@ function daysAgo(n:number){
   return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 export default function TrackPage(){
-  const {userId,userEmail,setUser,loadAll,habits}=useStore()
+  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,weeklyReviews}=useStore()
   const [ready,setReady]             = useState(false)
   const [member,setMember]           = useState<any>(null)
   const [memberLoaded,setMemberLoaded] = useState(false)
@@ -343,6 +344,16 @@ export default function TrackPage(){
                       </button>
                     )
                   })}
+                  <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'4px 0'}}>
+                    <button onClick={()=>{exportAsCsv({habits:Object.values(habits),leads,contactLogs,wins,weeklyReviews});setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
+                      <span style={{fontSize:13}}>⇩</span>
+                      <span>Export data (CSV)</span>
+                    </button>
+                    <button onClick={()=>{exportAsJson({habits:Object.values(habits),leads,contactLogs,wins,weeklyReviews});setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
+                      <span style={{fontSize:13}}>⇩</span>
+                      <span>Export data (JSON)</span>
+                    </button>
+                  </div>
                   <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'4px 0'}}>
                     <button onClick={()=>{signOut();setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
                       <span style={{fontSize:13}}>↪</span>
