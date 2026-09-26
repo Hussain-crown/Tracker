@@ -8,7 +8,15 @@ import { parseBody } from '@/lib/validate'
 
 export const dynamic = 'force-dynamic'
 
-const STAGES = ['New', 'Connected', 'MPA', 'Catch-Up', 'DTM']
+// Must match Pipeline.tsx's real STAGES exactly -- this used to be a stale
+// 5-stage list ('New','Connected','MPA','Catch-Up','DTM') left over from an
+// earlier stage naming scheme, while leads have actually been written with
+// Pipeline's real 6-stage set for a long time. Since 'Interruption'/'Convo'/
+// 'Contact' were absent from the old list, STAGES.indexOf(currentStage)
+// always returned -1 for a lead at any of the three earliest, most common
+// stages, and the admin's "advance stage" action silently no-op'd or
+// errored 'unknown stage' for the majority of real leads.
+const STAGES = ['Interruption', 'Convo', 'Contact', 'MPA', 'Catch-Up', 'DTM']
 
 // This route multiplexes many ops with their own per-field requirements
 // (each already enforced inline below), so the schema only pins down the
