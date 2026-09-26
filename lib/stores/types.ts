@@ -43,8 +43,6 @@ export interface HabitEntry {
   id: string; user_id: string; date: string
   interruptions: number; convo: number; mpa: number; contact: number
   catch_up: number; dtm: number; pre_filter: number; mg1: number; launch: number
-  energy?: number; deep_work_hours?: number; mg1_names?: string
-  hours?: number
   created_at: string; updated_at: string
 }
 
