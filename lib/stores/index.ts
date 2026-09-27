@@ -42,8 +42,6 @@ export function useStore() {
     setHabitLocal: habit.setHabitLocal,
     wins: habit.wins, loadWins: habit.loadWins,
     upsertWin: habit.upsertWin, deleteWin: habit.deleteWin,
-    weeklyReviews: habit.weeklyReviews, loadWeeklyReviews: habit.loadWeeklyReviews,
-    upsertWeeklyReview: habit.upsertWeeklyReview,
     moodEntries: habit.moodEntries, moodEntriesTruncated: habit.moodEntriesTruncated, loadMoodEntries: habit.loadMoodEntries,
     addMoodEntry: habit.addMoodEntry,
 

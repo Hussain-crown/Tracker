@@ -32,12 +32,19 @@ const ALL_NAV:{id:NavId;icon:string;label:string;minLevel:number}[]=[
 ]
 function buildNav(level:number){return ALL_NAV.filter(n=>level>=n.minLevel)}
 
+// Fire-and-forget instant push for an in-app event (streak milestone, level
+// up, ...) -- best-effort, a failure here should never interrupt whatever
+// the user was actually doing.
+function notifyEvent(type:'habit_logged'|'streak_milestone'|'level_up',payload:Record<string,unknown>={}){
+  authFetch('/api/team/notify-event',{method:'POST',body:JSON.stringify({type,...payload})}).catch(()=>{})
+}
+
 function daysAgo(n:number){
   const d=new Date(); d.setDate(d.getDate()-n)
   return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 export default function TrackPage(){
-  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,weeklyReviews,moodEntries,candidates}=useStore()
+  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,moodEntries,candidates}=useStore()
   const [showExportMenu,setShowExportMenu]=useState(false)
   const [ready,setReady]             = useState(false)
   const [member,setMember]           = useState<any>(()=>{
@@ -136,7 +143,7 @@ export default function TrackPage(){
             if(!tok)return
             fetch('/api/team/auto-upgrade',{method:'POST',headers:{Authorization:'Bearer '+tok}})
               .then(r=>r.json())
-              .then(d=>{if(d.upgraded)setMember((prev:any)=>prev?{...prev,level:d.level}:prev)})
+              .then(d=>{if(d.upgraded){setMember((prev:any)=>prev?{...prev,level:d.level}:prev);notifyEvent('level_up',{level:d.level})}})
               .catch(()=>{})
           })
         }else{setNeedsProfile(true);setMemberLoaded(true)}
@@ -163,6 +170,7 @@ export default function TrackPage(){
     if(!hit.length)return
     const top=hit[hit.length-1]
     setMilestone(top)
+    notifyEvent('streak_milestone',{streakDays:top.days,milestoneMsg:top.msg})
     const next=[...seenMilestones,...hit.map(m=>m.days)]
     setSeenMilestones(next)
     supabase.from('team_members').update({seen_milestones:JSON.stringify(next),updated_at:now()}).eq('user_id',userId)
@@ -371,7 +379,7 @@ export default function TrackPage(){
                       <span style={{fontSize:10,color:'#555'}}>{showExportMenu?'▲':'▼'}</span>
                     </button>
                     {showExportMenu&&(()=>{
-                      const data={habits:Object.values(habits),leads,contactLogs,wins,weeklyReviews,moodEntries,candidates}
+                      const data={habits:Object.values(habits),leads,contactLogs,wins,moodEntries,candidates}
                       const opts:[string,string,()=>void][]=[
                         ['📄','CSV (one file per table)',()=>exportAsCsv(data)],
                         ['🗂','JSON (single file)',()=>exportAsJson(data)],

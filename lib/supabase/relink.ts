@@ -10,8 +10,8 @@
 // (partners, partner_monthly, partner_notes) that in practice only the
 // admin has ever written to.
 const RELINK_TABLES = [
-  'habits', 'wins', 'weekly_reviews', 'mood_entries', 'ai_insights',
-  'statements', 'roi_costs', 'gpv_history', 'tasks', 'resources', 'audios',
+  'habits', 'wins', 'mood_entries', 'ai_insights',
+  'statements', 'roi_costs', 'gpv_history', 'tasks', 'audios',
   'partner_monthly', 'partner_notes', 'error_logs', 'push_subscriptions',
   'meta', 'leads', 'candidates', 'partners', 'contact_logs', 'tracker_leads',
 ] as const

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { exportAsCsv, exportAsJson, exportForGoogleSheets, exportAsPdfSummary, type ExportableData } from '@/lib/exportData'
 
-const EMPTY: ExportableData = { habits: [], leads: [], contactLogs: [], wins: [], weeklyReviews: [], moodEntries: [], candidates: [] }
+const EMPTY: ExportableData = { habits: [], leads: [], contactLogs: [], wins: [], moodEntries: [], candidates: [] }
 
 function captureDownloads() {
   const clicks: { filename: string; type: string; text: string }[] = []

@@ -5,6 +5,7 @@ import { uid, now, today as brisbaneToday, calcStreak, isHabitDayActive } from '
 import type { HabitEntry } from '@/lib/stores'
 import Analytics from './Analytics'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
+import { authFetch } from '@/lib/authFetch'
 
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const BLUE='var(--blue)';const PURPLE='var(--purple)';const TEAL='var(--teal)'
@@ -214,6 +215,16 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
       try{
         await saveHabit(attempt as any)
         setSaved(true);setTimeout(()=>setSaved(false),1500)
+        // Instant confirmation push, but only once per day for today's own
+        // entry -- otherwise every debounced field edit while logging would
+        // fire another notification.
+        if(date===todayStr){
+          const flagKey='habit_logged_notified_'+date
+          if(!localStorage.getItem(flagKey)){
+            localStorage.setItem(flagKey,'1')
+            authFetch('/api/team/notify-event',{method:'POST',body:JSON.stringify({type:'habit_logged'})}).catch(()=>{})
+          }
+        }
       }catch{
         // offline or network error: queue it for later. saveHabit already
         // rolled back its optimistic update on the failed write -- re-apply

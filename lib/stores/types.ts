@@ -54,12 +54,6 @@ export interface Win {
   description: string; date: string; created_at: string
 }
 
-export interface WeeklyReview {
-  id: string; user_id: string; week_start: string
-  what_happened: string; next_week_number: string; one_fix: string
-  created_at: string; updated_at?: string
-}
-
 export interface MoodEntry {
   id: string; user_id: string; text: string; ai_response: string
   sentiment: 'positive' | 'neutral' | 'low' | 'struggling' | 'fired-up'

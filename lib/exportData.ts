@@ -32,7 +32,6 @@ export interface ExportableData {
   leads: object[]
   contactLogs: object[]
   wins: object[]
-  weeklyReviews: object[]
   moodEntries: object[]
   candidates: object[]
 }
@@ -43,7 +42,6 @@ function sections(data: ExportableData): [string, object[]][] {
     ['leads', data.leads],
     ['contact_logs', data.contactLogs],
     ['wins', data.wins],
-    ['weekly_reviews', data.weeklyReviews],
     ['mood_entries', data.moodEntries],
     ['candidates', data.candidates],
   ]

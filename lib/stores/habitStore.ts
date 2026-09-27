@@ -1,12 +1,11 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { supabase as sb } from '@/lib/supabase/client'
-import type { HabitEntry, Win, WeeklyReview, MoodEntry } from './types'
+import type { HabitEntry, Win, MoodEntry } from './types'
 
 interface HabitStore {
   habits: Record<string, HabitEntry>
   wins: Win[]
-  weeklyReviews: WeeklyReview[]
   moodEntries: MoodEntry[]
   // Same reasoning as pipelineStore's contactLogsTruncated -- loadMoodEntries
   // caps at 90 rows with no indication when that cap is actually hit.
@@ -22,8 +21,6 @@ interface HabitStore {
   loadWins: () => Promise<void>
   upsertWin: (w: Win) => Promise<void>
   deleteWin: (id: string) => Promise<void>
-  loadWeeklyReviews: () => Promise<void>
-  upsertWeeklyReview: (r: WeeklyReview) => Promise<void>
   loadMoodEntries: () => Promise<void>
   addMoodEntry: (m: MoodEntry) => Promise<void>
   // NOTE: Supabase Realtime must be enabled on the project for live updates to work.
@@ -33,7 +30,6 @@ interface HabitStore {
 export const useHabitStore = create<HabitStore>()(persist((set, get) => ({
   habits: {},
   wins: [],
-  weeklyReviews: [],
   moodEntries: [],
   moodEntriesTruncated: false,
 
@@ -89,25 +85,6 @@ export const useHabitStore = create<HabitStore>()(persist((set, get) => ({
     if (error) { set({ wins: prev }); throw error }
   },
 
-  loadWeeklyReviews: async () => {
-    const { data: { user } } = await sb.auth.getUser()
-    const userId = user?.id ?? ''
-    if (!userId) return
-    try {
-      const { data } = await sb.from('weekly_reviews').select('*').eq('user_id', userId).order('created_at', { ascending: false })
-      set({ weeklyReviews: (data ?? []) as WeeklyReview[] })
-    } catch (e) { console.error(e) }
-  },
-
-  upsertWeeklyReview: async (r) => {
-    let prev: WeeklyReview[] = []
-    set(s => { prev = s.weeklyReviews; const idx = s.weeklyReviews.findIndex(x => x.id === r.id); return { weeklyReviews: idx >= 0 ? s.weeklyReviews.map(x => x.id === r.id ? r : x) : [r, ...s.weeklyReviews] } })
-    const { data: rows, error } = await sb.from('weekly_reviews').upsert(r as unknown as Record<string, unknown>, { onConflict: 'id' }).select('id')
-    if (error) { set({ weeklyReviews: prev }); throw error }
-    // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
-    if (!rows?.length) { set({ weeklyReviews: prev }); throw new Error('Weekly review save was silently blocked. Session may have expired — please refresh.') }
-  },
-
   loadMoodEntries: async () => {
     const { data: { user } } = await sb.auth.getUser()
     const userId = user?.id ?? ''
@@ -159,5 +136,5 @@ export const useHabitStore = create<HabitStore>()(persist((set, get) => ({
   storage: createJSONStorage(() => localStorage),
   // Only the actual data needs to survive a reload -- loading flags and
   // functions don't serialize and shouldn't anyway.
-  partialize: (s) => ({ habits: s.habits, wins: s.wins, weeklyReviews: s.weeklyReviews, moodEntries: s.moodEntries, moodEntriesTruncated: s.moodEntriesTruncated }),
+  partialize: (s) => ({ habits: s.habits, wins: s.wins, moodEntries: s.moodEntries, moodEntriesTruncated: s.moodEntriesTruncated }),
 }))
