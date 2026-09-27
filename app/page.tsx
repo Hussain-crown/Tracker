@@ -40,7 +40,12 @@ export default function TrackPage(){
   const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,weeklyReviews,moodEntries,candidates}=useStore()
   const [showExportMenu,setShowExportMenu]=useState(false)
   const [ready,setReady]             = useState(false)
-  const [member,setMember]           = useState<any>(null)
+  const [member,setMember]           = useState<any>(()=>{
+    // Seeds from the last-known member row so a cold, offline app open shows
+    // something real instead of being stuck with nothing until the network
+    // call below either succeeds or times out.
+    try{return JSON.parse(localStorage.getItem('tracker_member_cache')||'null')}catch{return null}
+  })
   const [memberLoaded,setMemberLoaded] = useState(false)
   const [needsProfile,setNeedsProfile] = useState(false)
   const [ibo,setIbo]                 = useState('')
@@ -114,9 +119,10 @@ export default function TrackPage(){
     loadAll().catch(()=>{})
     supabase.from('team_members').select('*').eq('user_id',userId).maybeSingle()
       .then(({data,error}:any)=>{
-        if(error){console.error('team_members fetch error:',error);return}
+        if(error){console.error('team_members fetch error:',error);setMemberLoaded(true);return}
         if(data){
           setMember(data);setNeedsProfile(false)
+          try{localStorage.setItem('tracker_member_cache',JSON.stringify(data))}catch{}
           if((data.level||1)>=2)setTab('habits')
           setMemberLoaded(true)
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
@@ -134,6 +140,18 @@ export default function TrackPage(){
               .catch(()=>{})
           })
         }else{setNeedsProfile(true);setMemberLoaded(true)}
+      }, (e:any)=>{
+        // Offline (or any other network-level failure): this fetch never
+        // resolves with {data,error} at all, it rejects outright -- with no
+        // catch here, memberLoaded never became true and the app was stuck
+        // on the "Loading..." screen forever once offline. Fall back to
+        // whatever member row is already cached (seeded above) so the app
+        // still opens; if there's nothing cached (first-ever launch was
+        // offline), there's genuinely nothing to show yet, but at least the
+        // app stops spinning and the rest of the offline-cached data
+        // (habits/leads) can still render once memberLoaded flips.
+        console.error('team_members fetch failed (offline?):',e)
+        setMemberLoaded(true)
       })
   },[userId]) // eslint-disable-line
 

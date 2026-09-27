@@ -21,13 +21,62 @@ const STAGE_CFG: Record<Stage,{color:string;bg:string;next:Stage|null;nextAction
 const FU_STAGES: Stage[] = ['FU1','FU2','FU3']
 const DQ_REASONS = ['Not interested','Wrong timing','Did not follow through','Ghosted','Chose another opportunity','Other']
 
+// Same option lists as Pipeline.tsx's lead-edit form -- these fields are the
+// same prospect-creation data, just editable from the candidate's own
+// profile now, so the input types (dropdowns, not free text) must match.
+const RELATIONS  = ['Close friend','Acquaintance','Stranger','Online only','Family']
+const AGE_RANGES = ['Under 25','25-35','35-45','45+']
+const LIFE_STAGES= ['Student','Working','Business owner','Parent','Retired']
+const DRIVERS    = ['Family','Community','Purpose','Personal Development','Time','Money','Lifestyle']
+function csvToList(s?:string):string[]{return(s||'').split(',').map(x=>x.trim()).filter(Boolean)}
+
 // ── STYLE CONSTANTS ───────────────────────────────────────
 const GOLD='var(--gold)';const GREEN='var(--green)';const RED='var(--red)'
 const PURPLE='var(--purple)';const ORANGE='var(--orange)'
 const CARD:React.CSSProperties={background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r2)',padding:'16px',marginBottom:10}
 const SL:React.CSSProperties={fontSize:9,color:'var(--text3)',letterSpacing:'2px',textTransform:'uppercase',fontWeight:700,marginBottom:6}
 const INP:React.CSSProperties={background:'var(--s0)',border:'1px solid var(--br2)',borderRadius:'var(--r)',padding:'9px 12px',color:'var(--text)',fontSize:13,fontFamily:"'Sora',sans-serif",outline:'none',width:'100%',boxSizing:'border-box'}
+const SEL:React.CSSProperties={...INP as object,cursor:'pointer'} as React.CSSProperties
 const OVERLAY:React.CSSProperties={position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)',overflowY:'auto'}
+
+function MultiSelectDropdown({label,options,values,onChange,max,invalid}:{label:string;options:string[];values:string[];onChange:(v:string[])=>void;max:number;invalid?:boolean}){
+  const [open,setOpen]=useState(false)
+  const ref=useRef<HTMLDivElement>(null)
+  useEffect(()=>{
+    function onDoc(e:MouseEvent){if(ref.current&&!ref.current.contains(e.target as Node))setOpen(false)}
+    document.addEventListener('mousedown',onDoc)
+    return()=>document.removeEventListener('mousedown',onDoc)
+  },[])
+  function toggle(o:string){
+    if(values.includes(o))onChange(values.filter(v=>v!==o))
+    else if(values.length<max)onChange([...values,o])
+  }
+  return(
+    <div ref={ref} style={{position:'relative'}}>
+      <div style={SL}>{label} {max>1?`(up to ${max})`:''}</div>
+      <div onClick={()=>setOpen(o=>!o)} style={{...SEL,display:'flex',justifyContent:'space-between',alignItems:'center',border:`1px solid ${invalid?RED:'var(--br2)'}`}}>
+        <span style={{color:values.length?'var(--text)':'var(--text4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' as const}}>{values.length?values.join(', '):'Select…'}</span>
+        <span style={{fontSize:10,color:'var(--text4)',flexShrink:0,marginLeft:6}}>{open?'▲':'▼'}</span>
+      </div>
+      {open&&(
+        <div style={{position:'absolute',top:'100%',left:0,right:0,marginTop:4,background:'var(--s2)',border:'1px solid var(--br2)',borderRadius:'var(--r)',zIndex:20,maxHeight:200,overflowY:'auto' as const,boxShadow:'0 8px 24px rgba(0,0,0,0.4)'}}>
+          {options.map(o=>{
+            const checked=values.includes(o)
+            const disabled=!checked&&values.length>=max
+            return(
+              <div key={o} onClick={()=>!disabled&&toggle(o)} style={{padding:'8px 12px',display:'flex',alignItems:'center',gap:8,cursor:disabled?'not-allowed':'pointer',opacity:disabled?0.4:1,fontSize:13,fontFamily:"'Sora',sans-serif"}}>
+                <span style={{width:14,height:14,borderRadius:4,border:`1px solid ${checked?GOLD:'var(--br2)'}`,background:checked?GOLD:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  {checked&&<span style={{color:'#000',fontSize:10,fontWeight:800}}>✓</span>}
+                </span>
+                <span>{o}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── HELPERS ───────────────────────────────────────────────
 function daysSince(d:string){return d?Math.floor((Date.now()-new Date(d).getTime())/86400000):999}
@@ -654,19 +703,38 @@ export default function Candidates({level=1}:{level?:number}={}){
                       ))}
                     </div>
                   ):(
-                    <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:16}}>
-                      {([
-                        ['email','Email'],['phone','Phone'],['relationship','Relationship'],
-                        ['age_range','Age Range'],['life_stage','Life Stage'],['primary_driver','Primary Driver'],
-                      ] as const).map(([key,label])=>(
-                        <div key={key}>
-                          <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{label}</div>
-                          <input value={profileForm[key]} onChange={e=>setProfileForm(p=>({...p,[key]:e.target.value}))} style={{...INP,fontSize:12}}/>
+                    <div style={{display:'flex',flexDirection:'column',gap:12,marginBottom:16}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                        <div>
+                          <div style={SL}>Email</div>
+                          <input type="email" value={profileForm.email} onChange={e=>setProfileForm(p=>({...p,email:e.target.value}))} placeholder="name@email.com" style={INP}/>
                         </div>
-                      ))}
+                        <div>
+                          <div style={SL}>Phone</div>
+                          <input type="tel" value={profileForm.phone} onChange={e=>setProfileForm(p=>({...p,phone:e.target.value}))} placeholder="+61 4XX XXX XXX" style={INP}/>
+                        </div>
+                        <div>
+                          <div style={SL}>Relationship</div>
+                          <select value={profileForm.relationship} onChange={e=>setProfileForm(p=>({...p,relationship:e.target.value}))} style={SEL}>
+                            <option value="">Select…</option>
+                            {RELATIONS.map(o=><option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <div style={SL}>Age Range</div>
+                          <select value={profileForm.age_range} onChange={e=>setProfileForm(p=>({...p,age_range:e.target.value}))} style={SEL}>
+                            <option value="">Select…</option>
+                            {AGE_RANGES.map(o=><option key={o} value={o}>{o}</option>)}
+                          </select>
+                        </div>
+                        <MultiSelectDropdown label="Life Stage" options={LIFE_STAGES} max={3}
+                          values={csvToList(profileForm.life_stage)} onChange={v=>setProfileForm(p=>({...p,life_stage:v.join(', ')}))}/>
+                        <MultiSelectDropdown label="Primary Driver" options={DRIVERS} max={3}
+                          values={csvToList(profileForm.primary_driver)} onChange={v=>setProfileForm(p=>({...p,primary_driver:v.join(', ')}))}/>
+                      </div>
                       <div>
-                        <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>Pain Point</div>
-                        <textarea value={profileForm.pain_point} onChange={e=>setProfileForm(p=>({...p,pain_point:e.target.value}))} rows={2} style={{...INP,fontSize:12,resize:'vertical'}}/>
+                        <div style={SL}>Their Why (goal / motivation)</div>
+                        <input value={profileForm.pain_point} onChange={e=>setProfileForm(p=>({...p,pain_point:e.target.value}))} placeholder="What drives them? What are they moving toward?" style={INP}/>
                       </div>
                       <div style={{display:'flex',gap:8}}>
                         <button disabled={profileSaving} onClick={async()=>{
