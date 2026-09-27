@@ -97,7 +97,8 @@ export default function TrackPage(){
     return()=>document.removeEventListener('visibilitychange',onVisible)
   },[userId,loadAll])
 
-  usePushSubscription(userId)
+  const {permission:pushPermission,requestAndSubscribe:requestPush}=usePushSubscription(userId)
+  const [pushRequesting,setPushRequesting]=useState(false)
 
   // Supabase Realtime — live habit/lead/contact-log updates without page refresh.
   // NOTE: Supabase Realtime must be enabled on the project for these subscriptions to work.
@@ -383,6 +384,22 @@ export default function TrackPage(){
           </div>
         </div>
       </div>
+
+      {/* ── PUSH NOTIFICATIONS PROMPT ──────────────────────────
+          Must be a real tap, not something that fires on its own -- iOS
+          Safari and most mobile browsers silently refuse a permission
+          request made from code that runs automatically (e.g. on page
+          load), so this can only ever be offered as a button. */}
+      {pushPermission==='default'&&(
+        <div style={{padding:'0 18px 12px',maxWidth:860,margin:'0 auto',boxSizing:'border-box' as const}}>
+          <div style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:12,padding:'12px 16px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+            <div style={{fontSize:11,color:'#999'}}>🔔 Turn on notifications for reminders and milestones</div>
+            <button disabled={pushRequesting} onClick={async()=>{setPushRequesting(true);await requestPush();setPushRequesting(false)}} style={{padding:'7px 14px',borderRadius:8,border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:pushRequesting?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:700,flexShrink:0,opacity:pushRequesting?0.6:1}}>
+              {pushRequesting?'…':'Enable'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── MILESTONE ───────────────────────────────────────── */}
       {milestone&&(

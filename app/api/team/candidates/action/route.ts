@@ -51,6 +51,22 @@ export async function POST(req: Request) {
       const status = [400, 403, 404].includes(res.status) ? res.status : 502
       return NextResponse.json({ error: d?.error || 'bridge_error' }, { status })
     }
+
+    // Permanently deleting a candidate must also remove the lead it was
+    // converted from -- otherwise the person a member just deleted for good
+    // reappears in Pipeline's Archived tab as a "Converted to candidate"
+    // stub, looking like the delete didn't actually take. Candidates and
+    // leads live in two separate databases (Operations / this project), so
+    // this side of the cascade has to run here, not in the bridge.
+    if (body?.action === 'delete') {
+      const { data: matchingLead } = await sbAdmin.from('leads')
+        .select('id').eq('user_id', user.id).eq('converted_candidate_id', candidateId).maybeSingle()
+      if (matchingLead) {
+        await sbAdmin.from('contact_logs').delete().eq('entity_id', matchingLead.id).eq('user_id', user.id)
+        await sbAdmin.from('leads').delete().eq('id', matchingLead.id).eq('user_id', user.id)
+      }
+    }
+
     return NextResponse.json(d)
   } catch (e: any) {
     console.error('track/candidates/action error:', e); return NextResponse.json({ error: 'internal_error' }, { status: 500 })

@@ -16,6 +16,9 @@ export interface Lead {
   archived_reason: string
   notes: string; next_action: string; next_action_date: string
   created_at: string; updated_at: string
+  // Set when this lead is converted into a candidate -- lets a permanent
+  // candidate delete find and remove the matching lead too.
+  converted_candidate_id?: string
 }
 
 export interface Candidate {

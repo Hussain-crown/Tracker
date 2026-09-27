@@ -150,6 +150,9 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [advanceModal,setAdvanceModal] = useState<Candidate|null>(null)
   const [dqModal,setDqModal]       = useState<Candidate|null>(null)
   const [deleteConfirm,setDeleteConfirm] = useState<Candidate|null>(null)
+  const [editingProfile,setEditingProfile] = useState(false)
+  const [profileForm,setProfileForm] = useState({email:'',phone:'',relationship:'',age_range:'',life_stage:'',primary_driver:'',pain_point:''})
+  const [profileSaving,setProfileSaving] = useState(false)
   const [logForm,setLogForm]       = useState({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})
   const [dqReason,setDqReason]     = useState('')
   const [actionLoading,setActionLoading] = useState(false)
@@ -179,6 +182,8 @@ export default function Candidates({level=1}:{level?:number}={}){
   useEffect(()=>{
     if(notesTimerRef.current){clearTimeout(notesTimerRef.current);notesTimerRef.current=null}
     setNotesValue(detail?getNotes(detail):'')
+    setEditingProfile(false)
+    if(detail)setProfileForm({email:detail.email||'',phone:detail.phone||'',relationship:detail.relationship||'',age_range:detail.age_range||'',life_stage:detail.life_stage||'',primary_driver:detail.primary_driver||'',pain_point:detail.pain_point||''})
     return ()=>{ if(notesTimerRef.current)clearTimeout(notesTimerRef.current) }
   },[detail?.id]) // eslint-disable-line
 
@@ -629,19 +634,54 @@ export default function Candidates({level=1}:{level?:number}={}){
               {/* PROFILE */}
               {detailTab==='profile'&&(
                 <div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
-                    {[
-                      {l:'HxL Score',v:`H${detail.hunger??5}×L${detail.looking??5} = ${detail.hxl_score??((detail.hunger??5)*(detail.looking??5))}`,c:healthColor(scores[detail.id]??0)},
-                      {l:'Relationship',v:detail.relationship||'—',c:'var(--text2)'},
-                      {l:'Age Range',v:detail.age_range||'—',c:'var(--text2)'},
-                      {l:'Life Stage',v:detail.life_stage||'—',c:'var(--text2)'},
-                      {l:'Source',v:detail.source||'—',c:'var(--text2)'},
-                      {l:'Phone',v:detail.phone||'—',c:'var(--text2)'},
-                    ].map(x=>(
-                      <div key={x.l}><div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div><div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div></div>
-                    ))}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <div style={SL}>Prospect details</div>
+                    {!editingProfile&&<button onClick={()=>setEditingProfile(true)} style={{padding:'4px 10px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:10}}>Edit</button>}
                   </div>
-                  {detail.pain_point&&<div style={{marginBottom:12,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}><div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div><div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{detail.pain_point}"</div></div>}
+                  {!editingProfile?(
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                      {[
+                        {l:'HxL Score',v:`H${detail.hunger??5}×L${detail.looking??5} = ${detail.hxl_score??((detail.hunger??5)*(detail.looking??5))}`,c:healthColor(scores[detail.id]??0)},
+                        {l:'Email',v:detail.email||'—',c:'var(--text2)'},
+                        {l:'Phone',v:detail.phone||'—',c:'var(--text2)'},
+                        {l:'Relationship',v:detail.relationship||'—',c:'var(--text2)'},
+                        {l:'Age Range',v:detail.age_range||'—',c:'var(--text2)'},
+                        {l:'Life Stage',v:detail.life_stage||'—',c:'var(--text2)'},
+                        {l:'Primary Driver',v:detail.primary_driver||'—',c:'var(--text2)'},
+                        {l:'Source',v:detail.source||'—',c:'var(--text2)'},
+                      ].map(x=>(
+                        <div key={x.l}><div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{x.l}</div><div style={{fontSize:12,fontWeight:600,color:x.c}}>{x.v}</div></div>
+                      ))}
+                    </div>
+                  ):(
+                    <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:16}}>
+                      {([
+                        ['email','Email'],['phone','Phone'],['relationship','Relationship'],
+                        ['age_range','Age Range'],['life_stage','Life Stage'],['primary_driver','Primary Driver'],
+                      ] as const).map(([key,label])=>(
+                        <div key={key}>
+                          <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>{label}</div>
+                          <input value={profileForm[key]} onChange={e=>setProfileForm(p=>({...p,[key]:e.target.value}))} style={{...INP,fontSize:12}}/>
+                        </div>
+                      ))}
+                      <div>
+                        <div style={{fontSize:9,color:'var(--text4)',marginBottom:2}}>Pain Point</div>
+                        <textarea value={profileForm.pain_point} onChange={e=>setProfileForm(p=>({...p,pain_point:e.target.value}))} rows={2} style={{...INP,fontSize:12,resize:'vertical'}}/>
+                      </div>
+                      <div style={{display:'flex',gap:8}}>
+                        <button disabled={profileSaving} onClick={async()=>{
+                          setProfileSaving(true)
+                          try{const r=await callAction('update_profile',detail.id,profileForm);if(r?.error)throw new Error(r.error);setEditingProfile(false);setRefreshKey(k=>k+1)}
+                          catch(e:any){alert('Save failed: '+(e?.message||'Unknown error'))}
+                          finally{setProfileSaving(false)}
+                        }} style={{flex:1,padding:'8px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:profileSaving?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:profileSaving?0.6:1}}>
+                          {profileSaving?'Saving…':'Save'}
+                        </button>
+                        <button onClick={()=>setEditingProfile(false)} style={{padding:'8px 14px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                  {!editingProfile&&detail.pain_point&&<div style={{marginBottom:12,padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',borderLeft:`3px solid ${GOLD}`}}><div style={{fontSize:9,color:'var(--text4)',marginBottom:4}}>PAIN POINT</div><div style={{fontSize:12,color:'var(--text2)',fontStyle:'italic'}}>"{detail.pain_point}"</div></div>}
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4}}>
                     <div style={SL}>Notes</div>
                     {notesSaving&&<span style={{fontSize:9,color:'var(--text4)'}}>Saving…</span>}

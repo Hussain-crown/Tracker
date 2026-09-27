@@ -487,8 +487,10 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         const migrateRes=await authFetch('/api/team/candidates/migrate-logs',{method:'POST',body:JSON.stringify({candidateId,logs:migratedLogs})})
         if(!migrateRes.ok)throw new Error('Failed to migrate contact history: '+(await migrateRes.text()))
         // Then archive (not delete) the lead so its own record — and its local
-        // history, still intact there — is kept too.
-        await upsertLead({...l,archived:true,archived_reason:'Converted to candidate',updated_at:now()})
+        // history, still intact there — is kept too. converted_candidate_id
+        // links the two so a later permanent candidate delete can find and
+        // remove this lead instead of leaving it behind as an orphaned stub.
+        await upsertLead({...l,archived:true,archived_reason:'Converted to candidate',converted_candidate_id:candidateId,updated_at:now()})
       },'Conversion failed')
       if(ok){await autoLogHabit('pre_filter');setBookPFModal(null)}
     }finally{setConverting(false)}

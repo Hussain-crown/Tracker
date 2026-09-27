@@ -13,10 +13,33 @@ const SHELL_URLS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_URLS).catch(() => {
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(SHELL_URLS).catch(() => {
         // Fail silently if some shell files aren't available yet
       })
+      // SHELL_URLS only covers the HTML shell and icons -- the actual JS/CSS
+      // a fresh cold launch needs to render anything is a set of hashed
+      // /_next/static/... filenames that change on every deploy, so they
+      // can't be hardcoded here. Without this, offline behaved fine on a
+      // RELOAD (that visit's chunks were already cached opportunistically by
+      // the fetch handler below) but a genuinely fresh install -- open once,
+      // go offline before ever reloading -- had no JS cached at all and
+      // failed to render anything. Fetch the real shell HTML now and cache
+      // every script/stylesheet it actually references, so day-one offline
+      // launch has everything it needs.
+      try {
+        const res = await fetch('/')
+        if (res.ok) {
+          const html = await res.clone().text()
+          const urls = Array.from(html.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)).map(m => m[1])
+          await cache.put('/', res)
+          if (urls.length) await cache.addAll(urls).catch(() => {})
+        }
+      } catch {
+        // Offline during install (e.g. re-installing the SW itself while
+        // offline) -- nothing more we can do here, the opportunistic
+        // fetch-handler caching below is the fallback.
+      }
     }).then(() => self.skipWaiting())
   )
 })
