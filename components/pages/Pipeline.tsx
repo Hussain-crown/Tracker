@@ -233,6 +233,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [contactLog,setContactLog]     = useState({notes:''})
   const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
   const [converting,setConverting]     = useState(false)
+  const [savingLead,setSavingLead]     = useState(false)
+  const [loggingContact,setLoggingContact] = useState(false)
   const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
   const [briefModal,setBriefModal]     = useState<{lead:Lead;text:string;loading:boolean}|null>(null)
   const [archiveModal,setArchiveModal] = useState<Lead|null>(null)
@@ -392,7 +394,9 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   function openEdit(l:Lead){setEd(l);setForm({...l});setErr('');setInvalidFields(new Set());setBanner(null);setOpen(true)}
 
   async function saveLead(force=false){
-    if(!userId)return
+    if(!userId||savingLead)return
+    setSavingLead(true)
+    try{
     const missing=new Set<string>()
     if(!form.name?.trim())missing.add('name')
     if(!form.phone?.trim())missing.add('phone')
@@ -422,9 +426,18 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         const stageHabits:Record<string,keyof HabitEntry>={Interruption:'interruptions',Convo:'convo',Contact:'contact',MPA:'mpa','Catch-Up':'catch_up',DTM:'dtm'}
         const idx=Math.max(STAGES.indexOf(l.stage as Stage),STAGES.indexOf('Contact'))
         for(let i=0;i<=idx;i++){const h=stageHabits[STAGES[i]];if(h)await autoLogHabit(h)}
+      }else if(ed.stage!==l.stage){
+        // A manual stage edit (as opposed to changeStage()'s drag/dropdown
+        // path) never logged a matching contact_log event -- LeadCard's
+        // "days in stage" reads the most recent log whose event_type matches
+        // the current stage, so without this it kept counting from whichever
+        // real transition happened last, silently showing a stale duration.
+        const eventType=l.stage.toLowerCase().replace('-','_').replace(/\s+/g,'_')
+        await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:eventType,outcome:'',notes:`Stage edited to ${l.stage}`,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
       }
     },'Save lead failed')
     if(ok)setOpen(false)
+    }finally{setSavingLead(false)}
   }
 
   async function archiveLead(l:Lead,reason=''){
@@ -459,14 +472,17 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   }
 
   async function logContact(){
-    if(!contactModal||!userId)return
+    if(!contactModal||!userId||loggingContact)return
+    setLoggingContact(true)
     const l=contactModal
-    const ok=await safeWrite(async()=>{
-      await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:'',notes:contactLog.notes,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
-    },'Log contact failed')
-    if(ok){
-      setContactModal(null);setContactLog({notes:''})
-    }
+    try{
+      const ok=await safeWrite(async()=>{
+        await addContactLog({id:uid(),user_id:userId,entity_type:'lead',entity_id:l.id,entity_name:l.name,event_type:'contacted',outcome:'',notes:contactLog.notes,fathom_link:'',next_action:'',next_date:'',created_at:new Date().toISOString()})
+      },'Log contact failed')
+      if(ok){
+        setContactModal(null);setContactLog({notes:''})
+      }
+    }finally{setLoggingContact(false)}
   }
 
   async function convertToCandidate(){
@@ -962,8 +978,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               {err&&<div style={{color:RED,fontSize:12,marginBottom:6,padding:'8px 12px',background:'rgba(224,85,85,0.08)',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.25)'}}>{err}</div>}
             </div>
             <div style={{display:'flex',gap:8,padding:'16px 24px',borderTop:'1px solid var(--br)',background:'var(--s1)',flexShrink:0}}>
-              <button onClick={()=>saveLead(err.startsWith('⚠ Duplicate'))} style={{flex:1,padding:'12px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:13}}>
-                {ed?'Save Changes':err.startsWith('⚠ Duplicate')?'Add Anyway':'Save Prospect'}
+              <button disabled={savingLead} onClick={()=>saveLead(err.startsWith('⚠ Duplicate'))} style={{flex:1,padding:'12px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:savingLead?'default':'pointer',opacity:savingLead?0.6:1,fontFamily:"'Sora',sans-serif",fontSize:13}}>
+                {savingLead?'Saving…':ed?'Save Changes':err.startsWith('⚠ Duplicate')?'Add Anyway':'Save Prospect'}
               </button>
               <button onClick={()=>setOpen(false)} style={{padding:'12px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
               {ed&&<button onClick={()=>{setArchiveModal(ed);setOpen(false)}} style={{padding:'12px 14px',borderRadius:'var(--r)',border:'1px solid rgba(224,85,85,0.3)',background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Archive</button>}
@@ -983,7 +999,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
               <textarea value={contactLog.notes} onChange={e=>setContactLog({notes:e.target.value})} rows={5} placeholder="What happened? Key moments, commitments…" autoFocus style={{...INP,resize:'vertical' as const}}/>
             </div>
             <div style={{display:'flex',gap:8}}>
-              <button onClick={logContact} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Save Log</button>
+              <button disabled={loggingContact} onClick={logContact} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:loggingContact?'default':'pointer',opacity:loggingContact?0.6:1,fontFamily:"'Sora',sans-serif"}}>{loggingContact?'Saving…':'Save Log'}</button>
               <button onClick={()=>setContactModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
             </div>
           </div>

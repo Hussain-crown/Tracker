@@ -295,14 +295,17 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     return Math.max(0,Math.min(100,Math.round((score/maxScore)*100)-Math.min(20,(h.interruptions??0)*4)))
   },[dailyTargets])
   const todayScore=useMemo(()=>calcScore(form),[form,calcScore])
-  const streak=useMemo(()=>{
-    const dAgo=(n:number)=>{const d=new Date();d.setDate(d.getDate()-n);return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})}
-    return calcStreak(habits,dAgo,1825)
-  },[habits])
+  // Anchor at noon on Brisbane's current calendar date (matching the
+  // brisbaneYearMonth/`tl` pattern above) rather than doing setDate() math on
+  // `new Date()` directly -- that starts from the DEVICE's local calendar day,
+  // which can already differ from Brisbane's by a day for a traveling team
+  // member, silently shifting the whole streak/consistency window by a day.
+  const dAgo=useCallback((n:number)=>{const d=new Date(todayStr+'T12:00:00');d.setDate(d.getDate()-n);return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})},[todayStr])
+  const streak=useMemo(()=>calcStreak(habits,dAgo,1825),[habits,dAgo])
   const consistency=useMemo(()=>{
-    const last30:string[]=[];for(let i=0;i<30;i++){const d=new Date();d.setDate(d.getDate()-i);last30.push(d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'}))}
+    const last30:string[]=[];for(let i=0;i<30;i++)last30.push(dAgo(i))
     return Math.round(last30.filter(d=>isHabitDayActive(habits[d])).length/30*100)
-  },[habits])
+  },[habits,dAgo])
   const conv=useMemo(()=>({
     mg1Rate:allTimeTotals.convo>0?Math.round((allTimeTotals.mg1??0)/allTimeTotals.convo*100):0,
     convoToMpa:allTimeTotals.convo>0?Math.round((allTimeTotals.mpa??0)/allTimeTotals.convo*100):0,

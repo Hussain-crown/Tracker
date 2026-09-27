@@ -563,7 +563,7 @@ export default function Candidates({level=1}:{level?:number}={}){
 
       {/* ── LOG CONTACT MODAL ── */}
       {logModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setLogModal(null)}}>
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})}}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:480,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{logModal.name}</div>
@@ -578,7 +578,7 @@ export default function Candidates({level=1}:{level?:number}={}){
               }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:GOLD,color:'#000',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.6:1}}>
                 {actionLoading?'Saving…':'Save Log'}
               </button>
-              <button onClick={()=>setLogModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+              <button onClick={()=>{setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})}} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
             </div>
           </div>
         </div>
@@ -615,7 +615,7 @@ export default function Candidates({level=1}:{level?:number}={}){
 
       {/* ── DQ MODAL ── */}
       {dqModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDqModal(null)}}>
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setDqModal(null);setDqReason('')}}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Disqualify</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{dqModal.name}</div>
@@ -633,7 +633,7 @@ export default function Candidates({level=1}:{level?:number}={}){
               }} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:RED,color:'#fff',fontWeight:700,cursor:(actionLoading||!dqReason)?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:(actionLoading||!dqReason)?0.5:1}}>
                 {actionLoading?'Saving…':'Disqualify'}
               </button>
-              <button onClick={()=>setDqModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+              <button onClick={()=>{setDqModal(null);setDqReason('')}} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
             </div>
           </div>
         </div>
