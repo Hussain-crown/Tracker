@@ -141,6 +141,17 @@ export default function TrackPage(){
           try{localStorage.setItem('tracker_member_cache',JSON.stringify(data))}catch{}
           if((data.level||1)>=2)setTab('habits')
           setMemberLoaded(true)
+          // A member marked dormant only for having been quiet (2 weeks once-off
+          // tonight, 3 months automatically going forward) gets everything back
+          // the instant they open the app again -- no approval, no waiting.
+          // A real drop-out (status:'inactive', set from Operations when a
+          // partner is actually removed) is a separate, deliberate state and
+          // must NOT be cleared just by logging in.
+          if(data.dormant&&data.status!=='inactive'){
+            supabase.from('team_members').update({dormant:false,dormant_since:null,updated_at:now()}).eq('user_id',userId)
+              .then(({error}:any)=>{if(error)console.error('dormant clear failed:',error)})
+            setMember((prev:any)=>prev?{...prev,dormant:false}:prev)
+          }
           try{setSeenMilestones(JSON.parse(data.seen_milestones||'[]'))}catch{}
           if(data.first_login&&data.status!=='pending')setShowOnboard(true)
           authFetch('/api/team/member-goals').then(r=>r.json()).then(d=>{
