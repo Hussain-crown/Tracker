@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { supabase as sb } from '@/lib/supabase/client'
 import type { Lead, ContactLog } from './types'
 
@@ -21,7 +22,7 @@ interface PipelineStore {
   subscribeRealtime: (userId: string) => () => void
 }
 
-export const usePipelineStore = create<PipelineStore>((set) => ({
+export const usePipelineStore = create<PipelineStore>()(persist((set) => ({
   leads: [],
   contactLogs: [],
   contactLogsTruncated: false,
@@ -134,4 +135,8 @@ export const usePipelineStore = create<PipelineStore>((set) => ({
       .subscribe()
     return () => { sb.removeChannel(leadsChannel); sb.removeChannel(logsChannel) }
   },
+}), {
+  name: 'tracker-pipeline-store',
+  storage: createJSONStorage(() => localStorage),
+  partialize: (s) => ({ leads: s.leads, contactLogs: s.contactLogs, contactLogsTruncated: s.contactLogsTruncated }),
 }))

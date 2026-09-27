@@ -1068,7 +1068,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                 {filteredArchive.map(l=>{
                   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
                   return(
-                    <div key={l.id} style={{...CARD,marginBottom:8,opacity:0.85}}>
+                    <div key={l.id} onClick={()=>setDrawerLead(l)} style={{...CARD,marginBottom:8,opacity:0.85,cursor:'pointer'}}>
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:13,fontWeight:700,marginBottom:3}}>{l.name}</div>
@@ -1082,8 +1082,8 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
                       </div>
                       {l.notes&&<div style={{fontSize:10,color:'var(--text4)',marginBottom:8,fontStyle:'italic'}}>"{l.notes.slice(0,80)}"</div>}
                       <div style={{display:'flex',gap:6}}>
-                        <button onClick={()=>restoreLead(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>↩ Restore</button>
-                        <button onClick={()=>setDeleteLeadConfirm(l)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>🗑 Delete</button>
+                        <button onClick={e=>{e.stopPropagation();restoreLead(l)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GREEN}40`,background:`${GREEN}0C`,color:GREEN,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>↩ Restore</button>
+                        <button onClick={e=>{e.stopPropagation();setDeleteLeadConfirm(l)}} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>🗑 Delete</button>
                       </div>
                     </div>
                   )

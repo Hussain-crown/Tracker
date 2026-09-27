@@ -9,7 +9,7 @@ import Training from '@/components/pages/Training'
 import { now, today as brisbaneToday, calcStreak } from '@/lib/utils'
 import { authFetch } from '@/lib/authFetch'
 import { usePushSubscription } from '@/lib/usePush'
-import { exportAsCsv, exportAsJson } from '@/lib/exportData'
+import { exportAsCsv, exportAsJson, exportForGoogleSheets, exportAsPdfSummary } from '@/lib/exportData'
 
 const GOLD='#C8A24A'
 
@@ -37,7 +37,8 @@ function daysAgo(n:number){
   return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 export default function TrackPage(){
-  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,weeklyReviews}=useStore()
+  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,weeklyReviews,moodEntries,candidates}=useStore()
+  const [showExportMenu,setShowExportMenu]=useState(false)
   const [ready,setReady]             = useState(false)
   const [member,setMember]           = useState<any>(null)
   const [memberLoaded,setMemberLoaded] = useState(false)
@@ -345,14 +346,30 @@ export default function TrackPage(){
                     )
                   })}
                   <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'4px 0'}}>
-                    <button onClick={()=>{exportAsCsv({habits:Object.values(habits),leads,contactLogs,wins,weeklyReviews});setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
+                    <button onClick={()=>setShowExportMenu(v=>!v)} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:showExportMenu?'rgba(200,162,74,0.06)':'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
                       <span style={{fontSize:13}}>⇩</span>
-                      <span>Export data (CSV)</span>
+                      <span style={{flex:1}}>Export data</span>
+                      <span style={{fontSize:10,color:'#555'}}>{showExportMenu?'▲':'▼'}</span>
                     </button>
-                    <button onClick={()=>{exportAsJson({habits:Object.values(habits),leads,contactLogs,wins,weeklyReviews});setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>
-                      <span style={{fontSize:13}}>⇩</span>
-                      <span>Export data (JSON)</span>
-                    </button>
+                    {showExportMenu&&(()=>{
+                      const data={habits:Object.values(habits),leads,contactLogs,wins,weeklyReviews,moodEntries,candidates}
+                      const opts:[string,string,()=>void][]=[
+                        ['📄','CSV (one file per table)',()=>exportAsCsv(data)],
+                        ['🗂','JSON (single file)',()=>exportAsJson(data)],
+                        ['📊','Google Sheets (CSV — File → Import in Sheets)',()=>exportForGoogleSheets(data)],
+                        ['🖨','PDF (opens print dialog — choose "Save as PDF")',()=>exportAsPdfSummary(data)],
+                      ]
+                      return(
+                        <div style={{padding:'2px 0 4px'}}>
+                          {opts.map(([icon,label,fn])=>(
+                            <button key={label} onClick={()=>{fn();setShowExportMenu(false);setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:10,padding:'9px 18px 9px 30px',border:'none',background:'transparent',color:'#666',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:11,textAlign:'left' as const}}>
+                              <span style={{fontSize:12}}>{icon}</span>
+                              <span>{label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',padding:'4px 0'}}>
                     <button onClick={()=>{signOut();setShowMenu(false)}} style={{display:'flex',width:'100%',boxSizing:'border-box' as const,alignItems:'center',gap:12,padding:'11px 18px',border:'none',background:'transparent',color:'#444',cursor:'pointer',fontFamily:"'Sora',system-ui,sans-serif",fontSize:12,textAlign:'left' as const}}>

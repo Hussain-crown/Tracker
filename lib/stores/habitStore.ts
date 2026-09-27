@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 import { supabase as sb } from '@/lib/supabase/client'
 import type { HabitEntry, Win, WeeklyReview, MoodEntry } from './types'
 
@@ -12,6 +13,12 @@ interface HabitStore {
   moodEntriesTruncated: boolean
   loadHabits: () => Promise<void>
   saveHabit: (e: HabitEntry) => Promise<void>
+  // Writes straight into the store with no network call -- used to re-apply
+  // a value after saveHabit's own rollback, when the failure was actually a
+  // queued-for-later offline write rather than a genuine rejection. Without
+  // this, opening the app offline (or losing connection mid-edit) reverts
+  // the just-typed value on screen even though it's safely queued underneath.
+  setHabitLocal: (date: string, e: HabitEntry) => void
   loadWins: () => Promise<void>
   upsertWin: (w: Win) => Promise<void>
   deleteWin: (id: string) => Promise<void>
@@ -23,7 +30,7 @@ interface HabitStore {
   subscribeRealtime: (userId: string) => () => void
 }
 
-export const useHabitStore = create<HabitStore>((set, get) => ({
+export const useHabitStore = create<HabitStore>()(persist((set, get) => ({
   habits: {},
   wins: [],
   weeklyReviews: [],
@@ -51,6 +58,8 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
     // RLS or an expired session can let the write resolve with 0 rows affected — catch that silent failure.
     if (!rows?.length) { rollback(); throw new Error('Habit save was silently blocked. Session may have expired — please refresh.') }
   },
+
+  setHabitLocal: (date, e) => set(s => ({ habits: { ...s.habits, [date]: e } })),
 
   loadWins: async () => {
     const { data: { user } } = await sb.auth.getUser()
@@ -145,4 +154,10 @@ export const useHabitStore = create<HabitStore>((set, get) => ({
       .subscribe()
     return () => { sb.removeChannel(channel) }
   },
+}), {
+  name: 'tracker-habit-store',
+  storage: createJSONStorage(() => localStorage),
+  // Only the actual data needs to survive a reload -- loading flags and
+  // functions don't serialize and shouldn't anyway.
+  partialize: (s) => ({ habits: s.habits, wins: s.wins, weeklyReviews: s.weeklyReviews, moodEntries: s.moodEntries, moodEntriesTruncated: s.moodEntriesTruncated }),
 }))

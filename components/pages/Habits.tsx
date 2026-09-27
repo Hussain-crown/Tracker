@@ -95,7 +95,7 @@ function deriveTargets(goals:CoreGoals):Partial<Record<FieldKey,number>>{
 
 
 export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalField:string;goalMonthly:number;deadline:string;overrides:Record<string,number>}|null;level?:number}={}){
-  const {userId,habits,loadHabits,saveHabit,getMeta,setMeta}=useStore()
+  const {userId,habits,loadHabits,saveHabit,setHabitLocal,getMeta,setMeta}=useStore()
   const todayStr=brisbaneToday()
   // Level 1 (Training): interruptions/convo/contact hidden — these are noise at this stage.
   // Level 2+ (Active): full field set is shown.
@@ -172,10 +172,19 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     if(!q.length)return
     const failed:any[]=[]
     for(const entry of q){
+      const ex=habits[entry.date] as HabitEntry|undefined
+      const attempt={...entry,user_id:userId,id:ex?.id??entry.id??uid(),created_at:ex?.created_at??entry.created_at??now(),updated_at:now()}
       try{
-        const ex=habits[entry.date] as HabitEntry|undefined
-        await saveHabit({...entry,user_id:userId,id:ex?.id??entry.id??uid(),created_at:ex?.created_at??entry.created_at??now(),updated_at:now()} as any)
-      }catch{failed.push(entry)}
+        await saveHabit(attempt as any)
+      }catch{
+        failed.push(entry)
+        // saveHabit rolls back its own optimistic update on failure (correct
+        // for a real rejection) -- but if we're still offline, that rollback
+        // would revert this date's data back to stale/empty on screen even
+        // though it's safely queued right here. Re-apply it so the UI keeps
+        // showing what's actually queued to sync.
+        setHabitLocal(entry.date,attempt as any)
+      }
     }
     setOfflineQueue(failed)
     if(failed.length===0){setSaved(true);setTimeout(()=>setSaved(false),2000)}
@@ -201,14 +210,19 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
     saveTimerRef.current=setTimeout(async()=>{
       setSaving(true)
       const ex=habits[date] as HabitEntry|undefined
+      const attempt={id:ex?.id??uid(),user_id:userId,date,...f,created_at:ex?.created_at??now(),updated_at:now()}
       try{
-        await saveHabit({id:ex?.id??uid(),user_id:userId,date,...f,created_at:ex?.created_at??now(),updated_at:now()} as any)
+        await saveHabit(attempt as any)
         setSaved(true);setTimeout(()=>setSaved(false),1500)
       }catch{
-        // offline or network error: queue it for later
+        // offline or network error: queue it for later. saveHabit already
+        // rolled back its optimistic update on the failed write -- re-apply
+        // it here so the value the user just typed stays on screen (matching
+        // what's actually queued) instead of visually reverting.
         const q=getOfflineQueue().filter((e:any)=>e.date!==date)
-        q.push({id:ex?.id??uid(),user_id:userId,date,...f,created_at:ex?.created_at??now(),updated_at:now()})
+        q.push(attempt)
         setOfflineQueue(q)
+        setHabitLocal(date,attempt as any)
       }finally{
         setSaving(false)
       }

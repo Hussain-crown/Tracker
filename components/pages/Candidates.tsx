@@ -149,6 +149,7 @@ export default function Candidates({level=1}:{level?:number}={}){
   const [logModal,setLogModal]     = useState<Candidate|null>(null)
   const [advanceModal,setAdvanceModal] = useState<Candidate|null>(null)
   const [dqModal,setDqModal]       = useState<Candidate|null>(null)
+  const [deleteConfirm,setDeleteConfirm] = useState<Candidate|null>(null)
   const [logForm,setLogForm]       = useState({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})
   const [dqReason,setDqReason]     = useState('')
   const [actionLoading,setActionLoading] = useState(false)
@@ -214,6 +215,13 @@ export default function Candidates({level=1}:{level?:number}={}){
     setActionLoading(true)
     try{const r=await callAction('restore',c.id,{});if(r?.error)throw new Error(r.error);setRefreshKey(k=>k+1)}
     catch(e:any){alert('Restore failed: '+(e?.message||'Unknown error'))}
+    finally{setActionLoading(false)}
+  }
+
+  async function deleteCandidatePermanently(c:Candidate){
+    setActionLoading(true)
+    try{const r=await callAction('delete',c.id,{});if(r?.error)throw new Error(r.error);setDeleteConfirm(null);setRefreshKey(k=>k+1)}
+    catch(e:any){alert('Delete failed: '+(e?.message||'Unknown error'))}
     finally{setActionLoading(false)}
   }
 
@@ -490,6 +498,7 @@ export default function Candidates({level=1}:{level?:number}={}){
                   <div style={{display:'flex',gap:6}}>
                     <button onClick={()=>openView(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>View →</button>
                     <button disabled={actionLoading} onClick={()=>restoreCandidate(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}10`,color:GOLD,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:11,fontWeight:600}}>↩ Restore</button>
+                    <button disabled={actionLoading} onClick={()=>setDeleteConfirm(c)} style={{padding:'7px 12px',borderRadius:'var(--r)',border:`1px solid ${RED}30`,background:'transparent',color:RED,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:11}}>🗑 Delete</button>
                   </div>
                 </div>
               )
@@ -571,6 +580,22 @@ export default function Candidates({level=1}:{level?:number}={}){
                 {actionLoading?'Saving…':'Disqualify'}
               </button>
               <button onClick={()=>setDqModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE CONFIRM MODAL ── */}
+      {deleteConfirm&&(
+        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDeleteConfirm(null)}}>
+          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
+            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Delete permanently</div>
+            <div style={{fontSize:12,color:'var(--text3)',marginBottom:16}}>This removes <b>{deleteConfirm.name}</b> and all its contact history for good. This can't be undone.</div>
+            <div style={{display:'flex',gap:8}}>
+              <button disabled={actionLoading} onClick={()=>deleteCandidatePermanently(deleteConfirm)} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:RED,color:'#fff',fontWeight:700,cursor:actionLoading?'not-allowed':'pointer',fontFamily:"'Sora',sans-serif",fontSize:12,opacity:actionLoading?0.5:1}}>
+                {actionLoading?'Deleting…':'Delete permanently'}
+              </button>
+              <button onClick={()=>setDeleteConfirm(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:12}}>Cancel</button>
             </div>
           </div>
         </div>
