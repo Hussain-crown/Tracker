@@ -218,7 +218,7 @@ export default function Habits({goalOverride=null,level=1}:{goalOverride?:{goalF
         // Instant confirmation push, but only once per day for today's own
         // entry -- otherwise every debounced field edit while logging would
         // fire another notification.
-        if(date===todayStr){
+        if(date===todayStr && typeof Notification!=='undefined' && Notification.permission==='granted'){
           const flagKey='habit_logged_notified_'+date
           if(!localStorage.getItem(flagKey)){
             localStorage.setItem(flagKey,'1')
