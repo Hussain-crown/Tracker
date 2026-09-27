@@ -77,6 +77,8 @@ export async function notifyAdminError(subject: string, body: string): Promise<v
             updated_at: new Date().toISOString(),
           }).eq('user_id', userId).then(({ error: dbErr }) => {
             if (dbErr) console.error('notifyAdminError: token DB persist failed:', dbErr.message)
+          }, (e: any) => {
+            console.error('notifyAdminError: token DB persist rejected:', e?.message || e)
           })
         }
       } catch {}

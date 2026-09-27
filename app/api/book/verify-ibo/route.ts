@@ -45,17 +45,21 @@ export async function GET(req: Request) {
     if (opsResult.valid) return NextResponse.json(opsResult)
 
     // ── CHECK 3: Tracker's own team_members table (people already registered here) ──
-    const { data: members } = await getSb()
+    const { data: members, error: membersErr } = await getSb()
       .from('team_members')
-      .select('id, name, ibo_number')
+      .select('user_id, name, ibo_number')
       .eq('ibo_number', ibo)
       .eq('status', 'active')
       .limit(1)
+    if (membersErr) {
+      console.error('verify-ibo team_members lookup error:', membersErr)
+      return NextResponse.json({ valid: false, error: 'internal_error' }, { status: 500 })
+    }
     if (members?.length) {
       const m = members[0]
       return NextResponse.json({
         valid: true,
-        partner: { id: m.id, name: m.name, ibo_number: m.ibo_number }
+        partner: { id: m.user_id, name: m.name, ibo_number: m.ibo_number }
       })
     }
 
