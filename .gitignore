@@ -1,0 +1,14 @@
+node_modules
+.next
+out
+next-env.d.ts
+tsconfig.tsbuildinfo
+.env
+.env.local
+.vercel
+
+# Playwright
+tests/.auth/
+playwright-report/
+test-results/
+.env.playwright
