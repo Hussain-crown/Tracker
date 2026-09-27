@@ -44,7 +44,8 @@ function daysAgo(n:number){
   return d.toLocaleDateString('en-CA',{timeZone:'Australia/Brisbane'})
 }
 export default function TrackPage(){
-  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,moodEntries,candidates}=useStore()
+  const {userId,userEmail,setUser,loadAll,habits,leads,contactLogs,wins,moodEntries}=useStore()
+  const [candidates,setCandidates]=useState<object[]>([])
   const [showExportMenu,setShowExportMenu]=useState(false)
   const [ready,setReady]             = useState(false)
   const [member,setMember]           = useState<any>(()=>{
@@ -108,6 +109,14 @@ export default function TrackPage(){
     document.addEventListener('visibilitychange',onVisible)
     return()=>document.removeEventListener('visibilitychange',onVisible)
   },[userId,loadAll])
+
+  // Only used to bundle candidates into the export-data download -- Tracker no
+  // longer maintains a Candidates store of its own (candidates are read-only
+  // here, created solely by someone booking a meeting in Operations).
+  useEffect(()=>{
+    if(!userId)return
+    authFetch('/api/team/my-candidates').then(r=>r.ok?r.json():null).then(d=>{if(d?.candidates)setCandidates(d.candidates)}).catch(()=>{})
+  },[userId])
 
   const {permission:pushPermission,requestAndSubscribe:requestPush}=usePushSubscription(userId)
   const [pushRequesting,setPushRequesting]=useState(false)

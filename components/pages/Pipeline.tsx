@@ -6,7 +6,6 @@ import { uid, now, today } from '@/lib/utils'
 import { buildPreCallBrief } from '@/lib/aiText'
 import type { Lead, ContactLog } from '@/lib/stores/types'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { authFetch } from '@/lib/authFetch'
 
 // ── CONSTANTS ─────────────────────────────────────────────
 const STAGES = ['Interruption','Convo','Contact','MPA','Catch-Up','DTM'] as const
@@ -84,11 +83,9 @@ type View = 'leads'|'funnel'|'archived'
 // ── LEAD CARD — defined OUTSIDE Pipeline so React doesn't recreate it ──
 interface LeadCardProps {
   l: Lead
-  candidates: {name:string}[]
   contactLogs: ContactLog[]
   setContactModal: (l:Lead)=>void
   setContactLog: (v:{notes:string})=>void
-  setBookPFModal: (l:Lead)=>void
   setBriefModal: (v:{lead:Lead;text:string;loading:boolean})=>void
   setDrawerLead: (l:Lead)=>void
   openEdit: (l:Lead)=>void
@@ -97,11 +94,9 @@ interface LeadCardProps {
   nextDue?: string
   isDupe?: boolean
 }
-function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,changeStage,isDupe}:LeadCardProps){
+function LeadCard({l,contactLogs,setContactModal,setContactLog,setBriefModal,setDrawerLead,openEdit,changeStage,isDupe}:LeadCardProps){
   const cfg=STAGE_CFG[l.stage as Stage]??STAGE_CFG['Convo']
   const overdue=isOverdue(l)
-  const isDTM=l.stage==='DTM'
-  const isCandidate=candidates.some(c=>c.name===l.name)
   const logs=contactLogs.filter(c=>c.entity_id===l.id).sort((a,b)=>b.created_at.localeCompare(a.created_at))
   const lastLog=logs[0]
   const stageChangeLogs=logs.filter(c=>['convo','contact','mpa','catch_up','dtm','lead_created'].includes(c.event_type))
@@ -151,11 +146,6 @@ function LeadCard({l,candidates,contactLogs,setContactModal,setContactLog,setBoo
         {idx<STAGES.length-1&&(
           <button onClick={()=>changeStage(l,STAGES[idx+1])} style={{padding:'8px 13px',borderRadius:'var(--r)',border:`1px solid ${GOLD}40`,background:`${GOLD}0C`,color:GOLD,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11.5,fontWeight:600}}>
             → {STAGES[idx+1]}
-          </button>
-        )}
-        {isDTM&&!isCandidate&&(
-          <button onClick={()=>setBookPFModal(l)} style={{padding:'8px 13px',borderRadius:'var(--r)',border:`1px solid ${TEAL}40`,background:`${TEAL}0C`,color:TEAL,cursor:'pointer',fontFamily:"'Sora',sans-serif",fontSize:11.5,fontWeight:700}}>
-            🚀 Convert
           </button>
         )}
         <div ref={menuRef} style={{position:'relative',marginLeft:'auto'}}>
@@ -216,7 +206,6 @@ function MultiSelectDropdown({label,options,values,onChange,max,invalid}:{label:
 
 export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const {leads,userId,upsertLead,deleteLead,loadLeads,
-         upsertCandidate,loadCandidates,candidates,
          addContactLog,loadContactLogs,contactLogs,
          habits,saveHabit,loadHabits} = useStore()
 
@@ -231,8 +220,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
   const [invalidFields,setInvalidFields] = useState<Set<string>>(new Set())
   const [contactModal,setContactModal] = useState<Lead|null>(null)
   const [contactLog,setContactLog]     = useState({notes:''})
-  const [bookPFModal,setBookPFModal]   = useState<Lead|null>(null)
-  const [converting,setConverting]     = useState(false)
   const [savingLead,setSavingLead]     = useState(false)
   const [loggingContact,setLoggingContact] = useState(false)
   const [drawerLead,setDrawerLead]     = useState<Lead|null>(null)
@@ -247,7 +234,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
   useEffect(()=>{
     loadLeads().catch(e=>console.error('loadLeads failed:',e))
-    loadCandidates().catch(e=>console.error('loadCandidates failed:',e))
     loadContactLogs().catch(e=>console.error('loadContactLogs failed:',e))
     loadHabits().catch(e=>console.error('loadHabits failed:',e))
   },[]) // eslint-disable-line
@@ -485,33 +471,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     }finally{setLoggingContact(false)}
   }
 
-  async function convertToCandidate(){
-    const l=bookPFModal;if(!l||!userId)return
-    if(converting)return
-    setConverting(true)
-    const candidateId=uid()
-    try{
-      const ok=await safeWrite(async()=>{
-        await upsertCandidate({id:candidateId,user_id:userId,name:l.name,email:l.email||'',phone:l.phone||'',stage:'Pre-Filter',source:l.source,interview_notes:l.notes||'',status:'active',sponsor_ibo:iboNumber,booker_ibo:iboNumber,hxl_score:l.score,hunger:l.hunger,looking:l.looking,relationship:l.relationship||'',age_range:l.age_range||'',life_stage:l.life_stage||'',primary_driver:l.primary_driver||'',pain_point:l.pain_point||'',created_at:now(),updated_at:now()},{create:true})
-        // Copy the lead's existing contact history onto the candidate, plus a
-        // "converted" entry, via the bridge -- both apps' Candidates views only
-        // ever read contact_logs from Operations' database, so writing these
-        // to Tracker's own local DB (like addContactLog/migrateLogsToCandidate
-        // do for leads) would leave the new candidate showing zero history.
-        const migratedLogs=leadLogs(l.id).map(log=>({event_type:log.event_type,outcome:log.outcome,notes:log.notes,fathom_link:log.fathom_link,next_action:log.next_action,next_date:log.next_date,objection:log.objection,created_at:log.created_at}))
-        migratedLogs.push({event_type:'converted_to_candidate',outcome:'Positive',notes:'Converted from Pipeline — Pre-Filter stage',fathom_link:'',next_action:'Book Pre-Filter',next_date:'',objection:undefined,created_at:new Date().toISOString()})
-        const migrateRes=await authFetch('/api/team/candidates/migrate-logs',{method:'POST',body:JSON.stringify({candidateId,logs:migratedLogs})})
-        if(!migrateRes.ok)throw new Error('Failed to migrate contact history: '+(await migrateRes.text()))
-        // Then archive (not delete) the lead so its own record — and its local
-        // history, still intact there — is kept too. converted_candidate_id
-        // links the two so a later permanent candidate delete can find and
-        // remove this lead instead of leaving it behind as an orphaned stub.
-        await upsertLead({...l,archived:true,archived_reason:'Converted to candidate',converted_candidate_id:candidateId,updated_at:now()})
-      },'Conversion failed')
-      if(ok){await autoLogHabit('pre_filter');setBookPFModal(null)}
-    }finally{setConverting(false)}
-  }
-
   async function getPreCallBrief(l:Lead){
     setBriefModal({lead:l,text:'',loading:true})
     const logs=leadLogs(l.id).slice(0,3)
@@ -574,7 +533,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
     setTimeout(()=>{setCsvModal(null);setCsvProgress(null)},1500)
   }
 
-  const cardProps = {candidates,contactLogs,setContactModal,setContactLog,setBookPFModal,setBriefModal,setDrawerLead,openEdit,changeStage}
+  const cardProps = {contactLogs,setContactModal,setContactLog,setBriefModal,setDrawerLead,openEdit,changeStage}
 
   return(
     <ErrorBoundary label="Pipeline">
@@ -1001,23 +960,6 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
             <div style={{display:'flex',gap:8}}>
               <button disabled={loggingContact} onClick={logContact} style={{flex:1,padding:'10px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GREEN},var(--green2))`,color:'#fff',fontWeight:700,cursor:loggingContact?'default':'pointer',opacity:loggingContact?0.6:1,fontFamily:"'Sora',sans-serif"}}>{loggingContact?'Saving…':'Save Log'}</button>
               <button onClick={()=>setContactModal(null)} style={{padding:'10px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── BOOK PF MODAL ─────────────────────────────────── */}
-      {bookPFModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setBookPFModal(null)}}>
-          <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Convert to Candidate → {bookPFModal.name}</div>
-            <div style={{fontSize:11,color:'var(--text3)',marginBottom:20,lineHeight:1.6}}>
-              This will create a Candidate record from this DTM lead. HxL score {hxl(bookPFModal.hunger,bookPFModal.looking)}, driver, and pain point carry over.
-            </div>
-            {bookPFModal.primary_driver&&<div style={{padding:'10px 12px',background:'var(--s2)',borderRadius:'var(--r)',marginBottom:20,fontSize:11,color:GOLD}}>Driver: {bookPFModal.primary_driver}{bookPFModal.pain_point?` · "${bookPFModal.pain_point}"`:''}</div>}
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={convertToCandidate} disabled={converting} style={{flex:1,padding:'11px',borderRadius:'var(--r)',border:'none',background:`linear-gradient(135deg,${GOLD},var(--gold3))`,color:'#000',fontWeight:700,cursor:converting?'not-allowed':'pointer',opacity:converting?0.6:1,fontFamily:"'Sora',sans-serif"}}>{converting?'Converting…':'🚀 Confirm — Convert to Candidate'}</button>
-              <button onClick={()=>setBookPFModal(null)} style={{padding:'11px 16px',borderRadius:'var(--r)',border:'1px solid var(--br)',background:'transparent',color:'var(--text3)',cursor:'pointer',fontFamily:"'Sora',sans-serif"}}>Cancel</button>
             </div>
           </div>
         </div>

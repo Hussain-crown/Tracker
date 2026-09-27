@@ -5,18 +5,15 @@ export * from './types'
 export { useHabitStore }        from './habitStore'
 export { useUIStore }           from './uiStore'
 export { usePipelineStore }     from './pipelineStore'
-export { useCandidateStore }    from './candidateStore'
 
 import { useHabitStore }        from './habitStore'
 import { useUIStore }           from './uiStore'
 import { usePipelineStore }     from './pipelineStore'
-import { useCandidateStore }    from './candidateStore'
 
 export function useStore() {
   const habit        = useHabitStore()
   const ui           = useUIStore()
   const pipeline     = usePipelineStore()
-  const candidate    = useCandidateStore()
 
   return {
     // UI / Auth
@@ -31,11 +28,6 @@ export function useStore() {
     contactLogsTruncated: pipeline.contactLogsTruncated,
     addContactLog: pipeline.addContactLog,
     loadContactLogs: pipeline.loadContactLogs,
-    migrateLogsToCandidate: pipeline.migrateLogsToCandidate,
-
-    // Candidates
-    candidates: candidate.candidates, loadCandidates: candidate.loadCandidates,
-    upsertCandidate: candidate.upsertCandidate, deleteCandidate: candidate.deleteCandidate,
 
     // Habits
     habits: habit.habits, loadHabits: habit.loadHabits, saveHabit: habit.saveHabit,
@@ -51,7 +43,6 @@ export function useStore() {
         sw(habit.loadHabits(), 'loadHabits'),
         sw(pipeline.loadLeads(), 'loadLeads'),
         sw(pipeline.loadContactLogs(), 'loadContactLogs'),
-        sw(candidate.loadCandidates(), 'loadCandidates'),
       ])
     },
   }
