@@ -42,7 +42,11 @@ export async function POST(req: Request) {
     const res = await fetch(`${base}/api/team/candidates-bridge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-internal-secret': secret },
-      body: JSON.stringify({ op: 'action', ibo: member.ibo_number, ...body }),
+      // Server-controlled fields (op, ibo) must be spread LAST — spreading
+      // `body` after them let a caller's own "op"/"ibo" fields silently
+      // override the verified values above, letting a Level-2 member act on
+      // any other IBO's candidates just by naming it in the request body.
+      body: JSON.stringify({ ...body, op: 'action', ibo: member.ibo_number }),
       cache: 'no-store',
       signal: AbortSignal.timeout(10_000),
     })

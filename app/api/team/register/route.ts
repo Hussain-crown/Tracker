@@ -52,10 +52,36 @@ export async function POST(req: Request) {
 
     // Does any row already exist for this IBO (possibly under a different account)?
     const { data: existing, error: existingErr } = await sb.from('team_members')
-      .select('user_id, name, ibo_number, status, level').eq('ibo_number', ibo).maybeSingle()
+      .select('user_id, name, ibo_number, status, level, email').eq('ibo_number', ibo).maybeSingle()
     if (existingErr) return NextResponse.json({ error: 'db_error' }, { status: 500 })
 
     if (existing && existing.user_id !== user.id) {
+      // IBO numbers can be enumerated (verify-ibo returns a name for any
+      // valid-looking number, rate-limited but not secret), so this branch
+      // used to let ANY signed-in Google account take over an existing
+      // member's account -- just by knowing their IBO, with no proof it was
+      // the same person. The only thing recoverable from here is whether the
+      // new login's email matches the email already on file for this IBO.
+      // Without a match, refuse the auto-relink and tell the admin instead,
+      // rather than moving someone's whole history to a stranger's account.
+      const existingEmail = String(existing.email || '').trim().toLowerCase()
+      const callerEmail = (user.email || '').trim().toLowerCase()
+      const emailsMatch = !!existingEmail && !!callerEmail && existingEmail === callerEmail
+      if (!emailsMatch) {
+        notifyAdminError(
+          `Blocked account re-link — IBO ${ibo}`,
+          [
+            `Someone signed in and tried to register with IBO ${ibo}, which is already linked to a different account.`,
+            `Existing account: ${existing.user_id}${existing.email ? ' (' + existing.email + ')' : ''}`,
+            `Attempting account: ${user.id}${user.email ? ' (' + user.email + ')' : ''}`,
+            '',
+            'The email on the new login did not match the email on file, so this was blocked automatically.',
+            'If this IS the same person (e.g. they changed Google accounts), relink them manually in Organisation, or ask them to sign in with their original email.',
+          ].join('\n'),
+        ).catch(e => console.error('team/register blocked-relink email error:', e))
+        return NextResponse.json({ error: 'relink_requires_admin', message: 'This IBO is already linked to a different account. Ask your admin to reconnect it.' }, { status: 409 })
+      }
+
       // One IBO, one account — re-point the existing record to the caller's
       // current auth id instead of creating a duplicate. Preserves their
       // approval status/level/history; only the auth link changes.
