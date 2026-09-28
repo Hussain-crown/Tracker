@@ -28,10 +28,24 @@ export async function GET(req: Request) {
     if (error) return NextResponse.json({ error: 'db_error' }, { status: 500 })
     if (!members?.length) return NextResponse.json({ ok: true, marked: 0 })
 
+    // One getUserById call per active member used to run sequentially here --
+    // fine for a handful of people, but it scales linearly with team size and
+    // risks the function timing out as the roster grows. listUsers paginates
+    // in batches of 200 instead, so the whole roster costs a handful of calls
+    // no matter how many members there are.
+    const lastSignInById = new Map<string, string | null>()
+    let page = 1
+    while (true) {
+      const { data, error: listErr } = await sb.auth.admin.listUsers({ page, perPage: 200 })
+      if (listErr) return NextResponse.json({ error: 'db_error' }, { status: 500 })
+      for (const u of data?.users || []) lastSignInById.set(u.id, u.last_sign_in_at || null)
+      if (!data?.users?.length || data.users.length < 200) break
+      page++
+    }
+
     const toMark: string[] = []
     for (const m of members as { user_id: string }[]) {
-      const { data } = await sb.auth.admin.getUserById(m.user_id)
-      const lastSignIn = data?.user?.last_sign_in_at || null
+      const lastSignIn = lastSignInById.get(m.user_id) ?? null
       if (!lastSignIn || lastSignIn < cutoff) toMark.push(m.user_id)
     }
     if (!toMark.length) return NextResponse.json({ ok: true, marked: 0 })
