@@ -16,7 +16,7 @@ const bodySchema = z.object({
 // actually landed, instead of trusting a single synchronous call that could
 // have failed silently before alerting existed.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 60, 60_000))
+  if (await isRateLimited(`team-status:post:${getClientIp(req)}`, 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''

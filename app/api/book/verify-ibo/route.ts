@@ -31,7 +31,7 @@ async function verifyAgainstOperations(ibo: string): Promise<{ valid: boolean; p
 }
 
 export async function GET(req: Request) {
-  if (await isRateLimited(getClientIp(req), 20, 60_000))
+  if (await isRateLimited(`book-verify-ibo:get:${getClientIp(req)}`, 20, 60_000))
     return NextResponse.json({ valid: false, error: 'Too many requests' }, { status: 429 })
 
   const { searchParams } = new URL(req.url)

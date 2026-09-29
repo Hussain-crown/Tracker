@@ -32,7 +32,7 @@ const bodySchema = z.object({ op: z.string() }).passthrough()
 // stage, claim a lead ahead of converting it to a candidate, dedup cleanup)
 // against the real data instead of Operations' own frozen copy.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 90, 60_000))
+  if (await isRateLimited(`team-prospects:post:${getClientIp(req)}`, 90, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''

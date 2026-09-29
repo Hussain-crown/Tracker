@@ -28,7 +28,7 @@ const bodySchema = z.object({
 // changes) goes through here instead of Operations' own now-frozen copy —
 // the exact bug class already found and fixed for pending-members.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 60, 60_000))
+  if (await isRateLimited(`team-roster:post:${getClientIp(req)}`, 60, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const provided = req.headers.get('x-internal-secret') || ''
@@ -62,17 +62,24 @@ export async function POST(req: Request) {
 
     // Each member's real Supabase Auth account lives in THIS project now —
     // Operations checking its own auth.users for a Tracker user_id would
-    // always report "not found", so this check has to run here.
-    const enriched = await Promise.all(members.map(async (m: any) => {
-      let authLinked = false
-      let lastSignInAt: string | null = null
-      if (m.user_id) {
-        try {
-          const { data } = await sb.auth.admin.getUserById(m.user_id)
-          if (data?.user) { authLinked = true; lastSignInAt = data.user.last_sign_in_at || null }
-        } catch { /* malformed/nonexistent id — treat as unlinked */ }
-      }
-      return { ...m, authLinked, lastSignInAt }
+    // always report "not found", so this check has to run here. This used
+    // to issue one getUserById call per member (parallelized, but still N
+    // Admin API calls per request) -- listUsers paginates the whole roster
+    // in a handful of calls instead, the same fix applied to the
+    // dormant-check cron's identical pattern.
+    const authById = new Map<string, { authLinked: boolean; lastSignInAt: string | null }>()
+    let page = 1
+    while (true) {
+      const { data, error: listErr } = await sb.auth.admin.listUsers({ page, perPage: 200 })
+      if (listErr) return NextResponse.json({ error: 'db_error' }, { status: 500 })
+      for (const u of data?.users || []) authById.set(u.id, { authLinked: true, lastSignInAt: u.last_sign_in_at || null })
+      if (!data?.users?.length || data.users.length < 200) break
+      page++
+    }
+
+    const enriched = members.map((m: any) => ({
+      ...m,
+      ...(authById.get(m.user_id) || { authLinked: false, lastSignInAt: null }),
     }))
     return NextResponse.json({ members: enriched })
   } catch (e: any) {

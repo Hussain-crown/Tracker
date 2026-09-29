@@ -20,7 +20,7 @@ const bodySchema = z.object({
 // Called by the client right when one of these events happens, so the push
 // arrives instantly instead of waiting for the once-daily reminder cron.
 export async function POST(req: Request) {
-  if (await isRateLimited(getClientIp(req), 30, 60_000))
+  if (await isRateLimited(`team-notify-event:post:${getClientIp(req)}`, 30, 60_000))
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
 
   const user = await verifyUser(req)
