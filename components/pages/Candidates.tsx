@@ -563,7 +563,7 @@ export default function Candidates({level=1}:{level?:number}={}){
 
       {/* ── LOG CONTACT MODAL ── */}
       {logModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})}}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setLogModal(null);setLogForm({outcome:'Neutral',logNotes:'',nextDate:'',objection:'None'})}}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:480,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{logModal.name}</div>
@@ -590,7 +590,7 @@ export default function Candidates({level=1}:{level?:number}={}){
         const next=STAGE_CFG[cur].next
         if(!next)return null
         return(
-          <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setAdvanceModal(null)}}>
+          <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setAdvanceModal(null)}}>
             <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
               <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Advance Stage</div>
               <div style={{fontSize:11,color:'var(--text4)',marginBottom:20}}>{advanceModal.name}</div>
@@ -615,7 +615,7 @@ export default function Candidates({level=1}:{level?:number}={}){
 
       {/* ── DQ MODAL ── */}
       {dqModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setDqModal(null);setDqReason('')}}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget){setDqModal(null);setDqReason('')}}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Disqualify</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{dqModal.name}</div>
@@ -641,7 +641,7 @@ export default function Candidates({level=1}:{level?:number}={}){
 
       {/* ── DELETE CONFIRM MODAL ── */}
       {deleteConfirm&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDeleteConfirm(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDeleteConfirm(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Delete permanently</div>
             <div style={{fontSize:12,color:'var(--text3)',marginBottom:16}}>This removes <b>{deleteConfirm.name}</b> and all its contact history for good. This can't be undone.</div>
@@ -657,7 +657,7 @@ export default function Candidates({level=1}:{level?:number}={}){
 
       {/* ── DETAIL DRAWER ── */}
       {detail&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDetail(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDetail(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:580,overflow:'hidden',margin:'auto'}}>
             <div style={{padding:'18px 24px',borderBottom:'1px solid var(--br)',display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
               <div>
@@ -852,7 +852,7 @@ export default function Candidates({level=1}:{level?:number}={}){
       )}
       {/* ── LAUNCH CONFIRM MODAL ── */}
       {launchConfirm&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setLaunchConfirm(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setLaunchConfirm(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:'24px',margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>🚀 Launch Candidate</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:16}}>{launchConfirm.name}</div>

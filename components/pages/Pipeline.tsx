@@ -677,7 +677,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
           </div>
         )
         return(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDrawerLead(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDrawerLead(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,overflow:'hidden',margin:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',display:'flex',flexDirection:'column' as const,maxHeight:'88vh'}}>
             <div style={{padding:'20px 24px',borderBottom:'1px solid var(--br)',display:'flex',alignItems:'center',gap:14,background:'linear-gradient(180deg,var(--s2),var(--s1))',flexShrink:0}}>
               <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${GOLD},var(--gold3))`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:15,color:'#000',flexShrink:0}}>{initials}</div>
@@ -830,7 +830,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
         const SECTION_ICON:React.CSSProperties={width:24,height:24,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,flexShrink:0}
         const initials=(form.name||'').trim().split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]?.toUpperCase()).join('')||'?'
         return(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,overflow:'hidden',margin:'auto',boxShadow:'0 24px 64px rgba(0,0,0,0.5)',display:'flex',flexDirection:'column' as const,maxHeight:'88vh'}}>
             <div style={{padding:'20px 24px',borderBottom:'1px solid var(--br)',display:'flex',alignItems:'center',gap:14,background:'linear-gradient(180deg,var(--s2),var(--s1))',flexShrink:0}}>
               <div style={{width:44,height:44,borderRadius:12,background:`linear-gradient(135deg,${GOLD},var(--gold3))`,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:15,color:'#000',flexShrink:0}}>{initials}</div>
@@ -949,7 +949,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
       {/* ── LOG CONTACT MODAL ─────────────────────────────── */}
       {contactModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setContactModal(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setContactModal(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:420,padding:28,margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Log Contact — {contactModal.name}</div>
             <div style={{fontSize:10,color:'var(--text4)',marginBottom:18}}>{contactModal.stage} · HxL {hxl(contactModal.hunger,contactModal.looking)} · {contactModal.primary_driver||contactModal.source}</div>
@@ -967,7 +967,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
       {/* ── PRE-CALL BRIEF MODAL ──────────────────────────── */}
       {briefModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setBriefModal(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setBriefModal(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:460,padding:28,margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,color:GOLD,marginBottom:4}}>Pre-Call Brief</div>
             <div style={{fontSize:12,color:'var(--text4)',marginBottom:16}}>{briefModal.lead.name} · {briefModal.lead.stage} · HxL {hxl(briefModal.lead.hunger,briefModal.lead.looking)}</div>
@@ -985,7 +985,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
       {/* ── DELETE CONFIRMATION ───────────────────────────── */}
       {deleteLeadConfirm&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDeleteLeadConfirm(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setDeleteLeadConfirm(null)}}>
           <div style={{background:'var(--s1)',border:`1px solid ${RED}40`,borderRadius:'var(--r3)',width:'100%',maxWidth:400,padding:28,margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,color:RED,marginBottom:8}}>Permanently Delete?</div>
             <div style={{fontSize:13,color:'var(--text3)',marginBottom:20,lineHeight:1.6}}>
@@ -1076,7 +1076,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
       {/* ── ARCHIVE MODAL ─────────────────────────────────── */}
       {archiveModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setArchiveModal(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget)setArchiveModal(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:380,padding:28,margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4,color:RED}}>Archive — {archiveModal.name}</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:20}}>Select a reason:</div>
@@ -1110,7 +1110,7 @@ export default function Pipeline({iboNumber=''}:{iboNumber?:string}){
 
       {/* ── CSV UPLOAD MODAL ──────────────────────────────── */}
       {csvModal&&(
-        <div style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget&&!csvProgress)setCsvModal(null)}}>
+        <div role="dialog" aria-modal="true" style={OVERLAY} onClick={e=>{if(e.target===e.currentTarget&&!csvProgress)setCsvModal(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:540,padding:28,margin:'auto'}}>
             <div style={{fontSize:16,fontWeight:700,marginBottom:4}}>Import Leads from CSV</div>
             <div style={{fontSize:11,color:'var(--text4)',marginBottom:18}}>{csvModal.rows.length} rows · Map columns then confirm</div>
