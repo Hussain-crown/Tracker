@@ -31,9 +31,14 @@ export async function POST(req: NextRequest) {
     const source   = (typeof body.source   === 'string' ? body.source   : 'iOS Shortcut').trim().slice(0, 100) || 'iOS Shortcut'
     const stage    = (typeof body.stage    === 'string' ? body.stage    : '').trim().slice(0, 50)
     const notes    = (typeof body.notes    === 'string' ? body.notes    : '').trim().slice(0, 500)
-    const hxl_score = typeof body.hxl_score === 'number' ? Math.min(10, Math.max(0, Math.round(body.hxl_score))) : null
-    const hunger    = typeof body.hunger    === 'number' ? Math.min(10, Math.max(0, Math.round(body.hunger)))    : null
-    const looking   = typeof body.looking   === 'number' ? Math.min(10, Math.max(0, Math.round(body.looking)))   : null
+    // Accept a numeric-looking string too -- see log-habit's identical comment.
+    const toScore = (raw: unknown): number | null => {
+      const v = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN
+      return Number.isFinite(v) ? Math.min(10, Math.max(0, Math.round(v))) : null
+    }
+    const hxl_score = toScore(body.hxl_score)
+    const hunger    = toScore(body.hunger)
+    const looking   = toScore(body.looking)
 
     const toCsv = (v: unknown) => Array.isArray(v) ? v.map(String).map(s => s.trim()).filter(Boolean).slice(0, 3).join(', ') : (typeof v === 'string' ? v.trim() : '')
     const relationship   = (typeof body.relationship === 'string' ? body.relationship : '').trim().slice(0, 50)

@@ -32,10 +32,16 @@ export async function POST(req: NextRequest) {
       ? body.date
       : new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Brisbane' })
 
+    // Accept a numeric-looking string too, not just a JSON number -- the
+    // iOS Shortcuts app's own JSON-body editor doesn't always give a literal
+    // integer type depending on how the field was built, and a shortcut that
+    // silently no-ops because of a type mismatch it can't see is far worse
+    // than being lenient about it here.
     const increments: Record<string, number> = {}
     for (const f of COUNT_FIELDS) {
-      const v = body[f]
-      if (typeof v === 'number' && Number.isFinite(v)) increments[f] = Math.max(0, Math.round(v))
+      const raw = body[f]
+      const v = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN
+      if (Number.isFinite(v)) increments[f] = Math.max(0, Math.round(v))
     }
     if (Object.keys(increments).length === 0)
       return NextResponse.json({ error: 'Provide at least one count field to log' }, { status: 400, headers: API_KEY_CORS })
