@@ -232,12 +232,23 @@ export default function Training(){
       {openPart && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.92)',zIndex:400,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'20px',backdropFilter:'blur(8px)',overflowY:'auto'}} onClick={e=>{if(e.target===e.currentTarget)setOpenPart(null)}}>
           <div style={{background:'var(--s1)',border:'1px solid var(--br)',borderRadius:'var(--r3)',width:'100%',maxWidth:560,margin:'auto',overflow:'hidden'}}>
-            {openPart.video_urls?.filter(v=>embedSrc(v)).map((v,i)=>(
-              <div key={i} style={{position:'relative',paddingTop:'56.25%',background:'#000',borderBottom:i<openPart.video_urls.length-1?'1px solid var(--br)':'none'}}>
-                <iframe src={embedSrc(v)!} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
-                  style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
-              </div>
-            ))}
+            {openPart.video_urls?.filter(Boolean).map((v,i,arr)=>{
+              const src=embedSrc(v)
+              return(
+                <div key={i} style={{position:'relative',paddingTop:'56.25%',background:'#000',borderBottom:i<arr.length-1?'1px solid var(--br)':'none'}}>
+                  {src ? (
+                    <iframe src={src} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen
+                      style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}/>
+                  ) : (
+                    // Not a recognized Vimeo/YouTube link -- treat it as a
+                    // direct video file URL and play it natively instead of
+                    // silently dropping it.
+                    <video controls src={v} preload="metadata"
+                      style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
+                  )}
+                </div>
+              )
+            })}
             {openPart.image_url && (
               <img src={openPart.image_url} alt={openPart.title} style={{width:'100%',display:'block'}}/>
             )}
