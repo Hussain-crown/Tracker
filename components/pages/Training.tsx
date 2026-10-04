@@ -48,6 +48,19 @@ function embedSrc(url:string):string|null{
       if(!id)return null
       return `https://www.youtube.com/embed/${id}`
     }
+    // Google Drive's own documented embed -- unlike Dropbox, Drive has no
+    // reliable raw-file-bytes URL for a plain <video> tag (large files hit
+    // a "can't scan for viruses" interstitial instead of streaming), so this
+    // uses Google's actual supported preview player the same way Vimeo/
+    // YouTube do. Share links come in two shapes: .../file/d/<id>/view and
+    // .../open?id=<id> or .../uc?id=<id>.
+    if(u.hostname.includes('drive.google.com')){
+      const parts=u.pathname.split('/').filter(Boolean)
+      const dIdx=parts.indexOf('d')
+      const id=dIdx>=0?parts[dIdx+1]:u.searchParams.get('id')
+      if(!id)return null
+      return `https://drive.google.com/file/d/${id}/preview`
+    }
     return null
   }catch{return null}
 }
