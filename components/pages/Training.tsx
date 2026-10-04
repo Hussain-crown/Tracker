@@ -52,6 +52,26 @@ function embedSrc(url:string):string|null{
   }catch{return null}
 }
 
+// Turns any non-Vimeo/YouTube video_urls entry into something actually
+// playable in a plain <video> tag. A Dropbox share link (?dl=0) serves an
+// HTML preview page, not the file itself -- Dropbox's own documented fix is
+// swapping dl=0 for raw=1 (not switching to dropboxusercontent.com), which
+// serves the real bytes with the right content-type and supports range
+// requests, so seeking works. Anything else (our own Supabase Storage
+// upload, or any other direct file link) is assumed to already be a raw,
+// playable URL and passes through unchanged.
+function directVideoSrc(url:string):string{
+  try{
+    const u=new URL(url)
+    if(u.hostname.includes('dropbox.com')){
+      u.searchParams.set('raw','1')
+      u.searchParams.delete('dl')
+      return u.toString()
+    }
+    return url
+  }catch{return url}
+}
+
 export default function Training(){
   const [modules,setModules]   = useState<Module[]>([])
   const [completed,setCompleted] = useState<Set<string>>(new Set())
@@ -243,7 +263,7 @@ export default function Training(){
                     // Not a recognized Vimeo/YouTube link -- treat it as a
                     // direct video file URL and play it natively instead of
                     // silently dropping it.
-                    <video controls src={v} preload="metadata"
+                    <video controls src={directVideoSrc(v)} preload="metadata"
                       style={{position:'absolute',top:0,left:0,width:'100%',height:'100%'}}/>
                   )}
                 </div>
